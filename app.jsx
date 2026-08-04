@@ -20,7 +20,7 @@ const sb = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABA
 const MODULOS = [
   { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
-  { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "proximo" },
+  { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "fase2" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "fase2" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "fase2" },
@@ -939,6 +939,210 @@ function PaginaArquivos({ ctx }) {
 }
 
 // ------------------------------------------------------------
+// Modelos: arquivos prontos da casa
+// ------------------------------------------------------------
+const CORES_CATEGORIA = [
+  { bg: "var(--tint)", cor: "var(--marca-texto)" },
+  { bg: "var(--verde-bg)", cor: "var(--verde)" },
+  { bg: "var(--roxo-bg)", cor: "var(--roxo)" },
+  { bg: "var(--teal-bg)", cor: "var(--teal)" },
+  { bg: "var(--rosa-bg)", cor: "var(--rosa)" },
+  { bg: "var(--ambar-bg)", cor: "var(--ambar)" },
+];
+
+function PaginaModelos({ ctx }) {
+  const [modelos, setModelos] = useState(null);
+  const [filtro, setFiltro] = useState("");
+  const [msg, setMsg] = useState("");
+  const [formAberto, setFormAberto] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [fNome, setFNome] = useState("");
+  const [fCategoria, setFCategoria] = useState("");
+  const [fDescricao, setFDescricao] = useState("");
+  const [fArquivo, setFArquivo] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+
+  const podeEditar = nivelModulo(ctx, "modelos") === "editar";
+
+  async function carregar() {
+    const { data } = await sb.from("modelos").select("*, profiles(nome)").order("categoria").order("nome");
+    setModelos(data || []);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  const categorias = useMemo(() => {
+    const set = [];
+    (modelos || []).forEach((m) => {
+      const c = (m.categoria || "Geral").trim();
+      if (set.indexOf(c) === -1) set.push(c);
+    });
+    return set.sort();
+  }, [modelos]);
+
+  function corCategoria(c) {
+    const i = Math.max(0, categorias.indexOf((c || "Geral").trim()));
+    return CORES_CATEGORIA[i % CORES_CATEGORIA.length];
+  }
+
+  const visiveis = (modelos || []).filter((m) => !filtro || (m.categoria || "Geral").trim() === filtro);
+
+  function abrirForm(m) {
+    setEditando(m || null);
+    setFNome(m ? m.nome : "");
+    setFCategoria(m ? (m.categoria || "") : "");
+    setFDescricao(m ? (m.descricao || "") : "");
+    setFArquivo(null);
+    setFormAberto(true);
+    setMsg("");
+  }
+
+  async function salvarModelo() {
+    const nome = fNome.trim();
+    if (!nome) { setMsg("Dê um nome ao modelo."); return; }
+    if (!editando && !fArquivo) { setMsg("Escolha o arquivo do modelo."); return; }
+    setSalvando(true);
+    setMsg("");
+
+    let caminho = editando ? editando.storage_path : null;
+    if (fArquivo) {
+      caminho = crypto.randomUUID() + "_" + fArquivo.name.replace(/[^\w.\-]+/g, "_");
+      const up = await sb.storage.from("modelos").upload(caminho, fArquivo);
+      if (up.error) { setMsg("Erro ao enviar o arquivo: " + up.error.message); setSalvando(false); return; }
+    }
+
+    const dados = { nome, categoria: fCategoria.trim() || "Geral", descricao: fDescricao.trim() || null, storage_path: caminho, atualizado_por: ctx.profile.id };
+    let erro = null;
+    if (editando) {
+      const { error } = await sb.from("modelos").update(dados).eq("id", editando.id);
+      erro = error;
+      if (!error && fArquivo && editando.storage_path && editando.storage_path !== caminho) {
+        await sb.storage.from("modelos").remove([editando.storage_path]);
+      }
+    } else {
+      const { error } = await sb.from("modelos").insert(dados);
+      erro = error;
+      if (error && caminho) await sb.storage.from("modelos").remove([caminho]);
+    }
+
+    if (erro) { setMsg("Erro ao salvar: " + erro.message); setSalvando(false); return; }
+    setSalvando(false);
+    setFormAberto(false);
+    carregar();
+  }
+
+  async function excluirModelo(m) {
+    if (!window.confirm('Excluir o modelo "' + m.nome + '"?')) return;
+    const { error } = await sb.from("modelos").delete().eq("id", m.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    if (m.storage_path) await sb.storage.from("modelos").remove([m.storage_path]);
+    carregar();
+  }
+
+  async function abrirModelo(m, baixar) {
+    if (!m.storage_path) { setMsg("Este modelo está sem arquivo. Edite e envie um."); return; }
+    const ext = "." + m.storage_path.split(".").pop();
+    const op = baixar ? { download: m.nome.replace(/[^\w.\- ]+/g, "").trim() + ext } : undefined;
+    const { data, error } = await sb.storage.from("modelos").createSignedUrl(m.storage_path, 120, op);
+    if (error || !data) { setMsg("Não foi possível abrir: " + (error ? error.message : "sem acesso")); return; }
+    registrarEvento(baixar ? "baixar" : "visualizar", "modelos", m.nome, m.id);
+    window.open(data.signedUrl, "_blank", "noopener");
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+          <span className="chip" onClick={() => setFiltro("")} style={{ cursor: "pointer", background: !filtro ? "var(--tint)" : "var(--branco)", color: !filtro ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (!filtro ? "var(--tint-borda)" : "var(--linha)") }}>Todos</span>
+          {categorias.map((c) => {
+            const cor = corCategoria(c);
+            const on = filtro === c;
+            return (
+              <span key={c} className="chip" onClick={() => setFiltro(on ? "" : c)}
+                style={{ cursor: "pointer", background: on ? cor.bg : "var(--branco)", color: on ? cor.cor : "var(--sec)", border: "1px solid " + (on ? "transparent" : "var(--linha)") }}>{c}</span>
+            );
+          })}
+        </div>
+        {podeEditar && (
+          <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} onClick={() => (formAberto ? setFormAberto(false) : abrirForm(null))}>
+            <i className="ti ti-plus" style={{ fontSize: 15 }} aria-hidden="true"></i>Novo modelo
+          </button>
+        )}
+      </div>
+
+      {formAberto && (
+        <div className="card-fl anim-pop" style={{ padding: "13px 14px", marginBottom: 12, maxWidth: 560 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>{editando ? "Editar modelo" : "Novo modelo"}</div>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 8 }}>
+            <input className="campo" style={{ flex: 2, minWidth: 170, padding: "8px 10px", fontSize: 13 }} placeholder="Nome do modelo" value={fNome} onChange={(e) => setFNome(e.target.value)} autoFocus />
+            <input className="campo" list="cats-modelos" style={{ flex: 1, minWidth: 120, padding: "8px 10px", fontSize: 13 }} placeholder="Categoria" value={fCategoria} onChange={(e) => setFCategoria(e.target.value)} />
+            <datalist id="cats-modelos">{categorias.map((c) => <option key={c} value={c} />)}</datalist>
+          </div>
+          <input className="campo" style={{ padding: "8px 10px", fontSize: 13, marginBottom: 8 }} placeholder="Descrição (opcional)" value={fDescricao} onChange={(e) => setFDescricao(e.target.value)} />
+          <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+            <label className="btn-contorno" style={{ cursor: "pointer", padding: "8px 13px", fontSize: 12.5 }}>
+              <i className="ti ti-upload" style={{ fontSize: 14 }} aria-hidden="true"></i>{fArquivo ? fArquivo.name : (editando ? "Substituir arquivo (opcional)" : "Escolher arquivo")}
+              <input type="file" style={{ display: "none" }} onChange={(e) => setFArquivo(e.target.files[0] || null)} />
+            </label>
+            <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} disabled={salvando} onClick={salvarModelo}>{salvando ? "Salvando…" : "Salvar"}</button>
+            <button className="btn-fantasma" style={{ width: "auto", padding: "0 10px" }} onClick={() => setFormAberto(false)}>cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {!modelos && <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+      {modelos && visiveis.length === 0 && (
+        <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+          {modelos.length === 0 ? "Nenhum modelo ainda." + (podeEditar ? " Comece pelo botão Novo modelo." : "") : "Nenhum modelo nesta categoria."}
+        </div>
+      )}
+
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 12 }}>
+        {visiveis.map((m, i) => {
+          const b = badgeTipo(m.storage_path || m.nome);
+          const cc = corCategoria(m.categoria);
+          return (
+            <div key={m.id} className="card-fl anim-sobe" style={{ padding: "13px 14px", display: "flex", flexDirection: "column", animationDelay: (i * 35) + "ms" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 9 }}>
+                <span className="chip" style={{ background: b.bg, color: b.cor }}>{b.r}</span>
+                <span className="chip" style={{ background: cc.bg, color: cc.cor }}>{(m.categoria || "Geral").trim()}</span>
+              </div>
+              <div style={{ fontSize: 13.5, fontWeight: 600, lineHeight: 1.35 }}>{m.nome}</div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)", margin: "4px 0 10px", lineHeight: 1.5, flex: 1 }}>
+                {m.descricao || ""}
+              </div>
+              <div style={{ fontSize: 10.5, color: "var(--muted)", marginBottom: 9 }}>
+                atualizado {tempoRelativo(m.atualizado_em)}{m.profiles && m.profiles.nome ? " por " + primeiroNome(m.profiles.nome) : ""}
+              </div>
+              <div style={{ display: "flex", gap: 5 }}>
+                <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => abrirModelo(m, false)}>
+                  <i className="ti ti-eye" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                </button>
+                <button className="btn-primaria" style={{ padding: "6px 12px", fontSize: 12, flex: 1, justifyContent: "center" }} onClick={() => abrirModelo(m, true)}>
+                  <i className="ti ti-download" style={{ fontSize: 13 }} aria-hidden="true"></i>Baixar
+                </button>
+                {podeEditar && (
+                  <React.Fragment>
+                    <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Editar" title="Editar" onClick={() => abrirForm(m)}>
+                      <i className="ti ti-edit" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                    </button>
+                    <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Excluir" title="Excluir" onClick={() => excluirModelo(m)}>
+                      <i className="ti ti-trash" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                    </button>
+                  </React.Fragment>
+                )}
+              </div>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
 // Configuracoes: perfis e permissoes, pessoas, outros CORTEX
 // ------------------------------------------------------------
 function SegNivel({ valor, aoMudar, desabilitado }) {
@@ -1312,6 +1516,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaPainel ctx={ctx} setPagina={setPagina} />;
   } else if (pagina === "arquivos") {
     conteudo = <PaginaArquivos ctx={ctx} />;
+  } else if (pagina === "modelos") {
+    conteudo = <PaginaModelos ctx={ctx} />;
   } else if (pagina === "auditoria") {
     conteudo = <PaginaAuditoria />;
   } else if (pagina === "outros_cortex") {
