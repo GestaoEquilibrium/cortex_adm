@@ -1,6 +1,6 @@
 # CORTEX Gestão
 
-Sistema administrativo único do Grupo Equilibrium. Identidade branco + laranja.
+Sistema administrativo único do Grupo Equilibrium. Identidade branco + azul Equilibrium (#1068B0).
 
 Frontend em React (Babel no navegador) hospedado no GitHub Pages, com backend Supabase
 (banco único, auth própria, storage e RLS). A auditoria registra tudo: criar, editar,

@@ -1,22 +1,22 @@
 /* ============================================================
    CORTEX GESTAO - ESTILO BASE
-   Identidade: branco + laranja | Tipografia: Outfit
+   Identidade: branco + azul Equilibrium | Tipografia: Outfit
    ============================================================ */
 
 :root {
-  --laranja: #F97316;
-  --laranja-claro: #FB923C;
-  --laranja-escuro: #EA580C;
-  --laranja-texto: #C2410C;
-  --tint: #FFF1E7;
-  --tint-borda: #F8D8C2;
-  --tint-hover: #FBF4EE;
-  --ink: #241F1C;
-  --sec: #6E655E;
-  --muted: #9A8F86;
-  --linha: #F0E8E0;
-  --linha-suave: #F3EDE6;
-  --fundo: #FBF8F5;
+  --marca: #1068B0;
+  --marca-claro: #2893EB;
+  --marca-escuro: #0C5088;
+  --marca-texto: #0B4575;
+  --tint: #E7F2FB;
+  --tint-borda: #C1DCF3;
+  --tint-hover: #F0F7FC;
+  --ink: #1C2530;
+  --sec: #5B6572;
+  --muted: #8C97A4;
+  --linha: #E7EDF3;
+  --linha-suave: #EEF3F8;
+  --fundo: #F6F8FB;
   --branco: #FFFFFF;
   --verde: #15803D;      --verde-bg: #E9F7EE;
   --vermelho: #B91C1C;   --vermelho-bg: #FDECEC;
@@ -25,9 +25,9 @@
   --roxo: #6D28D9;       --roxo-bg: #F1EAFE;
   --teal: #0F766E;       --teal-bg: #E0F5F1;
   --rosa: #BE185D;       --rosa-bg: #FDEAF1;
-  --grad: linear-gradient(135deg, #F97316 0%, #FB923C 100%);
-  --sombra: 0 1px 2px rgba(36, 31, 28, .05), 0 4px 14px rgba(36, 31, 28, .06);
-  --sombra-hover: 0 8px 22px rgba(234, 88, 12, .14), 0 2px 6px rgba(36, 31, 28, .06);
+  --grad: linear-gradient(135deg, #1068B0 0%, #2893EB 100%);
+  --sombra: 0 1px 2px rgba(28, 37, 48, .05), 0 4px 14px rgba(28, 37, 48, .06);
+  --sombra-hover: 0 8px 22px rgba(12, 80, 136, .14), 0 2px 6px rgba(28, 37, 48, .06);
   --mola: cubic-bezier(.34, 1.56, .64, 1);
 }
 
@@ -43,11 +43,11 @@ body {
   -webkit-font-smoothing: antialiased;
 }
 
-::selection { background: var(--tint); color: var(--laranja-escuro); }
+::selection { background: var(--tint); color: var(--marca-escuro); }
 
 ::-webkit-scrollbar { width: 9px; height: 9px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #E7DED5; border-radius: 99px; }
+::-webkit-scrollbar-thumb { background: #D8E0E8; border-radius: 99px; }
 ::-webkit-scrollbar-thumb:hover { background: var(--tint-borda); }
 
 /* ---------- animacoes ---------- */
@@ -100,17 +100,17 @@ body {
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  box-shadow: 0 3px 10px rgba(249, 115, 22, .3);
+  box-shadow: 0 3px 10px rgba(16, 104, 176, .3);
   transition: transform .15s var(--mola), box-shadow .2s ease, filter .2s ease;
 }
 
-.btn-primaria:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(249, 115, 22, .38); filter: brightness(1.03); }
+.btn-primaria:hover { transform: translateY(-2px); box-shadow: 0 6px 16px rgba(16, 104, 176, .38); filter: brightness(1.03); }
 .btn-primaria:active { transform: scale(.96); }
 .btn-primaria:disabled { opacity: .55; cursor: not-allowed; transform: none; box-shadow: none; }
 
 .btn-contorno {
   background: var(--branco);
-  color: var(--laranja-texto);
+  color: var(--marca-texto);
   border: 1px solid var(--tint-borda);
   border-radius: 10px;
   padding: 9px 16px;
@@ -141,7 +141,7 @@ body {
   transition: all .15s ease;
 }
 
-.btn-fantasma:hover { background: var(--tint); color: var(--laranja-texto); border-color: var(--tint-borda); }
+.btn-fantasma:hover { background: var(--tint); color: var(--marca-texto); border-color: var(--tint-borda); }
 .btn-fantasma:active { transform: scale(.88); }
 
 .campo {
@@ -158,7 +158,7 @@ body {
 }
 
 .campo::placeholder { color: var(--muted); }
-.campo:focus { border-color: var(--laranja); box-shadow: 0 0 0 3px rgba(249, 115, 22, .14); }
+.campo:focus { border-color: var(--marca); box-shadow: 0 0 0 3px rgba(16, 104, 176, .14); }
 
 .chip {
   display: inline-flex;
@@ -215,14 +215,14 @@ body {
   user-select: none;
 }
 
-.item-menu:hover { background: var(--tint-hover); color: var(--laranja-texto); transform: translateX(3px); }
+.item-menu:hover { background: var(--tint-hover); color: var(--marca-texto); transform: translateX(3px); }
 .item-menu:active { transform: scale(.96); }
 
 .item-menu.on {
   background: var(--grad);
   color: #fff;
   font-weight: 600;
-  box-shadow: 0 3px 10px rgba(249, 115, 22, .28);
+  box-shadow: 0 3px 10px rgba(16, 104, 176, .28);
 }
 
 .item-menu.on:hover { transform: none; }
@@ -291,8 +291,8 @@ body {
   user-select: none;
 }
 
-.aba:hover { color: var(--laranja-texto); }
-.aba.on { color: var(--laranja-texto); border-bottom-color: var(--laranja); }
+.aba:hover { color: var(--marca-texto); }
+.aba.on { color: var(--marca-texto); border-bottom-color: var(--marca); }
 
 .seg {
   display: inline-flex;
@@ -320,7 +320,7 @@ body {
 .sg:hover { color: var(--sec); background: var(--branco); }
 .sg:active { transform: scale(.93); }
 .sg:disabled { cursor: not-allowed; opacity: .55; }
-.sg.on-h { background: #EFE9E2; color: #57504A; }
+.sg.on-h { background: #E6EBF1; color: #4A5563; }
 .sg.on-v { background: var(--azul-bg); color: var(--azul); }
 .sg.on-e { background: var(--verde-bg); color: var(--verde); }
 
@@ -328,7 +328,7 @@ body {
   position: relative;
   width: 36px;
   height: 20px;
-  background: #E4DBD1;
+  background: #D9E1E9;
   border-radius: 999px;
   cursor: pointer;
   border: none;
@@ -345,22 +345,22 @@ body {
   height: 16px;
   border-radius: 50%;
   background: #fff;
-  box-shadow: 0 1px 3px rgba(36, 31, 28, .25);
+  box-shadow: 0 1px 3px rgba(28, 37, 48, .25);
   transition: transform .2s var(--mola);
 }
 
-.sw.on { background: var(--laranja); }
+.sw.on { background: var(--marca); }
 .sw.on::after { transform: translateX(16px); }
 .sw:disabled { opacity: .5; cursor: not-allowed; }
 
 /* ---------- tabelas e linhas ---------- */
 
 .linha-hover { transition: background .15s ease; }
-.linha-hover:hover { background: #FDF9F5; }
+.linha-hover:hover { background: #F8FAFD; }
 
 /* ---------- acessibilidade ---------- */
 
-:focus-visible { outline: 2px solid var(--laranja); outline-offset: 2px; border-radius: 6px; }
+:focus-visible { outline: 2px solid var(--marca); outline-offset: 2px; border-radius: 6px; }
 
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after {

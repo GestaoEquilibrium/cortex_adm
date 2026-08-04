@@ -18,23 +18,23 @@ const sb = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABA
 // Registro dos modulos (id = chave usada na tabela permissoes)
 // ------------------------------------------------------------
 const MODULOS = [
-  { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--laranja-texto)", fundo: "var(--tint)",        status: "ativo" },
-  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--laranja-texto)", fundo: "var(--tint)",        status: "proximo" },
+  { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
+  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "proximo" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "proximo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "fase2" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "fase2" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "fase2" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)",    status: "fase3" },
-  { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#EFE9E2",            status: "ativo" },
+  { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
-  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#F1EDE8",            status: "ativo" },
+  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#ECF1F6",            status: "ativo" },
 ];
 
 const STATUS_CHIP = {
-  proximo: { texto: "próxima entrega", fundo: "var(--tint)", cor: "var(--laranja-texto)" },
+  proximo: { texto: "próxima entrega", fundo: "var(--tint)", cor: "var(--marca-texto)" },
   fase2:   { texto: "fase 2",          fundo: "var(--azul-bg)", cor: "var(--azul)" },
-  fase3:   { texto: "fase 3",          fundo: "#F1EDE8", cor: "var(--sec)" },
+  fase3:   { texto: "fase 3",          fundo: "#ECF1F6", cor: "var(--sec)" },
 };
 
 // ------------------------------------------------------------
@@ -123,7 +123,7 @@ function nivelModulo(ctx, moduloId) {
 function Asterisco({ tam = 20 }) {
   return (
     <svg className="logo-marca" width={tam} height={tam} viewBox="0 0 24 24" aria-hidden="true">
-      <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" stroke="#F97316" strokeWidth="2.6" strokeLinecap="round" fill="none" />
+      <path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" stroke="#1068B0" strokeWidth="2.6" strokeLinecap="round" fill="none" />
     </svg>
   );
 }
@@ -146,11 +146,11 @@ function TelaConfigPendente() {
       <div className="card-fl anim-sobe" style={{ maxWidth: 460, padding: "30px 32px" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 14 }}>
           <Asterisco tam={22} />
-          <span style={{ fontWeight: 700, fontSize: 17 }}>CORTEX <span style={{ color: "var(--laranja-escuro)" }}>Gestão</span></span>
+          <span style={{ fontWeight: 700, fontSize: 17 }}>CORTEX <span style={{ color: "var(--marca-escuro)" }}>Gestão</span></span>
         </div>
         <div style={{ fontSize: 15, fontWeight: 600, marginBottom: 8 }}>Falta conectar o banco</div>
         <p style={{ fontSize: 13.5, color: "var(--sec)", lineHeight: 1.6 }}>
-          Abra o arquivo <span style={{ fontFamily: "'JetBrains Mono', monospace", background: "var(--tint)", color: "var(--laranja-texto)", padding: "1px 6px", borderRadius: 6, fontSize: 12 }}>config.js</span> e
+          Abra o arquivo <span style={{ fontFamily: "'JetBrains Mono', monospace", background: "var(--tint)", color: "var(--marca-texto)", padding: "1px 6px", borderRadius: 6, fontSize: 12 }}>config.js</span> e
           cole a Project URL e a anon key do seu projeto Supabase (Settings, API). Depois recarregue esta página.
         </p>
       </div>
@@ -163,7 +163,7 @@ function TelaSemPerfil({ profile, aoSair }) {
     <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "var(--fundo)", padding: 20 }}>
       <div className="card-fl anim-sobe" style={{ maxWidth: 440, padding: "30px 32px", textAlign: "center" }}>
         <div style={{ width: 52, height: 52, borderRadius: 16, background: "var(--tint)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 14px" }}>
-          <i className="ti ti-lock" style={{ fontSize: 24, color: "var(--laranja-texto)" }} aria-hidden="true"></i>
+          <i className="ti ti-lock" style={{ fontSize: 24, color: "var(--marca-texto)" }} aria-hidden="true"></i>
         </div>
         <div style={{ fontSize: 15.5, fontWeight: 600, marginBottom: 8 }}>Quase lá, {primeiroNome(profile && profile.nome) || "colega"}</div>
         <p style={{ fontSize: 13.5, color: "var(--sec)", lineHeight: 1.6, marginBottom: 18 }}>
@@ -202,11 +202,11 @@ function TelaLogin() {
   }
 
   return (
-    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(900px 480px at 15% -10%, #FFF1E7 0%, rgba(255,241,231,0) 60%), var(--fundo)", padding: 20 }}>
+    <div style={{ minHeight: "100vh", display: "flex", alignItems: "center", justifyContent: "center", background: "radial-gradient(900px 480px at 15% -10%, #E7F2FB 0%, rgba(255,241,231,0) 60%), var(--fundo)", padding: 20 }}>
       <div className="card-fl anim-sobe" style={{ width: "100%", maxWidth: 400, padding: "34px 34px 28px" }}>
         <div className="logo-area" style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 6 }}>
           <Asterisco tam={26} />
-          <span style={{ fontWeight: 700, fontSize: 20 }}>CORTEX <span style={{ color: "var(--laranja-escuro)" }}>Gestão</span></span>
+          <span style={{ fontWeight: 700, fontSize: 20 }}>CORTEX <span style={{ color: "var(--marca-escuro)" }}>Gestão</span></span>
         </div>
         <p style={{ fontSize: 13, color: "var(--muted)", marginBottom: 24 }}>Sistema administrativo do Grupo Equilibrium</p>
 
@@ -274,7 +274,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
       <aside className={"sb" + (estado === "rail" ? " rail" : "") + (estado === "oculta" ? " oculta" : "")}>
         <div className="logo-area" style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 8px 10px", minHeight: 34 }}>
           <Asterisco tam={20} />
-          <span className="rotulo" style={{ fontWeight: 700, fontSize: 15.5 }}>CORTEX <span style={{ color: "var(--laranja-escuro)" }}>Gestão</span></span>
+          <span className="rotulo" style={{ fontWeight: 700, fontSize: 15.5 }}>CORTEX <span style={{ color: "var(--marca-escuro)" }}>Gestão</span></span>
         </div>
 
         <div style={{ display: "flex", gap: 6, padding: "0 6px 10px", flexWrap: "wrap" }}>
@@ -294,7 +294,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
         {config && <Item m={config} />}
 
         <div className="user-card" title={ctx.profile.nome}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 2px 8px rgba(249,115,22,.28)" }}>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 2px 8px rgba(16,104,176,.28)" }}>
             {iniciais(ctx.profile.nome)}
           </div>
           <div className="rotulo" style={{ flex: 1, minWidth: 0 }}>
@@ -358,7 +358,7 @@ function PaginaPainel({ ctx, setPagina }) {
   }, []);
 
   const kpis = [
-    { rotulo: "Pastas no drive", chave: "pastas", icone: "ti-folder", cor: "var(--laranja-texto)", fundo: "var(--tint)" },
+    { rotulo: "Pastas no drive", chave: "pastas", icone: "ti-folder", cor: "var(--marca-texto)", fundo: "var(--tint)" },
     { rotulo: "Arquivos", chave: "arquivos", icone: "ti-file", cor: "var(--azul)", fundo: "var(--azul-bg)" },
     { rotulo: "Modelos prontos", chave: "modelos", icone: "ti-file-text", cor: "var(--ambar)", fundo: "var(--ambar-bg)" },
     { rotulo: "Pessoas cadastradas", chave: "pessoas", icone: "ti-users", cor: "var(--roxo)", fundo: "var(--roxo-bg)" },
@@ -409,7 +409,7 @@ function PaginaPainel({ ctx, setPagina }) {
           {atividade && atividade.length === 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", padding: "8px 0" }}>Ainda não há registros. Cada ação no sistema vai aparecer aqui.</div>}
           {atividade && atividade.map((a) => (
             <div key={a.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 4px", borderTop: "1px solid var(--linha-suave)", fontSize: 12.5, color: "var(--sec)" }}>
-              <i className={"ti " + (ICONES_ACAO[a.acao] || "ti-point")} style={{ fontSize: 15, color: "var(--laranja-texto)", flex: "none" }} aria-hidden="true"></i>
+              <i className={"ti " + (ICONES_ACAO[a.acao] || "ti-point")} style={{ fontSize: 15, color: "var(--marca-texto)", flex: "none" }} aria-hidden="true"></i>
               <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 <span style={{ fontWeight: 600, color: "var(--ink)" }}>{a.user_nome || "Alguém"}</span> {VERBOS[a.acao] || a.acao} {a.entidade ? a.entidade : (a.modulo || "")}
               </span>
@@ -455,7 +455,7 @@ function PaginaAuditoria() {
           <i className="ti ti-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 15, color: "var(--muted)" }} aria-hidden="true"></i>
           <input className="campo" style={{ paddingLeft: 36 }} placeholder="Buscar por pessoa, ação ou módulo" value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
-        <span className="chip" style={{ background: "var(--tint)", color: "var(--laranja-texto)" }}>
+        <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>
           <i className="ti ti-lock" style={{ fontSize: 12 }} aria-hidden="true"></i>registro imutável
         </span>
       </div>
@@ -469,7 +469,7 @@ function PaginaAuditoria() {
         )}
         {filtradas && filtradas.map((l) => (
           <div key={l.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
-            <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--tint)", color: "var(--laranja-texto)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
+            <div style={{ width: 28, height: 28, borderRadius: 8, background: "var(--tint)", color: "var(--marca-texto)", display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>
               <i className={"ti " + (ICONES_ACAO[l.acao] || "ti-point")} style={{ fontSize: 15 }} aria-hidden="true"></i>
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
@@ -515,7 +515,7 @@ function PaginaOutros() {
       <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 12 }}>
         {links && links.map((l, i) => (
           <div key={l.id} className="card-fl anim-sobe" style={{ padding: "16px 17px", animationDelay: (i * 60) + "ms" }}>
-            <div style={{ width: 34, height: 34, borderRadius: 10, background: l.cor || "var(--laranja)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 11, boxShadow: "0 3px 10px rgba(36,31,28,.15)" }}>
+            <div style={{ width: 34, height: 34, borderRadius: 10, background: l.cor || "var(--marca)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 11, boxShadow: "0 3px 10px rgba(28,37,48,.15)" }}>
               <Asterisco tam={16} />
             </div>
             <div style={{ fontSize: 14.5, fontWeight: 700 }}>{l.nome}</div>
@@ -525,7 +525,7 @@ function PaginaOutros() {
                 Abrir<i className="ti ti-external-link" style={{ fontSize: 14 }} aria-hidden="true"></i>
               </button>
             ) : (
-              <span className="chip" style={{ background: "#F1EDE8", color: "var(--sec)" }}>URL não configurada</span>
+              <span className="chip" style={{ background: "#ECF1F6", color: "var(--sec)" }}>URL não configurada</span>
             )}
           </div>
         ))}
@@ -561,7 +561,7 @@ function PaginaInstrucoes() {
         <div className="card-fl" style={{ padding: 20, fontSize: 13, color: "var(--muted)", textAlign: "center" }}>Nenhuma instrução cadastrada ainda.</div>
       )}
       {grupos && Object.keys(grupos).map((mod) => {
-        const meta = MODULOS.find((m) => m.id === mod) || { rotulo: mod, icone: "ti-info-circle", cor: "var(--sec)", fundo: "#F1EDE8" };
+        const meta = MODULOS.find((m) => m.id === mod) || { rotulo: mod, icone: "ti-info-circle", cor: "var(--sec)", fundo: "#ECF1F6" };
         return (
           <div key={mod} style={{ marginBottom: 16 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 2px 8px" }}>
@@ -687,10 +687,10 @@ function AbaPerfis({ ctx, podeEditar }) {
       <div style={{ flex: "none", width: 200, display: "flex", flexDirection: "column", gap: 8 }}>
         {perfis.map((p) => (
           <div key={p.id} className="card-fl clicavel" onClick={() => setSel(p)}
-            style={{ padding: "10px 12px", borderColor: sel && sel.id === p.id ? "var(--laranja)" : undefined, background: sel && sel.id === p.id ? "#FFF8F3" : undefined }}>
+            style={{ padding: "10px 12px", borderColor: sel && sel.id === p.id ? "var(--marca)" : undefined, background: sel && sel.id === p.id ? "#F4F9FD" : undefined }}>
             <div style={{ fontSize: 13, fontWeight: 600 }}>{exibirPerfil(p.nome)}</div>
             <div style={{ fontSize: 11, color: "var(--muted)" }}>{contagem[p.id] || 0} {(contagem[p.id] || 0) === 1 ? "pessoa" : "pessoas"}</div>
-            {p.acesso_total && <span className="chip" style={{ background: "var(--tint)", color: "var(--laranja-texto)", marginTop: 5 }}>Acesso total</span>}
+            {p.acesso_total && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", marginTop: 5 }}>Acesso total</span>}
           </div>
         ))}
         {podeEditar && !criando && (
@@ -715,7 +715,7 @@ function AbaPerfis({ ctx, podeEditar }) {
         {!sel && <div style={{ fontSize: 13, color: "var(--muted)" }}>Selecione um perfil.</div>}
         {sel && sel.acesso_total && (
           <div style={{ padding: "18px 8px", textAlign: "center" }}>
-            <div style={{ width: 44, height: 44, borderRadius: 13, background: "var(--tint)", color: "var(--laranja-texto)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: "var(--tint)", color: "var(--marca-texto)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
               <i className="ti ti-shield-check" style={{ fontSize: 21 }} aria-hidden="true"></i>
             </div>
             <div style={{ fontWeight: 600, fontSize: 14 }}>{exibirPerfil(sel.nome)} tem acesso total</div>
@@ -793,7 +793,7 @@ function AbaPessoas({ ctx, podeEditar }) {
           const euMesmo = p.id === ctx.profile.id;
           return (
             <div key={p.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
-              <div style={{ width: 32, height: 32, borderRadius: "50%", background: p.ativo ? "var(--grad)" : "#D9D2CA", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(p.nome)}</div>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: p.ativo ? "var(--grad)" : "#C3CCD6", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(p.nome)}</div>
               <div style={{ flex: 1, minWidth: 140 }}>
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nome || "(sem nome)"}{euMesmo && <span style={{ fontWeight: 400, color: "var(--muted)" }}> · você</span>}</div>
                 <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.email}</div>
@@ -851,7 +851,7 @@ function AbaLinks({ podeEditar }) {
 
   async function novo() {
     const maior = (links || []).reduce((m, l) => Math.max(m, l.ordem || 0), 0);
-    const { error } = await sb.from("cortex_links").insert({ nome: "Novo CORTEX", descricao: "", url: "", cor: "#F97316", ordem: maior + 1 });
+    const { error } = await sb.from("cortex_links").insert({ nome: "Novo CORTEX", descricao: "", url: "", cor: "#1068B0", ordem: maior + 1 });
     if (error) { setMsg("Erro: " + error.message); return; }
     carregar();
   }
@@ -862,7 +862,7 @@ function AbaLinks({ podeEditar }) {
     <div>
       {links.map((l) => (
         <div key={l.id} className="card-fl" style={{ padding: "11px 13px", marginBottom: 10, display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
-          <input type="color" value={l.cor || "#F97316"} disabled={!podeEditar}
+          <input type="color" value={l.cor || "#1068B0"} disabled={!podeEditar}
             onChange={(e) => editarLocal(l.id, "cor", e.target.value)}
             style={{ width: 34, height: 34, border: "1px solid var(--linha)", borderRadius: 9, padding: 2, background: "#fff", cursor: podeEditar ? "pointer" : "default", flex: "none" }}
             aria-label="Cor do botão" />
