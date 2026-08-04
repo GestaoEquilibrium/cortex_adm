@@ -3,7 +3,7 @@
 // Login + shell + sidebar flutuante + painel + auditoria
 // ============================================================
 
-const { useState, useEffect, useMemo, useCallback } = React;
+const { useState, useEffect, useMemo, useCallback, useRef } = React;
 
 const CFG = window.CORTEX_CFG || {};
 const CONFIG_OK =
@@ -1281,7 +1281,17 @@ function pdfPonto(colab, regs, ocos, mesRotulo, retornarBlob) {
 
 function AbaPonto({ ctx }) {
   const podeEditar = nivelAba(ctx, "rh", "ponto") === "editar";
-  const [visao, setVisao] = useState("hoje");
+  const [visao, setVisaoRaw] = useState(() => {
+    try {
+      const v = localStorage.getItem("cg_ponto_visao");
+      if (["hoje", "espelho", "ocorrencias", "relatorios"].indexOf(v) !== -1) return v;
+    } catch (e) {}
+    return "hoje";
+  });
+  const setVisao = useCallback((v) => {
+    setVisaoRaw(v);
+    try { localStorage.setItem("cg_ponto_visao", v); } catch (e) {}
+  }, []);
   const [hoje, setHoje] = useState(null);
   const [colabs, setColabs] = useState([]);
   const [colabSel, setColabSel] = useState("");
@@ -1741,7 +1751,17 @@ function PaginaRH({ ctx }) {
     { id: "faltas", r: "Faltas e atestados" },
     { id: "alertas", r: "Alertas e pendências" },
   ].filter((a) => nivelAba(ctx, "rh", a.id) !== "oculto");
-  const [aba, setAba] = useState(abas.length ? abas[0].id : "colaboradores");
+  const [aba, setAbaRaw] = useState(() => {
+    try {
+      const v = localStorage.getItem("cg_rh_aba");
+      if (v && abas.some((a) => a.id === v)) return v;
+    } catch (e) {}
+    return abas.length ? abas[0].id : "colaboradores";
+  });
+  const setAba = useCallback((v) => {
+    setAbaRaw(v);
+    try { localStorage.setItem("cg_rh_aba", v); } catch (e) {}
+  }, []);
 
   return (
     <div>
@@ -2318,7 +2338,17 @@ function PaginaStub({ m }) {
 // Shell
 // ------------------------------------------------------------
 function Shell({ ctx, aoSair }) {
-  const [pagina, setPagina] = useState("painel");
+  const [pagina, setPaginaRaw] = useState(() => {
+    try {
+      const v = localStorage.getItem("cg_pagina");
+      if (v && MODULOS.some((m) => m.id === v) && nivelModulo(ctx, v) !== "oculto") return v;
+    } catch (e) {}
+    return "painel";
+  });
+  const setPagina = useCallback((v) => {
+    setPaginaRaw(v);
+    try { localStorage.setItem("cg_pagina", v); } catch (e) {}
+  }, []);
   const [sbEstado, setSbEstadoRaw] = useState(() => {
     const v = localStorage.getItem("cg_sidebar");
     return v === "rail" || v === "oculta" ? v : "exp";
@@ -2380,8 +2410,10 @@ function Shell({ ctx, aoSair }) {
 function App() {
   const [fase, setFase] = useState("carregando"); // carregando | login | pronto
   const [ctx, setCtx] = useState(null);
+  const usuarioAtual = useRef(null);
 
   const carregarContexto = useCallback(async (userId) => {
+    usuarioAtual.current = userId;
     const { data: prof, error } = await sb
       .from("profiles")
       .select("id, nome, email, ativo, perfil_id, perfis ( nome, acesso_total )")
@@ -2420,10 +2452,15 @@ function App() {
 
     const { data: sub } = sb.auth.onAuthStateChange((evento, sessao) => {
       if (evento === "SIGNED_IN" && sessao) {
+        // O Supabase reemite SIGNED_IN quando a aba volta ao foco (renovacao
+        // de token). Se for a mesma pessoa, nao ha nada a fazer: o sistema
+        // continua exatamente onde estava.
+        if (usuarioAtual.current === sessao.user.id) return;
         setFase("carregando");
         carregarContexto(sessao.user.id);
       }
       if (evento === "SIGNED_OUT") {
+        usuarioAtual.current = null;
         setCtx(null);
         setFase("login");
       }
