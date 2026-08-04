@@ -19,7 +19,7 @@ const sb = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABA
 // ------------------------------------------------------------
 const MODULOS = [
   { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
-  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "proximo" },
+  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "proximo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "fase2" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "fase2" },
@@ -72,6 +72,22 @@ function urlAbsoluta(u) {
   if (!t) return "";
   if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return t;
   return "https://" + t;
+}
+
+function fmtBytes(n) {
+  if (n === null || n === undefined) return "";
+  if (n < 1024) return n + " B";
+  if (n < 1048576) return (n / 1024).toFixed(0) + " KB";
+  return (n / 1048576).toFixed(1).replace(".", ",") + " MB";
+}
+
+function badgeTipo(nome) {
+  const ext = String(nome || "").split(".").pop().toLowerCase();
+  if (ext === "pdf") return { r: "PDF", bg: "var(--vermelho-bg)", cor: "var(--vermelho)" };
+  if (["xls", "xlsx", "csv"].indexOf(ext) !== -1) return { r: "XLS", bg: "var(--verde-bg)", cor: "var(--verde)" };
+  if (["doc", "docx"].indexOf(ext) !== -1) return { r: "DOC", bg: "var(--azul-bg)", cor: "var(--azul)" };
+  if (["png", "jpg", "jpeg", "webp", "gif"].indexOf(ext) !== -1) return { r: "IMG", bg: "var(--roxo-bg)", cor: "var(--roxo)" };
+  return { r: "ARQ", bg: "#ECF1F6", cor: "var(--sec)" };
 }
 
 function tempoRelativo(ts) {
@@ -584,6 +600,345 @@ function PaginaInstrucoes() {
 }
 
 // ------------------------------------------------------------
+// Arquivos: o drive proprio
+// ------------------------------------------------------------
+function PaginaArquivos({ ctx }) {
+  const [trilha, setTrilha] = useState([]); // [{id, nome}] - vazio = raiz
+  const [pastas, setPastas] = useState(null);
+  const [arquivos, setArquivos] = useState(null);
+  const [contagens, setContagens] = useState({});
+  const [nivel, setNivel] = useState("oculto");
+  const [acessos, setAcessos] = useState([]);
+  const [perfis, setPerfis] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [criando, setCriando] = useState(false);
+  const [novoNome, setNovoNome] = useState("");
+  const [enviando, setEnviando] = useState("");
+  const [addPerfil, setAddPerfil] = useState("");
+  const [addNivel, setAddNivel] = useState("ver");
+
+  const atual = trilha.length ? trilha[trilha.length - 1] : null;
+
+  async function carregar() {
+    setMsg("");
+    setPastas(null);
+    setArquivos(null);
+
+    let niv;
+    if (!atual) {
+      niv = ctx.acessoTotal ? "editar" : nivelModulo(ctx, "arquivos");
+    } else {
+      const { data } = await sb.rpc("nivel_pasta", { p_pasta_id: atual.id });
+      niv = data || "oculto";
+    }
+    setNivel(niv);
+
+    let q = sb.from("pastas").select("*").order("nome");
+    q = atual ? q.eq("pasta_pai_id", atual.id) : q.is("pasta_pai_id", null);
+    const { data: ps } = await q;
+    const filhas = ps || [];
+    setPastas(filhas);
+
+    if (filhas.length) {
+      const ids = filhas.map((p) => p.id);
+      const [{ data: fa }, { data: fp }] = await Promise.all([
+        sb.from("arquivos").select("pasta_id").in("pasta_id", ids),
+        sb.from("pastas").select("pasta_pai_id").in("pasta_pai_id", ids),
+      ]);
+      const c = {};
+      (fa || []).forEach((r) => { c[r.pasta_id] = (c[r.pasta_id] || 0) + 1; });
+      (fp || []).forEach((r) => { c[r.pasta_pai_id] = (c[r.pasta_pai_id] || 0) + 1; });
+      setContagens(c);
+    } else {
+      setContagens({});
+    }
+
+    if (atual) {
+      const { data: fs } = await sb.from("arquivos").select("*, profiles(nome)").eq("pasta_id", atual.id).order("nome");
+      setArquivos(fs || []);
+      if (niv === "editar") {
+        const [{ data: ac }, { data: pf }] = await Promise.all([
+          sb.from("pasta_acessos").select("*, perfis(nome)").eq("pasta_id", atual.id),
+          sb.from("perfis").select("id, nome, acesso_total").order("nome"),
+        ]);
+        setAcessos(ac || []);
+        setPerfis((pf || []).filter((p) => !p.acesso_total));
+      }
+    } else {
+      setArquivos([]);
+    }
+  }
+
+  useEffect(() => { carregar(); }, [atual && atual.id]);
+
+  function entrar(p) { setTrilha([...trilha, { id: p.id, nome: p.nome, restrita: p.restrita }]); }
+  function irPara(i) { setTrilha(i < 0 ? [] : trilha.slice(0, i + 1)); }
+
+  async function criarPasta() {
+    const nome = novoNome.trim();
+    if (!nome) return;
+    const { error } = await sb.from("pastas").insert({ nome, pasta_pai_id: atual ? atual.id : null, criado_por: ctx.profile.id });
+    if (error) { setMsg("Erro ao criar pasta: " + error.message); return; }
+    setNovoNome("");
+    setCriando(false);
+    carregar();
+  }
+
+  async function excluirPasta(p) {
+    if ((contagens[p.id] || 0) > 0) { setMsg("A pasta " + p.nome + " não está vazia. Esvazie antes de excluir."); return; }
+    if (!window.confirm('Excluir a pasta "' + p.nome + '"?')) return;
+    const { error } = await sb.from("pastas").delete().eq("id", p.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    carregar();
+  }
+
+  async function enviarArquivos(lista) {
+    if (!atual || !lista || !lista.length) return;
+    const arr = Array.from(lista);
+    for (let i = 0; i < arr.length; i++) {
+      const f = arr[i];
+      setEnviando("Enviando " + (i + 1) + " de " + arr.length + ": " + f.name);
+      const caminho = atual.id + "/" + crypto.randomUUID() + "_" + f.name.replace(/[^\w.\-]+/g, "_");
+      const up = await sb.storage.from("arquivos").upload(caminho, f);
+      if (up.error) { setMsg("Erro ao enviar " + f.name + ": " + up.error.message); continue; }
+      const ins = await sb.from("arquivos").insert({
+        pasta_id: atual.id, nome: f.name, storage_path: caminho,
+        tamanho: f.size, tipo: f.type || null, enviado_por: ctx.profile.id,
+      });
+      if (ins.error) {
+        await sb.storage.from("arquivos").remove([caminho]);
+        setMsg("Erro ao registrar " + f.name + ": " + ins.error.message);
+      }
+    }
+    setEnviando("");
+    carregar();
+  }
+
+  async function abrirArquivo(a, baixar) {
+    const op = baixar ? { download: a.nome } : undefined;
+    const { data, error } = await sb.storage.from("arquivos").createSignedUrl(a.storage_path, 120, op);
+    if (error || !data) { setMsg("Não foi possível abrir: " + (error ? error.message : "sem acesso")); return; }
+    registrarEvento(baixar ? "baixar" : "visualizar", "arquivos", a.nome, a.id);
+    window.open(data.signedUrl, "_blank", "noopener");
+  }
+
+  async function excluirArquivo(a) {
+    if (!window.confirm('Excluir o arquivo "' + a.nome + '"?')) return;
+    const { error } = await sb.from("arquivos").delete().eq("id", a.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    await sb.storage.from("arquivos").remove([a.storage_path]);
+    carregar();
+  }
+
+  async function alternarRestrita() {
+    const { error } = await sb.from("pastas").update({ restrita: !atual.restrita }).eq("id", atual.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    const nova = { ...atual, restrita: !atual.restrita };
+    setTrilha(trilha.slice(0, -1).concat(nova));
+  }
+
+  async function adicionarAcesso() {
+    if (!addPerfil) return;
+    const { error } = await sb.from("pasta_acessos").insert({ pasta_id: atual.id, perfil_id: addPerfil, nivel: addNivel });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setAddPerfil("");
+    carregar();
+  }
+
+  async function mudarAcesso(ac, niv) {
+    const { error } = await sb.from("pasta_acessos").update({ nivel: niv }).eq("id", ac.id);
+    if (!error) carregar(); else setMsg("Erro: " + error.message);
+  }
+
+  async function removerAcesso(ac) {
+    const { error } = await sb.from("pasta_acessos").delete().eq("id", ac.id);
+    if (!error) carregar(); else setMsg("Erro: " + error.message);
+  }
+
+  const podeEditar = nivel === "editar";
+  const perfisDisponiveis = perfis.filter((p) => !acessos.some((a) => a.perfil_id === p.id));
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, flexWrap: "wrap" }}>
+          <span onClick={() => irPara(-1)} style={{ color: trilha.length ? "var(--muted)" : "var(--ink)", fontWeight: trilha.length ? 400 : 600, cursor: "pointer" }}>Arquivos</span>
+          {trilha.map((t, i) => (
+            <React.Fragment key={t.id}>
+              <i className="ti ti-chevron-right" style={{ fontSize: 13, color: "var(--muted)" }} aria-hidden="true"></i>
+              <span onClick={() => irPara(i)} style={{ color: i === trilha.length - 1 ? "var(--ink)" : "var(--muted)", fontWeight: i === trilha.length - 1 ? 600 : 400, cursor: "pointer" }}>{t.nome}</span>
+            </React.Fragment>
+          ))}
+          {atual && atual.restrita && (
+            <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", marginLeft: 4 }}>
+              <i className="ti ti-lock" style={{ fontSize: 11 }} aria-hidden="true"></i>restrita
+            </span>
+          )}
+        </div>
+        {podeEditar && (
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-contorno" onClick={() => setCriando(!criando)}>
+              <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova pasta
+            </button>
+            {atual && (
+              <label className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5, cursor: "pointer" }}>
+                <i className="ti ti-upload" style={{ fontSize: 15 }} aria-hidden="true"></i>Enviar arquivo
+                <input type="file" multiple style={{ display: "none" }} onChange={(e) => { enviarArquivos(e.target.files); e.target.value = ""; }} />
+              </label>
+            )}
+          </div>
+        )}
+      </div>
+
+      {criando && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 8, maxWidth: 420 }}>
+          <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder={"Nome da pasta" + (atual ? " dentro de " + atual.nome : "")}
+            value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
+            onKeyDown={(e) => { if (e.key === "Enter") criarPasta(); }} autoFocus />
+          <button className="btn-primaria" style={{ padding: "8px 14px", fontSize: 12.5 }} onClick={criarPasta}>Criar</button>
+        </div>
+      )}
+
+      {enviando && (
+        <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--marca-texto)", display: "flex", alignItems: "center", gap: 8 }}>
+          <div style={{ animation: "girar 1.1s linear infinite", lineHeight: 0 }}><Asterisco tam={14} /></div>{enviando}
+        </div>
+      )}
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 280 }}>
+          {!pastas && <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+
+          {pastas && pastas.length > 0 && (
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 12 }}>
+              {pastas.map((p, i) => (
+                <div key={p.id} className="card-fl clicavel anim-sobe" onClick={() => entrar(p)} style={{ padding: "12px 13px", animationDelay: (i * 40) + "ms", position: "relative" }}>
+                  <div style={{ width: 30, height: 30, borderRadius: 9, background: "var(--tint)", color: "var(--marca-texto)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
+                    <i className={"ti " + (p.restrita ? "ti-folder-cog" : "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true"></i>
+                  </div>
+                  <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
+                    {(contagens[p.id] || 0)} {(contagens[p.id] || 0) === 1 ? "item" : "itens"}
+                    {p.restrita && <i className="ti ti-lock" style={{ fontSize: 11 }} aria-hidden="true"></i>}
+                  </div>
+                  {podeEditar && (
+                    <button className="btn-fantasma" style={{ position: "absolute", top: 8, right: 8, width: 24, height: 24 }}
+                      aria-label="Excluir pasta" title="Excluir pasta"
+                      onClick={(e) => { e.stopPropagation(); excluirPasta(p); }}>
+                      <i className="ti ti-trash" style={{ fontSize: 13 }} aria-hidden="true"></i>
+                    </button>
+                  )}
+                </div>
+              ))}
+            </div>
+          )}
+
+          {atual && arquivos && (
+            <div className="card-fl" style={{ overflow: "hidden" }}>
+              {arquivos.length === 0 && (
+                <div style={{ padding: "24px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+                  Pasta sem arquivos.{podeEditar ? " Use o botão Enviar arquivo para começar." : ""}
+                </div>
+              )}
+              {arquivos.map((a) => {
+                const b = badgeTipo(a.nome);
+                return (
+                  <div key={a.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 13px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
+                    <div style={{ flex: 1, minWidth: 160 }}>
+                      <div style={{ fontSize: 12.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+                        <span className="chip" style={{ background: b.bg, color: b.cor, marginRight: 7 }}>{b.r}</span>{a.nome}
+                      </div>
+                      <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 2 }}>
+                        {fmtBytes(a.tamanho)}{a.profiles && a.profiles.nome ? " · enviado por " + primeiroNome(a.profiles.nome) : ""} · {tempoRelativo(a.created_at)}
+                      </div>
+                    </div>
+                    <span style={{ display: "flex", gap: 5, flex: "none" }}>
+                      <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => abrirArquivo(a, false)}>
+                        <i className="ti ti-eye" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                      </button>
+                      <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Baixar" title="Baixar" onClick={() => abrirArquivo(a, true)}>
+                        <i className="ti ti-download" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                      </button>
+                      {podeEditar && (
+                        <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Excluir" title="Excluir" onClick={() => excluirArquivo(a)}>
+                          <i className="ti ti-trash" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                        </button>
+                      )}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {!atual && pastas && pastas.length === 0 && (
+            <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+              Nenhuma pasta ainda.{podeEditar ? " Crie a primeira com o botão Nova pasta." : ""}
+            </div>
+          )}
+        </div>
+
+        {atual && podeEditar && (
+          <div className="card-fl anim-sobe" style={{ flex: "none", width: 250, padding: "12px 13px" }}>
+            <div style={{ fontWeight: 600, fontSize: 12.5, marginBottom: 10, display: "flex", alignItems: "center", gap: 6 }}>
+              <i className="ti ti-lock" style={{ fontSize: 14, color: "var(--marca-texto)" }} aria-hidden="true"></i>Quem acessa esta pasta
+            </div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 9, borderBottom: "1px solid var(--linha-suave)", marginBottom: 8 }}>
+              <span style={{ fontSize: 12 }}>Pasta restrita</span>
+              <button type="button" className={"sw" + (atual.restrita ? " on" : "")} onClick={alternarRestrita}
+                aria-label={atual.restrita ? "Liberar pasta" : "Restringir pasta"}></button>
+            </div>
+            {!atual.restrita && (
+              <p style={{ fontSize: 11.5, color: "var(--muted)", lineHeight: 1.55 }}>
+                Aberta: vale a permissão do módulo Arquivos de cada perfil. Ligue a restrição para escolher perfis.
+              </p>
+            )}
+            {atual.restrita && (
+              <div>
+                {acessos.length === 0 && (
+                  <p style={{ fontSize: 11.5, color: "var(--ambar)", lineHeight: 1.55, marginBottom: 8 }}>
+                    Nenhum perfil liberado: por enquanto só a Direção vê esta pasta.
+                  </p>
+                )}
+                {acessos.map((ac) => (
+                  <div key={ac.id} style={{ display: "flex", alignItems: "center", gap: 6, padding: "6px 0", borderBottom: "1px solid var(--linha-suave)" }}>
+                    <span style={{ flex: 1, minWidth: 0, fontSize: 12, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exibirPerfil(ac.perfis ? ac.perfis.nome : "")}</span>
+                    <span className="seg">
+                      <button type="button" className={"sg" + (ac.nivel === "ver" ? " on-v" : "")} onClick={() => mudarAcesso(ac, "ver")}>Ver</button>
+                      <button type="button" className={"sg" + (ac.nivel === "editar" ? " on-e" : "")} onClick={() => mudarAcesso(ac, "editar")}>Editar</button>
+                    </span>
+                    <button className="btn-fantasma" style={{ width: 22, height: 22 }} aria-label="Remover" title="Remover" onClick={() => removerAcesso(ac)}>
+                      <i className="ti ti-x" style={{ fontSize: 12 }} aria-hidden="true"></i>
+                    </button>
+                  </div>
+                ))}
+                {perfisDisponiveis.length > 0 && (
+                  <div style={{ display: "flex", gap: 6, marginTop: 9, flexWrap: "wrap" }}>
+                    <select className="campo" style={{ flex: 1, minWidth: 110, padding: "6px 8px", fontSize: 12 }} value={addPerfil} onChange={(e) => setAddPerfil(e.target.value)}>
+                      <option value="">perfil…</option>
+                      {perfisDisponiveis.map((p) => <option key={p.id} value={p.id}>{exibirPerfil(p.nome)}</option>)}
+                    </select>
+                    <select className="campo" style={{ width: 78, padding: "6px 8px", fontSize: 12 }} value={addNivel} onChange={(e) => setAddNivel(e.target.value)}>
+                      <option value="ver">Ver</option>
+                      <option value="editar">Editar</option>
+                    </select>
+                    <button className="btn-primaria" style={{ padding: "6px 12px", fontSize: 12 }} onClick={adicionarAcesso}>Liberar</button>
+                  </div>
+                )}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10, display: "flex", alignItems: "center", gap: 5 }}>
+              <i className="ti ti-history" style={{ fontSize: 12 }} aria-hidden="true"></i>Visualizações e downloads ficam na auditoria
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
 // Configuracoes: perfis e permissoes, pessoas, outros CORTEX
 // ------------------------------------------------------------
 function SegNivel({ valor, aoMudar, desabilitado }) {
@@ -955,6 +1310,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaStub m={{ ...moduloAtual, status: "proximo", rotulo: "Sem acesso", icone: "ti-lock" }} />;
   } else if (pagina === "painel") {
     conteudo = <PaginaPainel ctx={ctx} setPagina={setPagina} />;
+  } else if (pagina === "arquivos") {
+    conteudo = <PaginaArquivos ctx={ctx} />;
   } else if (pagina === "auditoria") {
     conteudo = <PaginaAuditoria />;
   } else if (pagina === "outros_cortex") {
