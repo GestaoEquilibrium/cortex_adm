@@ -252,6 +252,29 @@ body {
 .quadradinho:hover { transform: translateY(-2px) rotate(6deg); box-shadow: var(--sombra-hover); }
 .quadradinho:active { transform: scale(.9); }
 
+/* ---------- rodape da sidebar (usuario) ---------- */
+
+.user-card {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 8px 9px;
+  margin-top: 8px;
+  border-radius: 12px;
+  background: var(--fundo);
+  border: 1px solid var(--linha-suave);
+  transition: background .15s ease;
+  overflow: hidden;
+}
+
+.user-card:hover { background: var(--tint-hover); }
+
+.sb.rail .user-card {
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 4px;
+}
+
 /* ---------- tabelas e linhas ---------- */
 
 .linha-hover { transition: background .15s ease; }

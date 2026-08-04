@@ -62,6 +62,11 @@ function primeiroNome(nome) {
   return (nome || "").trim().split(/\s+/)[0] || "";
 }
 
+const NOMES_PERFIL = { Direcao: "Direção", Coordenacao: "Coordenação", Recepcao: "Recepção" };
+function exibirPerfil(nome) {
+  return NOMES_PERFIL[nome] || nome || "sem perfil";
+}
+
 function tempoRelativo(ts) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
   if (s < 60) return "agora mesmo";
@@ -228,7 +233,7 @@ function TelaLogin() {
 // ------------------------------------------------------------
 // Sidebar flutuante (3 estados: exp, rail, oculta)
 // ------------------------------------------------------------
-function Sidebar({ ctx, pagina, setPagina, estado, setEstado }) {
+function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
   const visiveis = MODULOS.filter((m) => nivelModulo(ctx, m.id) !== "oculto");
   const principais = visiveis.filter((m) => m.id !== "configuracoes");
   const config = visiveis.find((m) => m.id === "configuracoes");
@@ -280,6 +285,19 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado }) {
         <div style={{ flex: 1, minHeight: 12 }}></div>
 
         {config && <Item m={config} />}
+
+        <div className="user-card" title={ctx.profile.nome}>
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 2px 8px rgba(249,115,22,.28)" }}>
+            {iniciais(ctx.profile.nome)}
+          </div>
+          <div className="rotulo" style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ctx.profile.nome}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exibirPerfil(ctx.perfilNome)}</div>
+          </div>
+          <button className="btn-fantasma" onClick={aoSair} aria-label="Sair" title="Sair" style={{ width: 28, height: 28, flex: "none" }}>
+            <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
+          </button>
+        </div>
       </aside>
     </React.Fragment>
   );
@@ -288,21 +306,11 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado }) {
 // ------------------------------------------------------------
 // Topo
 // ------------------------------------------------------------
-function Topo({ ctx, aoSair }) {
+function Topo({ ctx }) {
   return (
-    <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 18 }}>
-      <div>
-        <div style={{ fontSize: 20, fontWeight: 700 }}>{saudacao()}, {primeiroNome(ctx.profile.nome)}</div>
-        <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{dataExtenso()} · perfil {ctx.perfilNome || "sem perfil"}</div>
-      </div>
-      <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
-        <div title={ctx.profile.nome} style={{ width: 38, height: 38, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 13, display: "flex", alignItems: "center", justifyContent: "center", boxShadow: "0 3px 10px rgba(249,115,22,.3)" }}>
-          {iniciais(ctx.profile.nome)}
-        </div>
-        <button className="btn-fantasma" onClick={aoSair} aria-label="Sair" title="Sair">
-          <i className="ti ti-logout" style={{ fontSize: 16 }} aria-hidden="true"></i>
-        </button>
-      </div>
+    <div style={{ marginBottom: 18 }}>
+      <div style={{ fontSize: 20, fontWeight: 700 }}>{saudacao()}, {primeiroNome(ctx.profile.nome)}</div>
+      <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 2 }}>{dataExtenso()} · perfil {exibirPerfil(ctx.perfilNome)}</div>
     </div>
   );
 }
@@ -625,9 +633,9 @@ function Shell({ ctx, aoSair }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
-      <Sidebar ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} />
-      <main style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px" }}>
-        <Topo ctx={ctx} aoSair={aoSair} />
+      <Sidebar ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
+      <main style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
+        <Topo ctx={ctx} />
         {pagina !== "painel" && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "0 0 14px" }}>
             <div style={{ width: 30, height: 30, borderRadius: 9, background: moduloAtual.fundo, color: moduloAtual.cor, display: "flex", alignItems: "center", justifyContent: "center" }}>
