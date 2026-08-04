@@ -43,7 +43,6 @@ do $$
 declare
   v_base text := 'https://qybtqjyujgaigwytypha.supabase.co/rest/v1/';
   v_key  text := 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6InF5YnRxanl1amdhaWd3eXR5cGhhIiwicm9sZSI6ImFub24iLCJpYXQiOjE3ODUyNjcxMzcsImV4cCI6MjEwMDg0MzEzN30.Vu-MppfIuEOVUd1rBsKnEehujAuq301KnwBAQ1WlFAs';
-  v_resp extensions.http_response;
   v_json jsonb;
   v_item jsonb;
   v_off int;
@@ -55,22 +54,6 @@ declare
   n_batidas int := 0;
   n_ocorrencias int := 0;
 
-begin
-    r := extensions.http((
-      'GET',
-      v_base || p_tabela || '?select=*&order=id&limit=1000&offset=' || p_offset,
-      array[
-        extensions.http_header('apikey', v_key),
-        extensions.http_header('Authorization', 'Bearer ' || v_key)
-      ],
-      null, null
-    )::extensions.http_request);
-    if r.status <> 200 then
-      raise exception 'Falha ao buscar % (status %): %', p_tabela, r.status, left(coalesce(r.content, ''), 200);
-    end if;
-    return r.content::jsonb;
-  end;
-  $f$;
 
 begin
   -- ---------- 1) EMPLOYEES -> COLABORADORES ----------
