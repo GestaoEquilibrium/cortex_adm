@@ -1196,9 +1196,214 @@ function AbaColaboradores({ ctx }) {
   );
 }
 
+function horaLocal(ts) {
+  return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+}
+
+function AbaPonto({ ctx }) {
+  const podeEditar = nivelAba(ctx, "rh", "ponto") === "editar";
+  const [visao, setVisao] = useState("hoje");
+  const [hoje, setHoje] = useState(null);
+  const [colabs, setColabs] = useState([]);
+  const [colabSel, setColabSel] = useState("");
+  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [espelho, setEspelho] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [addDia, setAddDia] = useState("");
+  const [addHora, setAddHora] = useState("");
+  const [addTipo, setAddTipo] = useState("entrada");
+
+  async function carregarHoje() {
+    const ini = new Date(); ini.setHours(0, 0, 0, 0);
+    const { data } = await sb.from("ponto_registros")
+      .select("id, tipo, batida, origem, colaboradores(nome)")
+      .gte("batida", ini.toISOString())
+      .order("batida");
+    setHoje(data || []);
+  }
+
+  async function carregarColabs() {
+    const { data } = await sb.from("colaboradores").select("id, nome, status").order("nome");
+    setColabs(data || []);
+  }
+
+  async function carregarEspelho() {
+    if (!colabSel || !mes) { setEspelho(null); return; }
+    const ini = mes + "-01T00:00:00";
+    const fimD = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1);
+    const { data } = await sb.from("ponto_registros")
+      .select("id, tipo, batida, origem")
+      .eq("colaborador_id", colabSel)
+      .gte("batida", new Date(ini).toISOString())
+      .lt("batida", fimD.toISOString())
+      .order("batida");
+    setEspelho(data || []);
+  }
+
+  useEffect(() => { carregarHoje(); carregarColabs(); }, []);
+  useEffect(() => { carregarEspelho(); }, [colabSel, mes]);
+
+  const gruposHoje = useMemo(() => {
+    if (!hoje) return null;
+    const g = {};
+    hoje.forEach((r) => {
+      const n = r.colaboradores ? r.colaboradores.nome : "?";
+      (g[n] = g[n] || []).push(r);
+    });
+    return Object.keys(g).sort().map((n) => ({ nome: n, regs: g[n] }));
+  }, [hoje]);
+
+  const dias = useMemo(() => {
+    if (!espelho) return null;
+    const g = {};
+    espelho.forEach((r) => {
+      const d = new Date(r.batida);
+      const k = d.getFullYear() + "-" + String(d.getMonth() + 1).padStart(2, "0") + "-" + String(d.getDate()).padStart(2, "0");
+      (g[k] = g[k] || []).push(r);
+    });
+    let totalMin = 0;
+    const lista = Object.keys(g).sort().map((k) => {
+      const regs = g[k];
+      let min = 0, aberto = false, ent = null;
+      regs.forEach((r) => {
+        if (r.tipo === "entrada") { ent = new Date(r.batida); }
+        else if (ent) { min += (new Date(r.batida) - ent) / 60000; ent = null; }
+      });
+      if (ent) aberto = true;
+      totalMin += min;
+      return { dia: k, regs, min, aberto };
+    });
+    return { lista, totalMin };
+  }, [espelho]);
+
+  function fmtMin(m) {
+    const h = Math.floor(m / 60), mi = Math.round(m % 60);
+    return h + "h" + String(mi).padStart(2, "0");
+  }
+
+  async function excluirBatida(r) {
+    if (!window.confirm("Excluir esta batida de " + horaLocal(r.batida) + "? A exclusão fica na auditoria.")) return;
+    const { error } = await sb.from("ponto_registros").delete().eq("id", r.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregarHoje(); carregarEspelho();
+  }
+
+  async function adicionarBatida() {
+    if (!colabSel || !addDia || !addHora) { setMsg("Escolha colaborador, dia e hora."); return; }
+    const quando = new Date(addDia + "T" + addHora + ":00");
+    const { error } = await sb.from("ponto_registros").insert({
+      colaborador_id: colabSel, tipo: addTipo, batida: quando.toISOString(),
+      origem: "manual", editado_por: ctx.profile.id,
+    });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setAddDia(""); setAddHora("");
+    carregarHoje(); carregarEspelho();
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["hoje", "Hoje"], ["espelho", "Espelho mensal"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setVisao(v)}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        <a href="ponto.html" target="_blank" rel="noopener" className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5, textDecoration: "none" }}>
+          <i className="ti ti-clock" style={{ fontSize: 14 }} aria-hidden="true"></i>Abrir o relógio
+        </a>
+      </div>
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {visao === "hoje" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {!gruposHoje && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+          {gruposHoje && gruposHoje.length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Ninguém bateu ponto hoje ainda.</div>
+          )}
+          {gruposHoje && gruposHoje.map((g) => (
+            <div key={g.nome} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
+              <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(g.nome)}</div>
+              <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{g.nome}</span>
+              <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
+                {g.regs.map((r) => (
+                  <span key={r.id} className="chip" title={r.origem}
+                    style={{ background: r.tipo === "entrada" ? "var(--verde-bg)" : "var(--azul-bg)", color: r.tipo === "entrada" ? "var(--verde)" : "var(--azul)" }}>
+                    {r.tipo === "entrada" ? "E" : "S"} {horaLocal(r.batida)}
+                  </span>
+                ))}
+              </span>
+            </div>
+          ))}
+          {gruposHoje && gruposHoje.length > 0 && (
+            <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>{gruposHoje.length} pessoa(s) registraram ponto hoje</div>
+          )}
+        </div>
+      )}
+
+      {visao === "espelho" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+            <select className="campo" style={{ flex: 1, minWidth: 180, padding: "8px 10px", fontSize: 13 }} value={colabSel} onChange={(e) => setColabSel(e.target.value)}>
+              <option value="">escolha o colaborador…</option>
+              {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+            </select>
+            <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={mes} onChange={(e) => setMes(e.target.value)} />
+          </div>
+
+          {podeEditar && colabSel && (
+            <div className="card-fl" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--sec)", fontWeight: 600 }}>Batida manual:</span>
+              <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={addDia} onChange={(e) => setAddDia(e.target.value)} />
+              <input className="campo" type="time" style={{ width: 100, padding: "7px 9px", fontSize: 12.5 }} value={addHora} onChange={(e) => setAddHora(e.target.value)} />
+              <select className="campo" style={{ width: 100, padding: "7px 9px", fontSize: 12.5 }} value={addTipo} onChange={(e) => setAddTipo(e.target.value)}>
+                <option value="entrada">Entrada</option><option value="saida">Saída</option>
+              </select>
+              <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={adicionarBatida}>Registrar</button>
+            </div>
+          )}
+
+          {!colabSel && <div className="card-fl" style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Escolha um colaborador para ver o espelho do mês.</div>}
+          {colabSel && dias && (
+            <div className="card-fl" style={{ overflow: "hidden" }}>
+              {dias.lista.length === 0 && <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Sem batidas neste mês.</div>}
+              {dias.lista.map((d) => (
+                <div key={d.dia} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, width: 84, flex: "none" }}>{dataBr(d.dia)}</span>
+                  <span style={{ display: "flex", gap: 5, flexWrap: "wrap", flex: 1 }}>
+                    {d.regs.map((r) => (
+                      <span key={r.id} className="chip" title={r.origem + (r.origem !== "relogio" ? " · corrigível" : "")}
+                        style={{ background: r.tipo === "entrada" ? "var(--verde-bg)" : "var(--azul-bg)", color: r.tipo === "entrada" ? "var(--verde)" : "var(--azul)" }}>
+                        {r.tipo === "entrada" ? "E" : "S"} {horaLocal(r.batida)}
+                        {podeEditar && (
+                          <i className="ti ti-x" style={{ fontSize: 11, marginLeft: 4, cursor: "pointer" }} aria-label="Excluir batida"
+                            onClick={() => excluirBatida(r)}></i>
+                        )}
+                      </span>
+                    ))}
+                  </span>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, color: d.aberto ? "var(--ambar)" : "var(--ink)", flex: "none" }}>
+                    {d.aberto ? "em aberto" : fmtMin(d.min)}
+                  </span>
+                </div>
+              ))}
+              {dias.lista.length > 0 && (
+                <div style={{ padding: "9px 14px", fontSize: 12.5, fontWeight: 700, display: "flex", justifyContent: "space-between" }}>
+                  <span style={{ color: "var(--sec)" }}>Total do mês</span><span>{fmtMin(dias.totalMin)}</span>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaginaRH({ ctx }) {
   const abas = [
     { id: "colaboradores", r: "Colaboradores" },
+    { id: "ponto", r: "Ponto" },
     { id: "faltas", r: "Faltas e atestados" },
     { id: "alertas", r: "Alertas e pendências" },
   ].filter((a) => nivelAba(ctx, "rh", a.id) !== "oculto");
@@ -1212,7 +1417,8 @@ function PaginaRH({ ctx }) {
         ))}
       </div>
       {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
-      {aba !== "colaboradores" && (
+      {aba === "ponto" && <AbaPonto ctx={ctx} />}
+      {aba !== "colaboradores" && aba !== "ponto" && (
         <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
           Esta aba chega no próximo sprint — o banco já está pronto para ela.
         </div>

@@ -1,0 +1,190 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Ponto · CORTEX Gestão</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4' stroke='%231068B0' stroke-width='2.6' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700&family=JetBrains+Mono:wght@600;800&display=swap" rel="stylesheet" />
+  <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
+  <script src="https://unpkg.com/react-dom@18.3.1/umd/react-dom.production.min.js"></script>
+  <script src="https://unpkg.com/@babel/standalone@7.26.4/babel.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="config.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; }
+    body { font-family: 'Outfit', sans-serif; background: #F6F8FB; color: #1C2530; min-height: 100vh; display: flex; align-items: center; justify-content: center; padding: 18px; }
+    .cartao { width: 100%; max-width: 520px; background: #fff; border: 1px solid #E7EDF3; border-radius: 22px; box-shadow: 0 2px 6px rgba(28,37,48,.05), 0 14px 40px rgba(28,37,48,.08); padding: 26px 26px 22px; text-align: center; }
+    .relogio { font-family: 'JetBrains Mono', monospace; font-weight: 800; font-size: 58px; letter-spacing: 2px; line-height: 1; margin: 10px 0 2px; }
+    .data { font-size: 14px; color: #8C97A4; margin-bottom: 18px; }
+    .campo { width: 100%; padding: 13px 15px; border: 1px solid #E7EDF3; border-radius: 12px; font-family: 'Outfit', sans-serif; font-size: 16px; outline: none; }
+    .campo:focus { border-color: #1068B0; box-shadow: 0 0 0 3px rgba(16,104,176,.14); }
+    .lista { max-height: 220px; overflow-y: auto; border: 1px solid #E7EDF3; border-radius: 12px; margin-top: 8px; text-align: left; }
+    .pessoa { padding: 12px 15px; font-size: 15px; cursor: pointer; border-bottom: 1px solid #EEF3F8; transition: background .12s; }
+    .pessoa:hover { background: #F0F7FC; }
+    .pontos { display: flex; gap: 12px; justify-content: center; margin: 14px 0 16px; }
+    .ponto-pin { width: 16px; height: 16px; border-radius: 50%; border: 2px solid #C1DCF3; transition: all .15s cubic-bezier(.34,1.56,.64,1); }
+    .ponto-pin.cheio { background: #1068B0; border-color: #1068B0; transform: scale(1.15); }
+    .teclado { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; max-width: 300px; margin: 0 auto; }
+    .tecla { padding: 16px 0; font-family: 'JetBrains Mono', monospace; font-size: 22px; font-weight: 600; background: #F6F8FB; border: 1px solid #E7EDF3; border-radius: 14px; cursor: pointer; transition: all .12s cubic-bezier(.34,1.56,.64,1); user-select: none; }
+    .tecla:hover { background: #E7F2FB; border-color: #C1DCF3; }
+    .tecla:active { transform: scale(.92); }
+    .acoes { display: flex; gap: 12px; margin-top: 18px; }
+    .btn { flex: 1; padding: 17px 0; border: none; border-radius: 14px; font-family: 'Outfit', sans-serif; font-size: 17px; font-weight: 700; color: #fff; cursor: pointer; transition: transform .14s cubic-bezier(.34,1.56,.64,1), filter .15s; }
+    .btn:hover { transform: translateY(-2px); filter: brightness(1.05); }
+    .btn:active { transform: scale(.95); }
+    .btn:disabled { opacity: .45; cursor: not-allowed; transform: none; }
+    .entrada { background: linear-gradient(135deg, #2E7D32, #4CAF50); box-shadow: 0 6px 16px rgba(46,125,50,.3); }
+    .saida { background: linear-gradient(135deg, #1068B0, #2893EB); box-shadow: 0 6px 16px rgba(16,104,176,.3); }
+    .volta { margin-top: 14px; background: none; border: none; color: #8C97A4; font-family: 'Outfit', sans-serif; font-size: 13px; cursor: pointer; }
+    .volta:hover { color: #1068B0; }
+    .aviso { margin-top: 12px; padding: 10px 14px; border-radius: 12px; font-size: 14px; font-weight: 600; }
+    .aviso.erro { background: #FCEBEB; color: #A32D2D; animation: treme .35s; }
+    .aviso.ok { background: #EAF3DE; color: #3B6D11; }
+    .chip-b { display: inline-block; padding: 4px 12px; border-radius: 999px; font-size: 13px; font-weight: 600; margin: 3px; }
+    .sucesso-icone { width: 74px; height: 74px; border-radius: 50%; display: flex; align-items: center; justify-content: center; margin: 4px auto 12px; font-size: 38px; color: #fff; animation: pulo .45s cubic-bezier(.34,1.56,.64,1); }
+    .rodape { margin-top: 16px; font-size: 12px; color: #8C97A4; display: flex; align-items: center; justify-content: center; gap: 6px; }
+    @keyframes treme { 0%,100%{transform:translateX(0)} 25%{transform:translateX(-7px)} 75%{transform:translateX(7px)} }
+    @keyframes pulo { from { transform: scale(.4); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+    @media (prefers-reduced-motion: reduce) { * { animation: none !important; transition-duration: .01ms !important; } }
+  </style>
+</head>
+<body>
+  <div id="raiz"></div>
+  <script type="text/babel" data-presets="react">
+    const { useState, useEffect } = React;
+    const CFG = window.CORTEX_CFG || {};
+    const sb = window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY);
+
+    function Marca() {
+      return (
+        <div style={{ display: "flex", alignItems: "center", justifyContent: "center", gap: 8 }}>
+          <svg width="20" height="20" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" stroke="#1068B0" strokeWidth="2.6" strokeLinecap="round" fill="none"/></svg>
+          <span style={{ fontWeight: 700, fontSize: 17 }}>CORTEX <span style={{ color: "#0C5088" }}>Gestão</span> · Ponto</span>
+        </div>
+      );
+    }
+
+    function App() {
+      const [agora, setAgora] = useState(new Date());
+      const [pessoas, setPessoas] = useState([]);
+      const [busca, setBusca] = useState("");
+      const [sel, setSel] = useState(null);
+      const [pin, setPin] = useState("");
+      const [erro, setErro] = useState("");
+      const [enviando, setEnviando] = useState(false);
+      const [feito, setFeito] = useState(null);
+
+      useEffect(() => {
+        const t = setInterval(() => setAgora(new Date()), 1000);
+        return () => clearInterval(t);
+      }, []);
+
+      async function carregarPessoas() {
+        const { data, error } = await sb.rpc("relogio_colaboradores");
+        if (error) { setErro("Sem conexão com o sistema. Confira a internet."); return; }
+        setPessoas(data || []);
+      }
+      useEffect(() => { carregarPessoas(); }, []);
+
+      function tecla(d) {
+        setErro("");
+        if (d === "apagar") { setPin(pin.slice(0, -1)); return; }
+        if (pin.length < 4) setPin(pin + d);
+      }
+
+      function reiniciar() {
+        setSel(null); setPin(""); setBusca(""); setErro(""); setFeito(null);
+      }
+
+      async function bater(tipo) {
+        if (!sel || pin.length < 4 || enviando) return;
+        setEnviando(true);
+        setErro("");
+        const { data, error } = await sb.rpc("relogio_bater", { p_colaborador: sel.id, p_pin: pin, p_tipo: tipo });
+        if (error || !data || !data.ok) {
+          setErro((data && data.erro) || "Não foi possível registrar. Tente de novo.");
+          setPin("");
+          setEnviando(false);
+          return;
+        }
+        const dia = await sb.rpc("relogio_meu_dia", { p_colaborador: sel.id, p_pin: pin });
+        setFeito({ nome: data.nome, tipo: data.tipo, hora: data.hora, batidas: dia.data && dia.data.ok ? dia.data.batidas : [] });
+        setEnviando(false);
+        setTimeout(reiniciar, 7000);
+      }
+
+      const filtradas = pessoas.filter((p) => p.nome.toLowerCase().indexOf(busca.trim().toLowerCase()) !== -1);
+
+      return (
+        <div className="cartao">
+          <Marca />
+          <div className="relogio">{agora.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" })}</div>
+          <div className="data">{(() => { const t = agora.toLocaleDateString("pt-BR", { weekday: "long", day: "numeric", month: "long", year: "numeric" }); return t.charAt(0).toUpperCase() + t.slice(1); })()}</div>
+
+          {feito && (
+            <div>
+              <div className="sucesso-icone" style={{ background: feito.tipo === "entrada" ? "linear-gradient(135deg,#2E7D32,#4CAF50)" : "linear-gradient(135deg,#1068B0,#2893EB)" }}>✓</div>
+              <div style={{ fontSize: 19, fontWeight: 700 }}>{feito.tipo === "entrada" ? "Entrada" : "Saída"} registrada, {feito.nome.split(" ")[0]}</div>
+              <div style={{ fontSize: 14, color: "#5B6572", margin: "4px 0 12px" }}>às {feito.hora}</div>
+              <div>
+                {feito.batidas.map((b, i) => (
+                  <span key={i} className="chip-b" style={{ background: b.tipo === "entrada" ? "#EAF3DE" : "#E6F1FB", color: b.tipo === "entrada" ? "#3B6D11" : "#0C5088" }}>
+                    {b.tipo === "entrada" ? "E" : "S"} {b.hora}
+                  </span>
+                ))}
+              </div>
+              <button className="volta" onClick={reiniciar}>próximo colaborador</button>
+            </div>
+          )}
+
+          {!feito && !sel && (
+            <div>
+              <input className="campo" placeholder="Digite seu nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+              {busca.trim() && (
+                <div className="lista">
+                  {filtradas.length === 0 && <div className="pessoa" style={{ cursor: "default", color: "#8C97A4" }}>Ninguém encontrado.</div>}
+                  {filtradas.slice(0, 8).map((p) => (
+                    <div key={p.id} className="pessoa" onClick={() => { setSel(p); setErro(""); }}>{p.nome}</div>
+                  ))}
+                </div>
+              )}
+              {erro && <div className="aviso erro">{erro}</div>}
+            </div>
+          )}
+
+          {!feito && sel && (
+            <div>
+              <div style={{ fontSize: 17, fontWeight: 700, marginBottom: 2 }}>{sel.nome}</div>
+              <div style={{ fontSize: 13, color: "#8C97A4" }}>digite seu PIN de 4 números</div>
+              <div className="pontos">
+                {[0, 1, 2, 3].map((i) => <div key={i} className={"ponto-pin" + (pin.length > i ? " cheio" : "")}></div>)}
+              </div>
+              <div className="teclado">
+                {["1","2","3","4","5","6","7","8","9"].map((d) => (
+                  <button key={d} className="tecla" onClick={() => tecla(d)}>{d}</button>
+                ))}
+                <button className="tecla" style={{ fontSize: 15 }} onClick={() => tecla("apagar")}>⌫</button>
+                <button className="tecla" onClick={() => tecla("0")}>0</button>
+                <button className="tecla" style={{ fontSize: 13 }} onClick={reiniciar}>trocar</button>
+              </div>
+              {erro && <div className="aviso erro">{erro}</div>}
+              <div className="acoes">
+                <button className="btn entrada" disabled={pin.length < 4 || enviando} onClick={() => bater("entrada")}>{enviando ? "…" : "Entrada"}</button>
+                <button className="btn saida" disabled={pin.length < 4 || enviando} onClick={() => bater("saida")}>{enviando ? "…" : "Saída"}</button>
+              </div>
+            </div>
+          )}
+
+          <div className="rodape">
+            <svg width="12" height="12" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" stroke="#8C97A4" strokeWidth="2.6" strokeLinecap="round" fill="none"/></svg>
+            Todo registro fica na auditoria do CORTEX Gestão
+          </div>
+        </div>
+      );
+    }
+
+    ReactDOM.createRoot(document.getElementById("raiz")).render(<App />);
+  </script>
+</body>
+</html>
