@@ -172,16 +172,6 @@ function App(){
 
   function sair(){ setLogado(null); setBatidas([]); setSelId(""); setPin(""); setOccModal(null); }
 
-  // Quiosque: 45 s sem interação na tela logada, volta sozinho para o início.
-  useEffect(() => {
-    if (!logado) return;
-    let t = setTimeout(sair, 45000);
-    const renovar = () => { clearTimeout(t); t = setTimeout(sair, 45000); };
-    window.addEventListener("pointerdown", renovar);
-    window.addEventListener("keydown", renovar);
-    return () => { clearTimeout(t); window.removeEventListener("pointerdown", renovar); window.removeEventListener("keydown", renovar); };
-  }, [logado]);
-
   async function acessar(){
     if (!selId) return avisar("Selecione um funcionário", "erro");
     if (!pin) return avisar("Digite a senha", "erro");
