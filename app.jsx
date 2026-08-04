@@ -1200,6 +1200,85 @@ function horaLocal(ts) {
   return new Date(ts).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
 }
 
+function hojeLocalISO() {
+  const n = new Date();
+  return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0");
+}
+
+// PDF mensal do ponto: mesmo modelo das folhas de assinatura do Ponto Digital antigo.
+function pdfPonto(colab, regs, ocos, mesRotulo, retornarBlob) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF();
+  const pw = doc.internal.pageSize.getWidth();
+  doc.setFillColor(16, 104, 176); doc.rect(0, 0, pw, 38, "F");
+  doc.setTextColor(255); doc.setFontSize(20); doc.setFont("helvetica", "bold");
+  doc.text("RELATÓRIO DE PONTO", pw / 2, 18, { align: "center" });
+  doc.setFontSize(11); doc.setFont("helvetica", "normal");
+  doc.text("Período: " + mesRotulo, pw / 2, 28, { align: "center" });
+  doc.setTextColor(28, 37, 48); doc.setFontSize(12); doc.setFont("helvetica", "bold");
+  doc.text("Funcionário: " + colab.nome, 14, 50);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(10);
+  doc.text("Cargo: " + (colab.cargo || "—"), 14, 58);
+  doc.text("Gerado em: " + new Date().toLocaleDateString("pt-BR") + " às " + new Date().toLocaleTimeString("pt-BR"), 14, 65);
+
+  const chave = (dt) => dt.getFullYear() + "-" + String(dt.getMonth() + 1).padStart(2, "0") + "-" + String(dt.getDate()).padStart(2, "0");
+  const grupos = {};
+  regs.slice().sort((a, b) => a.batida.localeCompare(b.batida)).forEach((r) => {
+    const k = chave(new Date(r.batida)); (grupos[k] = grupos[k] || []).push(r);
+  });
+  const ocosPorDia = {};
+  ocos.forEach((o) => { if (o.data) (ocosPorDia[o.data] = ocosPorDia[o.data] || []).push(o); });
+  const datas = Object.keys(grupos);
+  Object.keys(ocosPorDia).forEach((d) => { if (datas.indexOf(d) === -1) datas.push(d); });
+  datas.sort();
+
+  const fmtHora = (iso) => new Date(iso).toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit", second: "2-digit" });
+  const linhas = []; let totalMin = 0;
+  datas.forEach((dia) => {
+    const rs = grupos[dia] || [];
+    const entradas = rs.filter((r) => r.tipo === "entrada").map((r) => fmtHora(r.batida));
+    const saidas = rs.filter((r) => r.tipo === "saida").map((r) => fmtHora(r.batida));
+    let min = 0, ent = null;
+    rs.forEach((r) => { if (r.tipo === "entrada") { ent = new Date(r.batida); } else if (ent) { min += (new Date(r.batida) - ent) / 60000; ent = null; } });
+    totalMin += min;
+    const h = Math.floor(min / 60), mi = Math.round(min % 60);
+    const p = dia.split("-");
+    linhas.push([p[2] + "/" + p[1] + "/" + p[0], entradas.join("\n") || "-", saidas.join("\n") || "-", rs.length ? h + "h " + String(mi).padStart(2, "0") + "min" : "-"]);
+    (ocosPorDia[dia] || []).forEach((o) => {
+      const prefixo = o.tipo === "admin" ? "Obs. Admin: " : "Ocorrência: ";
+      let txt = prefixo + (o.descricao || "");
+      if (o.observacao && o.observacao.trim()) txt += "\nResp. Administrativo: " + o.observacao;
+      linhas.push([{ content: "", styles: { fillColor: [255, 252, 240] } }, { content: txt, colSpan: 3, styles: { fillColor: [255, 252, 240], textColor: [120, 90, 40], fontSize: 7.5, fontStyle: "italic", cellPadding: { top: 2, bottom: 3, left: 4, right: 6 } } }]);
+    });
+  });
+  doc.autoTable({ startY: 74, head: [["Data", "Entradas", "Saídas", "Horas Trab."]], body: linhas,
+    styles: { fontSize: 9, cellPadding: 4, lineColor: [231, 237, 243] },
+    headStyles: { fillColor: [16, 104, 176], textColor: 255, fontStyle: "bold", fontSize: 10 },
+    alternateRowStyles: { fillColor: [246, 248, 251] },
+    columnStyles: { 0: { cellWidth: 30, fontStyle: "bold" }, 3: { cellWidth: 30, halign: "center", fontStyle: "bold" } },
+    margin: { left: 14, right: 14 } });
+  const yFim = doc.lastAutoTable.finalY + 12;
+  const th = Math.floor(totalMin / 60), tm = Math.round(totalMin % 60);
+  doc.setFillColor(246, 248, 251); doc.roundedRect(14, yFim, pw - 28, 24, 3, 3, "F");
+  doc.setDrawColor(16, 104, 176); doc.roundedRect(14, yFim, pw - 28, 24, 3, 3, "S");
+  doc.setFontSize(12); doc.setFont("helvetica", "bold"); doc.setTextColor(28, 37, 48);
+  doc.text("TOTAL DE HORAS:", 20, yFim + 15);
+  doc.text("(" + datas.filter((d) => grupos[d] && grupos[d].length).length + " dias)", pw / 2, yFim + 15, { align: "center" });
+  doc.setTextColor(16, 104, 176);
+  doc.text(th + "h " + String(tm).padStart(2, "0") + "min", pw - 20, yFim + 15, { align: "right" });
+  const yAss = yFim + 46;
+  doc.setDrawColor(180, 190, 200); doc.setLineWidth(0.3);
+  doc.line(14, yAss, 90, yAss); doc.line(pw - 90, yAss, pw - 14, yAss);
+  doc.setFontSize(8); doc.setTextColor(100, 116, 139); doc.setFont("helvetica", "normal");
+  doc.text("Assinatura do Funcionário", 52, yAss + 6, { align: "center" });
+  doc.text("Assinatura do Responsável", pw - 52, yAss + 6, { align: "center" });
+  doc.setFontSize(7); doc.setTextColor(160, 170, 180);
+  doc.text("Documento gerado pelo CORTEX Gestão — Grupo Equilibrium", pw / 2, doc.internal.pageSize.getHeight() - 8, { align: "center" });
+  const arq = "ponto-" + colab.nome.replace(/\s+/g, "_") + "-" + mesRotulo.replace("/", "-") + ".pdf";
+  if (retornarBlob) return { blob: doc.output("blob"), nome: arq };
+  doc.save(arq);
+}
+
 function AbaPonto({ ctx }) {
   const podeEditar = nivelAba(ctx, "rh", "ponto") === "editar";
   const [visao, setVisao] = useState("hoje");
@@ -1212,6 +1291,15 @@ function AbaPonto({ ctx }) {
   const [addDia, setAddDia] = useState("");
   const [addHora, setAddHora] = useState("");
   const [addTipo, setAddTipo] = useState("entrada");
+  const [ocorrencias, setOcorrencias] = useState(null);
+  const [ocoMes, setOcoMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [ocoColab, setOcoColab] = useState("");
+  const [novaOco, setNovaOco] = useState(null);
+  const [editOco, setEditOco] = useState(null);
+  const [obsOco, setObsOco] = useState(null);
+  const [relMes, setRelMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [relDados, setRelDados] = useState(null);
+  const [gerando, setGerando] = useState(false);
 
   async function carregarHoje() {
     const ini = new Date(); ini.setHours(0, 0, 0, 0);
@@ -1223,7 +1311,7 @@ function AbaPonto({ ctx }) {
   }
 
   async function carregarColabs() {
-    const { data } = await sb.from("colaboradores").select("id, nome, status").order("nome");
+    const { data } = await sb.from("colaboradores").select("id, nome, cargo, status").order("nome");
     setColabs(data || []);
   }
 
@@ -1300,10 +1388,136 @@ function AbaPonto({ ctx }) {
     carregarHoje(); carregarEspelho();
   }
 
+  function ultimoDia(m) {
+    return String(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate()).padStart(2, "0");
+  }
+
+  async function carregarOcorrencias() {
+    if (!ocoMes) { setOcorrencias(null); return; }
+    let q = sb.from("ponto_ocorrencias")
+      .select("id, colaborador_id, data, tipo, descricao, observacao, colaboradores(nome)")
+      .gte("data", ocoMes + "-01").lte("data", ocoMes + "-" + ultimoDia(ocoMes))
+      .order("data", { ascending: false }).order("created_at", { ascending: false }).limit(20000);
+    if (ocoColab) q = q.eq("colaborador_id", ocoColab);
+    const { data, error } = await q;
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setOcorrencias(data || []);
+  }
+  useEffect(() => { if (visao === "ocorrencias") carregarOcorrencias(); }, [visao, ocoMes, ocoColab]);
+
+  async function carregarRelatorio() {
+    if (!relMes) { setRelDados(null); return; }
+    const ini = new Date(Number(relMes.slice(0, 4)), Number(relMes.slice(5, 7)) - 1, 1);
+    const fim = new Date(Number(relMes.slice(0, 4)), Number(relMes.slice(5, 7)), 1);
+    const [regs, ocos] = await Promise.all([
+      sb.from("ponto_registros").select("colaborador_id, tipo, batida")
+        .gte("batida", ini.toISOString()).lt("batida", fim.toISOString())
+        .order("batida").limit(20000),
+      sb.from("ponto_ocorrencias").select("colaborador_id, data, tipo, descricao, observacao")
+        .gte("data", relMes + "-01").lte("data", relMes + "-" + ultimoDia(relMes))
+        .order("data").limit(20000),
+    ]);
+    if (regs.error || ocos.error) { setMsg("Erro: " + (regs.error || ocos.error).message); return; }
+    setRelDados({ regs: regs.data || [], ocos: ocos.data || [] });
+  }
+  useEffect(() => { if (visao === "relatorios") carregarRelatorio(); }, [visao, relMes]);
+
+  async function salvarNovaOco() {
+    if (!novaOco || !novaOco.colaborador_id || !novaOco.data || !novaOco.descricao.trim()) { setMsg("Preencha colaborador, data e descrição."); return; }
+    const { error } = await sb.from("ponto_ocorrencias").insert({
+      colaborador_id: novaOco.colaborador_id, data: novaOco.data, tipo: "admin",
+      descricao: novaOco.descricao.trim(), criado_por: ctx.profile.id,
+    });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setNovaOco(null); carregarOcorrencias();
+  }
+
+  async function salvarEditOco() {
+    if (!editOco || !editOco.data || !editOco.descricao.trim()) { setMsg("A data e a descrição não podem ficar vazias."); return; }
+    const { error } = await sb.from("ponto_ocorrencias").update({ data: editOco.data, descricao: editOco.descricao.trim() }).eq("id", editOco.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setEditOco(null); carregarOcorrencias();
+  }
+
+  async function salvarObsOco() {
+    if (!obsOco) return;
+    const { error } = await sb.from("ponto_ocorrencias").update({ observacao: obsOco.texto.trim() || null }).eq("id", obsOco.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setObsOco(null); carregarOcorrencias();
+  }
+
+  async function excluirOco(o) {
+    if (!window.confirm("Excluir esta ocorrência? A exclusão fica na auditoria.")) return;
+    const { error } = await sb.from("ponto_ocorrencias").delete().eq("id", o.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregarOcorrencias();
+  }
+
+  const resumoRel = useMemo(() => {
+    if (!relDados) return [];
+    return colabs.filter((c) => c.status === "ativo").map((c) => {
+      const regs = relDados.regs.filter((r) => r.colaborador_id === c.id);
+      const diasSet = {}; let min = 0, ent = null;
+      regs.forEach((r) => {
+        const d = new Date(r.batida);
+        diasSet[d.getFullYear() + "-" + (d.getMonth() + 1) + "-" + d.getDate()] = 1;
+        if (r.tipo === "entrada") { ent = new Date(r.batida); }
+        else if (ent) { min += (new Date(r.batida) - ent) / 60000; ent = null; }
+      });
+      return { colab: c, dias: Object.keys(diasSet).length, min };
+    });
+  }, [relDados, colabs]);
+
+  function pdfDe(colab) {
+    if (!window.jspdf || !window.jspdf.jsPDF) { setMsg("O gerador de PDF não carregou. Atualize a página com Ctrl+F5."); return; }
+    const regs = (relDados.regs || []).filter((r) => r.colaborador_id === colab.id);
+    const ocos = (relDados.ocos || []).filter((o) => o.colaborador_id === colab.id);
+    if (!regs.length && !ocos.length) { setMsg(colab.nome + " não tem registros neste mês."); return; }
+    setMsg("");
+    const p = relMes.split("-");
+    pdfPonto(colab, regs, ocos, p[1] + "/" + p[0]);
+  }
+
+  async function pdfTodos() {
+    if (!window.jspdf || !window.jspdf.jsPDF || !window.JSZip) { setMsg("Bibliotecas de PDF/ZIP não carregaram. Atualize a página com Ctrl+F5."); return; }
+    setGerando(true); setMsg("");
+    try {
+      const zip = new window.JSZip(); const p = relMes.split("-"); let n = 0;
+      colabs.filter((c) => c.status === "ativo").forEach((c) => {
+        const regs = (relDados.regs || []).filter((r) => r.colaborador_id === c.id);
+        const ocos = (relDados.ocos || []).filter((o) => o.colaborador_id === c.id);
+        if (regs.length || ocos.length) {
+          const r = pdfPonto(c, regs, ocos, p[1] + "/" + p[0], true);
+          zip.file(r.nome, r.blob); n++;
+        }
+      });
+      if (!n) { setMsg("Nenhum registro neste mês."); setGerando(false); return; }
+      const blob = await zip.generateAsync({ type: "blob" });
+      const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+      a.download = "relatorios-ponto-" + relMes + ".zip"; a.click();
+    } catch (e) { setMsg("Erro ao gerar o ZIP: " + e.message); }
+    setGerando(false);
+  }
+
+  function csvMes() {
+    if (!relDados) return;
+    let csv = "Funcionário,Cargo,Data,Tipo,Horário\r\n";
+    colabs.filter((c) => c.status === "ativo").forEach((c) => {
+      (relDados.regs || []).filter((r) => r.colaborador_id === c.id).forEach((r) => {
+        const d = new Date(r.batida);
+        const dia = String(d.getDate()).padStart(2, "0") + "/" + String(d.getMonth() + 1).padStart(2, "0") + "/" + d.getFullYear();
+        csv += '"' + c.nome + '","' + (c.cargo || "") + '","' + dia + '","' + r.tipo + '","' + d.toLocaleTimeString("pt-BR") + '"\r\n';
+      });
+    });
+    const blob = new Blob(["\uFEFF" + csv], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a"); a.href = URL.createObjectURL(blob);
+    a.download = "relatorio-ponto-" + relMes + ".csv"; a.click();
+  }
+
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {[["hoje", "Hoje"], ["espelho", "Espelho mensal"]].map(([v, r]) => (
+        {[["hoje", "Hoje"], ["espelho", "Espelho mensal"], ["ocorrencias", "Ocorrências"], ["relatorios", "Relatórios"]].map(([v, r]) => (
           <span key={v} className="chip" onClick={() => setVisao(v)}
             style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
         ))}
@@ -1394,6 +1608,126 @@ function AbaPonto({ ctx }) {
               )}
             </div>
           )}
+        </div>
+      )}
+
+      {visao === "ocorrencias" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={ocoMes} onChange={(e) => setOcoMes(e.target.value)} />
+            <select className="campo" style={{ flex: 1, minWidth: 180, padding: "8px 10px", fontSize: 13 }} value={ocoColab} onChange={(e) => setOcoColab(e.target.value)}>
+              <option value="">todos os colaboradores</option>
+              {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+            </select>
+            {podeEditar && (
+              <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+                onClick={() => setNovaOco(novaOco ? null : { colaborador_id: ocoColab || "", data: hojeLocalISO(), descricao: "" })}>
+                <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova ocorrência
+              </button>
+            )}
+          </div>
+
+          {novaOco && podeEditar && (
+            <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+              <span style={{ fontSize: 12, color: "var(--sec)", fontWeight: 600 }}>Ocorrência administrativa:</span>
+              <select className="campo" style={{ flex: 1, minWidth: 170, padding: "7px 9px", fontSize: 12.5 }} value={novaOco.colaborador_id} onChange={(e) => setNovaOco({ ...novaOco, colaborador_id: e.target.value })}>
+                <option value="">colaborador…</option>
+                {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+              </select>
+              <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novaOco.data} onChange={(e) => setNovaOco({ ...novaOco, data: e.target.value })} />
+              <input className="campo" style={{ flex: 2, minWidth: 220, padding: "7px 9px", fontSize: 12.5 }} placeholder="descrição (ex.: atestado entregue, atraso combinado…)" value={novaOco.descricao} onChange={(e) => setNovaOco({ ...novaOco, descricao: e.target.value })} />
+              <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovaOco}>Registrar</button>
+              <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovaOco(null)}>Cancelar</button>
+            </div>
+          )}
+
+          <div className="card-fl" style={{ overflow: "hidden" }}>
+            {!ocorrencias && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+            {ocorrencias && ocorrencias.length === 0 && (
+              <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhuma ocorrência neste mês.</div>
+            )}
+            {ocorrencias && ocorrencias.map((o) => (
+              <div key={o.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 600, width: 84, flex: "none" }}>{o.data ? dataBr(o.data) : "—"}</span>
+                  <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{o.colaboradores ? o.colaboradores.nome : "(sem colaborador)"}</span>
+                  <span className="chip" style={{ background: o.tipo === "admin" ? "var(--tint)" : "var(--azul-bg)", color: o.tipo === "admin" ? "var(--marca-texto)" : "var(--azul)" }}>
+                    {o.tipo === "admin" ? "Administrativo" : "Funcionário"}
+                  </span>
+                  <span style={{ flex: 1 }}></span>
+                  {podeEditar && (
+                    <span style={{ display: "flex", gap: 10, flex: "none" }}>
+                      <i className="ti ti-message-circle" title="Observação do administrativo" aria-label="Observação do administrativo"
+                        style={{ fontSize: 15, cursor: "pointer", color: o.observacao ? "var(--ambar)" : "var(--muted)" }}
+                        onClick={() => { setEditOco(null); setObsOco(obsOco && obsOco.id === o.id ? null : { id: o.id, texto: o.observacao || "" }); }}></i>
+                      <i className="ti ti-pencil" title="Editar" aria-label="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                        onClick={() => { setObsOco(null); setEditOco(editOco && editOco.id === o.id ? null : { id: o.id, data: o.data || "", descricao: o.descricao || "" }); }}></i>
+                      <i className="ti ti-trash" title="Excluir" aria-label="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }}
+                        onClick={() => excluirOco(o)}></i>
+                    </span>
+                  )}
+                </div>
+                {(!editOco || editOco.id !== o.id) && (
+                  <div style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 4, whiteSpace: "pre-wrap" }}>{o.descricao || "—"}</div>
+                )}
+                {editOco && editOco.id === o.id && (
+                  <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+                    <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={editOco.data} onChange={(e) => setEditOco({ ...editOco, data: e.target.value })} />
+                    <input className="campo" style={{ flex: 1, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} value={editOco.descricao} onChange={(e) => setEditOco({ ...editOco, descricao: e.target.value })} />
+                    <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEditOco}>Salvar</button>
+                    <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEditOco(null)}>Cancelar</button>
+                  </div>
+                )}
+                {obsOco && obsOco.id === o.id && podeEditar && (
+                  <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+                    <input className="campo" style={{ flex: 1, minWidth: 220, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação do administrativo (aparece no PDF)" value={obsOco.texto} onChange={(e) => setObsOco({ ...obsOco, texto: e.target.value })} />
+                    <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarObsOco}>Salvar</button>
+                    <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setObsOco(null)}>Cancelar</button>
+                  </div>
+                )}
+                {o.observacao && (!obsOco || obsOco.id !== o.id) && (
+                  <div style={{ marginTop: 6, fontSize: 12, color: "var(--ambar)", background: "var(--ambar-bg, #FFF7E6)", border: "1px solid var(--linha)", borderRadius: 8, padding: "6px 10px", whiteSpace: "pre-wrap" }}>
+                    <b>Observação do administrativo:</b> {o.observacao}
+                  </div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {visao === "relatorios" && (
+        <div>
+          <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
+            <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={relMes} onChange={(e) => setRelMes(e.target.value)} />
+            <span style={{ flex: 1 }}></span>
+            <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }} disabled={!relDados} onClick={csvMes}>
+              <i className="ti ti-table-export" style={{ fontSize: 14 }} aria-hidden="true"></i>CSV do mês
+            </button>
+            <button className="btn-primaria" style={{ padding: "8px 13px", fontSize: 12.5 }} disabled={!relDados || gerando} onClick={pdfTodos}>
+              <i className="ti ti-file-zip" style={{ fontSize: 14 }} aria-hidden="true"></i>{gerando ? "Gerando…" : "PDF de todos (ZIP)"}
+            </button>
+          </div>
+          <div className="card-fl" style={{ overflow: "hidden" }}>
+            {!relDados && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+            {relDados && resumoRel.length === 0 && (
+              <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhum colaborador ativo.</div>
+            )}
+            {relDados && resumoRel.map((l) => (
+              <div key={l.colab.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
+                <div style={{ width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(l.colab.nome)}</div>
+                <div style={{ flex: 1, minWidth: 140 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{l.colab.nome}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{l.colab.cargo || "—"}</div>
+                </div>
+                <span style={{ fontSize: 12.5, color: "var(--sec)", flex: "none" }}>{l.dias} dia(s)</span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, flex: "none", width: 64, textAlign: "right" }}>{fmtMin(l.min)}</span>
+                <button className="btn-contorno" style={{ padding: "6px 11px", fontSize: 12 }} onClick={() => pdfDe(l.colab)}>
+                  <i className="ti ti-file-type-pdf" style={{ fontSize: 14 }} aria-hidden="true"></i>PDF
+                </button>
+              </div>
+            ))}
+          </div>
         </div>
       )}
     </div>
