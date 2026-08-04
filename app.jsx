@@ -28,7 +28,7 @@ const MODULOS = [
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#EFE9E2",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
-  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#F1EDE8",            status: "proximo" },
+  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#F1EDE8",            status: "ativo" },
 ];
 
 const STATUS_CHIP = {
@@ -577,6 +577,333 @@ function PaginaInstrucoes() {
 }
 
 // ------------------------------------------------------------
+// Configuracoes: perfis e permissoes, pessoas, outros CORTEX
+// ------------------------------------------------------------
+function SegNivel({ valor, aoMudar, desabilitado }) {
+  const ops = [
+    { v: "oculto", r: "Oculto", cls: "on-h" },
+    { v: "ver", r: "Ver", cls: "on-v" },
+    { v: "editar", r: "Editar", cls: "on-e" },
+  ];
+  return (
+    <span className="seg">
+      {ops.map((o) => (
+        <button key={o.v} type="button" disabled={desabilitado}
+          className={"sg" + (valor === o.v ? " " + o.cls : "")}
+          onClick={() => aoMudar(o.v)}>{o.r}</button>
+      ))}
+    </span>
+  );
+}
+
+function AbaPerfis({ ctx, podeEditar }) {
+  const [perfis, setPerfis] = useState(null);
+  const [contagem, setContagem] = useState({});
+  const [sel, setSel] = useState(null);
+  const [mapa, setMapa] = useState({});
+  const [orig, setOrig] = useState("{}");
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const [novoNome, setNovoNome] = useState("");
+  const [criando, setCriando] = useState(false);
+
+  async function carregarPerfis(selecionarId) {
+    const { data: ps } = await sb.from("perfis").select("*").order("acesso_total", { ascending: false }).order("nome");
+    const { data: pessoas } = await sb.from("profiles").select("id, perfil_id");
+    const cont = {};
+    (pessoas || []).forEach((p) => { if (p.perfil_id) cont[p.perfil_id] = (cont[p.perfil_id] || 0) + 1; });
+    setPerfis(ps || []);
+    setContagem(cont);
+    const alvo = (ps || []).find((p) => p.id === selecionarId) || (ps || [])[0] || null;
+    setSel(alvo);
+  }
+
+  useEffect(() => { carregarPerfis(); }, []);
+
+  useEffect(() => {
+    if (!sel || sel.acesso_total) { setMapa({}); setOrig("{}"); return; }
+    let vivo = true;
+    sb.from("permissoes").select("modulo, nivel").eq("perfil_id", sel.id).is("aba", null)
+      .then(({ data }) => {
+        if (!vivo) return;
+        const m = {};
+        MODULOS.forEach((mod) => { m[mod.id] = "oculto"; });
+        (data || []).forEach((r) => { m[r.modulo] = r.nivel; });
+        setMapa(m);
+        setOrig(JSON.stringify(m));
+      });
+    return () => { vivo = false; };
+  }, [sel && sel.id]);
+
+  const temMudanca = sel && !sel.acesso_total && JSON.stringify(mapa) !== orig;
+
+  async function salvar() {
+    if (!sel || salvando) return;
+    setSalvando(true);
+    setMsg("");
+    const del = await sb.from("permissoes").delete().eq("perfil_id", sel.id).is("aba", null);
+    if (del.error) { setMsg("Erro ao salvar: " + del.error.message); setSalvando(false); return; }
+    const linhas = Object.keys(mapa).filter((k) => mapa[k] !== "oculto").map((k) => ({ perfil_id: sel.id, modulo: k, nivel: mapa[k] }));
+    if (linhas.length) {
+      const ins = await sb.from("permissoes").insert(linhas);
+      if (ins.error) { setMsg("Erro ao salvar: " + ins.error.message); setSalvando(false); return; }
+    }
+    setOrig(JSON.stringify(mapa));
+    setMsg("Permissões salvas.");
+    setSalvando(false);
+    setTimeout(() => setMsg(""), 3500);
+  }
+
+  async function criarPerfil() {
+    const nome = novoNome.trim();
+    if (!nome) return;
+    const { data, error } = await sb.from("perfis").insert({ nome }).select().single();
+    if (error) { setMsg("Erro ao criar: " + error.message); return; }
+    setNovoNome("");
+    setCriando(false);
+    carregarPerfis(data.id);
+  }
+
+  async function excluirPerfil() {
+    if (!sel || sel.acesso_total) return;
+    if ((contagem[sel.id] || 0) > 0) { setMsg("Este perfil tem pessoas atribuídas. Mova as pessoas antes de excluir."); return; }
+    if (!window.confirm('Excluir o perfil "' + sel.nome + '"?')) return;
+    const { error } = await sb.from("perfis").delete().eq("id", sel.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    carregarPerfis();
+  }
+
+  if (!perfis) return <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>;
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div style={{ flex: "none", width: 200, display: "flex", flexDirection: "column", gap: 8 }}>
+        {perfis.map((p) => (
+          <div key={p.id} className="card-fl clicavel" onClick={() => setSel(p)}
+            style={{ padding: "10px 12px", borderColor: sel && sel.id === p.id ? "var(--laranja)" : undefined, background: sel && sel.id === p.id ? "#FFF8F3" : undefined }}>
+            <div style={{ fontSize: 13, fontWeight: 600 }}>{exibirPerfil(p.nome)}</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>{contagem[p.id] || 0} {(contagem[p.id] || 0) === 1 ? "pessoa" : "pessoas"}</div>
+            {p.acesso_total && <span className="chip" style={{ background: "var(--tint)", color: "var(--laranja-texto)", marginTop: 5 }}>Acesso total</span>}
+          </div>
+        ))}
+        {podeEditar && !criando && (
+          <button className="btn-contorno" onClick={() => setCriando(true)} style={{ justifyContent: "center" }}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Novo perfil
+          </button>
+        )}
+        {podeEditar && criando && (
+          <div className="card-fl" style={{ padding: 10 }}>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13, marginBottom: 8 }} placeholder="Nome do perfil"
+              value={novoNome} onChange={(e) => setNovoNome(e.target.value)}
+              onKeyDown={(e) => { if (e.key === "Enter") criarPerfil(); }} autoFocus />
+            <div style={{ display: "flex", gap: 6 }}>
+              <button className="btn-primaria" style={{ padding: "7px 12px", fontSize: 12 }} onClick={criarPerfil}>Criar</button>
+              <button className="btn-fantasma" style={{ width: "auto", padding: "0 10px" }} onClick={() => { setCriando(false); setNovoNome(""); }}>cancelar</button>
+            </div>
+          </div>
+        )}
+      </div>
+
+      <div className="card-fl" style={{ flex: 1, minWidth: 280, padding: "12px 14px" }}>
+        {!sel && <div style={{ fontSize: 13, color: "var(--muted)" }}>Selecione um perfil.</div>}
+        {sel && sel.acesso_total && (
+          <div style={{ padding: "18px 8px", textAlign: "center" }}>
+            <div style={{ width: 44, height: 44, borderRadius: 13, background: "var(--tint)", color: "var(--laranja-texto)", display: "flex", alignItems: "center", justifyContent: "center", margin: "0 auto 10px" }}>
+              <i className="ti ti-shield-check" style={{ fontSize: 21 }} aria-hidden="true"></i>
+            </div>
+            <div style={{ fontWeight: 600, fontSize: 14 }}>{exibirPerfil(sel.nome)} tem acesso total</div>
+            <p style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 6 }}>Vê e edita todos os módulos, sempre. Não precisa de regras por módulo.</p>
+          </div>
+        )}
+        {sel && !sel.acesso_total && (
+          <div>
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingBottom: 8, borderBottom: "1px solid var(--linha-suave)", marginBottom: 4, flexWrap: "wrap", gap: 8 }}>
+              <span style={{ fontWeight: 600, fontSize: 13.5 }}>Permissões do perfil {exibirPerfil(sel.nome)}</span>
+              {podeEditar && (
+                <button className="btn-fantasma" style={{ width: "auto", padding: "0 10px", height: 28, fontSize: 12, fontWeight: 600 }} onClick={excluirPerfil}>excluir perfil</button>
+              )}
+            </div>
+            {MODULOS.map((m) => (
+              <div key={m.id} className="linha-hover" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 6px", borderRadius: 9 }}>
+                <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                  <i className={"ti " + m.icone} style={{ fontSize: 15, color: "var(--muted)", flex: "none" }} aria-hidden="true"></i>
+                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.rotulo}</span>
+                </span>
+                <SegNivel valor={mapa[m.id] || "oculto"} desabilitado={!podeEditar}
+                  aoMudar={(v) => setMapa({ ...mapa, [m.id]: v })} />
+              </div>
+            ))}
+            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, marginTop: 6, borderTop: "1px solid var(--linha-suave)", gap: 10, flexWrap: "wrap" }}>
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Permissão por aba entra junto com os módulos da fase 2.</span>
+              {podeEditar && (
+                <button className="btn-primaria" style={{ padding: "8px 16px", fontSize: 12.5 }} disabled={!temMudanca || salvando} onClick={salvar}>
+                  {salvando ? "Salvando…" : "Salvar permissões"}
+                </button>
+              )}
+            </div>
+            {msg && <div className="anim-pop" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</div>}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function AbaPessoas({ ctx, podeEditar }) {
+  const [pessoas, setPessoas] = useState(null);
+  const [perfis, setPerfis] = useState([]);
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    const { data: ps } = await sb.from("perfis").select("id, nome, acesso_total").order("acesso_total", { ascending: false }).order("nome");
+    const { data: gente } = await sb.from("profiles").select("id, nome, email, ativo, perfil_id").order("nome");
+    setPerfis(ps || []);
+    setPessoas(gente || []);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  async function mudarPerfil(p, perfilId) {
+    const { error } = await sb.from("profiles").update({ perfil_id: perfilId || null }).eq("id", p.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg("");
+    carregar();
+  }
+
+  async function alternarAtivo(p) {
+    const { error } = await sb.from("profiles").update({ ativo: !p.ativo }).eq("id", p.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg("");
+    carregar();
+  }
+
+  if (!pessoas) return <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>;
+
+  return (
+    <div>
+      <div className="card-fl" style={{ overflow: "hidden" }}>
+        {pessoas.map((p) => {
+          const euMesmo = p.id === ctx.profile.id;
+          return (
+            <div key={p.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap" }}>
+              <div style={{ width: 32, height: 32, borderRadius: "50%", background: p.ativo ? "var(--grad)" : "#D9D2CA", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(p.nome)}</div>
+              <div style={{ flex: 1, minWidth: 140 }}>
+                <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nome || "(sem nome)"}{euMesmo && <span style={{ fontWeight: 400, color: "var(--muted)" }}> · você</span>}</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.email}</div>
+              </div>
+              <select className="campo" style={{ width: 170, padding: "7px 10px", fontSize: 12.5 }}
+                value={p.perfil_id || ""} disabled={!podeEditar || euMesmo}
+                title={euMesmo ? "Você não pode alterar o próprio perfil" : undefined}
+                onChange={(e) => mudarPerfil(p, e.target.value)}>
+                <option value="">sem perfil</option>
+                {perfis.map((pf) => <option key={pf.id} value={pf.id}>{exibirPerfil(pf.nome)}</option>)}
+              </select>
+              <button type="button" className={"sw" + (p.ativo ? " on" : "")} disabled={!podeEditar || euMesmo}
+                title={euMesmo ? "Você não pode desativar a si mesmo" : (p.ativo ? "Desativar acesso" : "Ativar acesso")}
+                aria-label={p.ativo ? "Desativar acesso" : "Ativar acesso"}
+                onClick={() => alternarAtivo(p)}></button>
+            </div>
+          );
+        })}
+      </div>
+      {msg && <div className="anim-pop" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+      <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
+        Novos logins são criados no painel do Supabase (Authentication, Users) por enquanto; a pessoa aparece aqui na hora, aguardando perfil.
+      </p>
+    </div>
+  );
+}
+
+function AbaLinks({ podeEditar }) {
+  const [links, setLinks] = useState(null);
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    const { data, error } = await sb.from("cortex_links").select("*").order("ordem");
+    if (error) { setMsg("Sem acesso aos links (módulo Outros CORTEX)."); setLinks([]); return; }
+    setLinks(data || []);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  function editarLocal(id, campo, valor) {
+    setLinks(links.map((l) => (l.id === id ? { ...l, [campo]: valor } : l)));
+  }
+
+  async function salvarLinha(l) {
+    const { error } = await sb.from("cortex_links").update({ nome: l.nome, descricao: l.descricao, url: l.url, cor: l.cor, ordem: Number(l.ordem) || 0, ativo: l.ativo }).eq("id", l.id);
+    setMsg(error ? "Erro: " + error.message : "Link salvo.");
+    if (!error) setTimeout(() => setMsg(""), 3000);
+  }
+
+  async function excluir(l) {
+    if (!window.confirm('Excluir o link "' + l.nome + '"?')) return;
+    const { error } = await sb.from("cortex_links").delete().eq("id", l.id);
+    if (!error) carregar();
+  }
+
+  async function novo() {
+    const maior = (links || []).reduce((m, l) => Math.max(m, l.ordem || 0), 0);
+    const { error } = await sb.from("cortex_links").insert({ nome: "Novo CORTEX", descricao: "", url: "", cor: "#F97316", ordem: maior + 1 });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  if (!links) return <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>;
+
+  return (
+    <div>
+      {links.map((l) => (
+        <div key={l.id} className="card-fl" style={{ padding: "11px 13px", marginBottom: 10, display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+          <input type="color" value={l.cor || "#F97316"} disabled={!podeEditar}
+            onChange={(e) => editarLocal(l.id, "cor", e.target.value)}
+            style={{ width: 34, height: 34, border: "1px solid var(--linha)", borderRadius: 9, padding: 2, background: "#fff", cursor: podeEditar ? "pointer" : "default", flex: "none" }}
+            aria-label="Cor do botão" />
+          <input className="campo" style={{ width: 150, padding: "7px 10px", fontSize: 12.5 }} value={l.nome || ""} disabled={!podeEditar} placeholder="Nome"
+            onChange={(e) => editarLocal(l.id, "nome", e.target.value)} />
+          <input className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 10px", fontSize: 12.5 }} value={l.url || ""} disabled={!podeEditar} placeholder="https://…"
+            onChange={(e) => editarLocal(l.id, "url", e.target.value)} />
+          <input className="campo" type="number" style={{ width: 62, padding: "7px 8px", fontSize: 12.5 }} value={l.ordem} disabled={!podeEditar} title="Ordem"
+            onChange={(e) => editarLocal(l.id, "ordem", e.target.value)} />
+          <button type="button" className={"sw" + (l.ativo ? " on" : "")} disabled={!podeEditar}
+            title={l.ativo ? "Visível" : "Oculto"} aria-label={l.ativo ? "Ocultar link" : "Mostrar link"}
+            onClick={() => editarLocal(l.id, "ativo", !l.ativo)}></button>
+          {podeEditar && (
+            <span style={{ display: "flex", gap: 5, flex: "none" }}>
+              <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => salvarLinha(l)}>Salvar</button>
+              <button className="btn-fantasma" onClick={() => excluir(l)} aria-label="Excluir link" title="Excluir">
+                <i className="ti ti-trash" style={{ fontSize: 15 }} aria-hidden="true"></i>
+              </button>
+            </span>
+          )}
+        </div>
+      ))}
+      {podeEditar && (
+        <button className="btn-contorno" onClick={novo}><i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Novo link</button>
+      )}
+      {msg && <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 || msg.indexOf("Sem") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</div>}
+    </div>
+  );
+}
+
+function PaginaConfiguracoes({ ctx }) {
+  const [aba, setAba] = useState("perfis");
+  const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
+  return (
+    <div>
+      <div className="aba-linha">
+        <div className={"aba" + (aba === "perfis" ? " on" : "")} onClick={() => setAba("perfis")}>Perfis e permissões</div>
+        <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
+        <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
+      </div>
+      {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
+      {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
+      {aba === "links" && <AbaLinks podeEditar={podeEditar} />}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
 // Stub das proximas fases
 // ------------------------------------------------------------
 function PaginaStub({ m }) {
@@ -627,6 +954,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaOutros />;
   } else if (pagina === "instrucoes") {
     conteudo = <PaginaInstrucoes />;
+  } else if (pagina === "configuracoes") {
+    conteudo = <PaginaConfiguracoes ctx={ctx} />;
   } else {
     conteudo = <PaginaStub m={moduloAtual} />;
   }
