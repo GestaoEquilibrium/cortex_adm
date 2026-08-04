@@ -21,7 +21,7 @@ const MODULOS = [
   { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
-  { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "fase2" },
+  { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "fase2" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "fase2" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)",    status: "fase3" },
@@ -131,6 +131,15 @@ function nivelModulo(ctx, moduloId) {
   if (ctx.acessoTotal) return "editar";
   const regra = (ctx.permissoes || []).find((p) => p.modulo === moduloId && !p.aba);
   return regra ? regra.nivel : "oculto";
+}
+
+// Nivel efetivo de uma aba: regra da aba, senao a do modulo.
+function nivelAba(ctx, moduloId, aba) {
+  if (!ctx || !ctx.profile) return "oculto";
+  if (ctx.acessoTotal) return "editar";
+  const regraAba = (ctx.permissoes || []).find((p) => p.modulo === moduloId && p.aba === aba);
+  if (regraAba) return regraAba.nivel;
+  return nivelModulo(ctx, moduloId);
 }
 
 // ------------------------------------------------------------
@@ -939,6 +948,280 @@ function PaginaArquivos({ ctx }) {
 }
 
 // ------------------------------------------------------------
+// RH e equipe
+// ------------------------------------------------------------
+const STATUS_COLAB = {
+  ativo:     { r: "Ativo",     bg: "var(--verde-bg)",    cor: "var(--verde)" },
+  ferias:    { r: "Férias",    bg: "var(--azul-bg)",     cor: "var(--azul)" },
+  afastado:  { r: "Afastado",  bg: "var(--ambar-bg)",    cor: "var(--ambar)" },
+  desligado: { r: "Desligado", bg: "#ECF1F6",            cor: "var(--sec)" },
+};
+
+function dataBr(iso) {
+  if (!iso) return "";
+  const p = String(iso).slice(0, 10).split("-");
+  return p.length === 3 ? p[2] + "/" + p[1] + "/" + p[0] : iso;
+}
+
+function dataIso(br) {
+  const t = String(br || "").trim();
+  if (!t) return null;
+  if (/^\d{4}-\d{2}-\d{2}$/.test(t)) return t;
+  const m = t.match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if (!m) return null;
+  return m[3] + "-" + m[2].padStart(2, "0") + "-" + m[1].padStart(2, "0");
+}
+
+function numeroBr(v) {
+  const t = String(v || "").trim();
+  if (!t) return null;
+  const n = parseFloat(t.replace(/\./g, "").replace(",", "."));
+  return isNaN(n) ? null : n;
+}
+
+function AbaColaboradores({ ctx }) {
+  const podeEditar = nivelAba(ctx, "rh", "colaboradores") === "editar";
+  const [lista, setLista] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("ativos");
+  const [msg, setMsg] = useState("");
+  const [formAberto, setFormAberto] = useState(false);
+  const [editando, setEditando] = useState(null);
+  const [f, setF] = useState({});
+  const [salvando, setSalvando] = useState(false);
+  const [importando, setImportando] = useState(false);
+
+  async function carregar() {
+    const { data } = await sb.from("colaboradores").select("*").order("nome");
+    setLista(data || []);
+  }
+
+  useEffect(() => { carregar(); }, []);
+
+  const visiveis = useMemo(() => {
+    let v = lista || [];
+    if (filtro === "ativos") v = v.filter((c) => c.status !== "desligado");
+    if (filtro === "desligados") v = v.filter((c) => c.status === "desligado");
+    const q = busca.trim().toLowerCase();
+    if (q) v = v.filter((c) => [c.nome, c.cargo, c.setor, c.unidade, c.regime].some((x) => String(x || "").toLowerCase().indexOf(q) !== -1));
+    return v;
+  }, [lista, busca, filtro]);
+
+  function abrirForm(c) {
+    setEditando(c || null);
+    setF(c ? {
+      nome: c.nome || "", cpf: c.cpf || "", cargo: c.cargo || "", setor: c.setor || "",
+      regime: c.regime || "CLT", unidade: c.unidade || "", email: c.email || "", telefone: c.telefone || "",
+      admissao: c.admissao || "", nascimento: c.nascimento || "", salario: c.salario != null ? String(c.salario).replace(".", ",") : "",
+      status: c.status || "ativo", observacoes: c.observacoes || "",
+    } : { nome: "", cpf: "", cargo: "", setor: "", regime: "CLT", unidade: "", email: "", telefone: "", admissao: "", nascimento: "", salario: "", status: "ativo", observacoes: "" });
+    setFormAberto(true);
+    setMsg("");
+  }
+
+  function campo(k, v) { setF({ ...f, [k]: v }); }
+
+  async function salvar() {
+    if (!f.nome.trim()) { setMsg("O nome é obrigatório."); return; }
+    setSalvando(true);
+    const dados = {
+      nome: f.nome.trim(), cpf: f.cpf.trim() || null, cargo: f.cargo.trim() || null, setor: f.setor.trim() || null,
+      regime: f.regime || null, unidade: f.unidade.trim() || null, email: f.email.trim() || null, telefone: f.telefone.trim() || null,
+      admissao: f.admissao || null, nascimento: f.nascimento || null,
+      salario: numeroBr(f.salario), status: f.status, observacoes: f.observacoes.trim() || null,
+      atualizado_por: ctx.profile.id,
+    };
+    const r = editando
+      ? await sb.from("colaboradores").update(dados).eq("id", editando.id)
+      : await sb.from("colaboradores").insert(dados);
+    setSalvando(false);
+    if (r.error) { setMsg("Erro ao salvar: " + r.error.message); return; }
+    setFormAberto(false);
+    carregar();
+  }
+
+  async function excluir(c) {
+    if (!window.confirm('Excluir "' + c.nome + '" e todos os registros ligados (faltas, atestados)? Para manter o histórico, prefira o status Desligado.')) return;
+    const { error } = await sb.from("colaboradores").delete().eq("id", c.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    carregar();
+  }
+
+  function baixarModelo() {
+    const linhas = [
+      "nome;cpf;cargo;setor;regime;unidade;email;telefone;admissao;nascimento;salario;status",
+      "Maria Exemplo;123.456.789-00;Recepcionista;Recepcao;CLT;EQ1 Med Center;maria@exemplo.com;(34) 99999-0000;01/02/2024;15/06/1995;1850,00;ativo",
+    ];
+    const blob = new Blob(["\uFEFF" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "modelo_colaboradores.csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  async function importar(arquivo) {
+    if (!arquivo) return;
+    setImportando(true);
+    setMsg("");
+    const texto = await arquivo.text();
+    const linhas = texto.replace(/^\uFEFF/, "").split(/\r?\n/).filter((l) => l.trim());
+    if (linhas.length < 2) { setMsg("A planilha está vazia (só o cabeçalho ou nada)."); setImportando(false); return; }
+    const sep = linhas[0].indexOf(";") !== -1 ? ";" : ",";
+    const cab = linhas[0].split(sep).map((c) => c.trim().toLowerCase());
+    const idx = (n) => cab.indexOf(n);
+    if (idx("nome") === -1) { setMsg("O cabeçalho precisa ter a coluna nome. Baixe o modelo."); setImportando(false); return; }
+    const novos = [];
+    const erros = [];
+    for (let i = 1; i < linhas.length; i++) {
+      const c = linhas[i].split(sep).map((x) => x.trim());
+      const pega = (n) => (idx(n) !== -1 ? c[idx(n)] || "" : "");
+      const nome = pega("nome");
+      if (!nome) { erros.push("linha " + (i + 1) + ": sem nome"); continue; }
+      const st = (pega("status") || "ativo").toLowerCase();
+      novos.push({
+        nome, cpf: pega("cpf") || null, cargo: pega("cargo") || null, setor: pega("setor") || null,
+        regime: pega("regime") || null, unidade: pega("unidade") || null, email: pega("email") || null,
+        telefone: pega("telefone") || null, admissao: dataIso(pega("admissao")), nascimento: dataIso(pega("nascimento")),
+        salario: numeroBr(pega("salario")), status: ["ativo","ferias","afastado","desligado"].indexOf(st) !== -1 ? st : "ativo",
+        atualizado_por: ctx.profile.id,
+      });
+    }
+    let inseridos = 0;
+    for (let i = 0; i < novos.length; i += 50) {
+      const lote = novos.slice(i, i + 50);
+      const { error } = await sb.from("colaboradores").insert(lote);
+      if (error) { erros.push("lote " + (i / 50 + 1) + ": " + error.message); }
+      else inseridos += lote.length;
+    }
+    setImportando(false);
+    setMsg(inseridos + " colaborador(es) importado(s)." + (erros.length ? " Problemas: " + erros.join(" · ") : ""));
+    carregar();
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        <div style={{ flex: 1, minWidth: 170, position: "relative" }}>
+          <i className="ti ti-search" style={{ position: "absolute", left: 12, top: "50%", transform: "translateY(-50%)", fontSize: 15, color: "var(--muted)" }} aria-hidden="true"></i>
+          <input className="campo" style={{ paddingLeft: 36, padding: "8px 10px 8px 36px", fontSize: 13 }} placeholder="Buscar por nome, cargo, setor" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        {[["ativos", "Ativos"], ["todos", "Todos"], ["desligados", "Desligados"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setFiltro(v)}
+            style={{ cursor: "pointer", background: filtro === v ? "var(--tint)" : "var(--branco)", color: filtro === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (filtro === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        {podeEditar && (
+          <React.Fragment>
+            <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={baixarModelo}>
+              <i className="ti ti-download" style={{ fontSize: 14 }} aria-hidden="true"></i>Modelo
+            </button>
+            <label className="btn-contorno" style={{ cursor: "pointer", padding: "8px 13px", fontSize: 12.5 }}>
+              <i className="ti ti-upload" style={{ fontSize: 14 }} aria-hidden="true"></i>{importando ? "Importando…" : "Importar planilha"}
+              <input type="file" accept=".csv,text/csv" style={{ display: "none" }} onChange={(e) => { importar(e.target.files[0]); e.target.value = ""; }} />
+            </label>
+            <button className="btn-primaria" style={{ padding: "9px 15px", fontSize: 12.5 }} onClick={() => (formAberto ? setFormAberto(false) : abrirForm(null))}>
+              <i className="ti ti-plus" style={{ fontSize: 15 }} aria-hidden="true"></i>Novo colaborador
+            </button>
+          </React.Fragment>
+        )}
+      </div>
+
+      {formAberto && (
+        <div className="card-fl anim-pop" style={{ padding: "13px 14px", marginBottom: 12 }}>
+          <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 10 }}>{editando ? "Editar colaborador" : "Novo colaborador"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 8, marginBottom: 8 }}>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13, gridColumn: "span 2" }} placeholder="Nome completo *" value={f.nome} onChange={(e) => campo("nome", e.target.value)} autoFocus />
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="CPF" value={f.cpf} onChange={(e) => campo("cpf", e.target.value)} />
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="Cargo" value={f.cargo} onChange={(e) => campo("cargo", e.target.value)} />
+            <input className="campo" list="setores-rh" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="Setor" value={f.setor} onChange={(e) => campo("setor", e.target.value)} />
+            <datalist id="setores-rh"><option value="Administrativo" /><option value="Clínico" /><option value="Terapêutico" /><option value="Recepção" /><option value="Financeiro" /><option value="Limpeza" /></datalist>
+            <select className="campo" style={{ padding: "8px 10px", fontSize: 13 }} value={f.regime} onChange={(e) => campo("regime", e.target.value)}>
+              {["CLT", "PJ", "Estágio", "Sócio", "Voluntário", "Outro"].map((r) => <option key={r} value={r}>{r}</option>)}
+            </select>
+            <input className="campo" list="unidades-rh" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="Unidade" value={f.unidade} onChange={(e) => campo("unidade", e.target.value)} />
+            <datalist id="unidades-rh"><option value="EQ1 Med Center" /><option value="EQ2 Terapia Infantil" /></datalist>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="E-mail" value={f.email} onChange={(e) => campo("email", e.target.value)} />
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="Telefone" value={f.telefone} onChange={(e) => campo("telefone", e.target.value)} />
+            <label style={{ fontSize: 11, color: "var(--muted)" }}>Admissão<input className="campo" type="date" style={{ padding: "7px 10px", fontSize: 13, marginTop: 3 }} value={f.admissao || ""} onChange={(e) => campo("admissao", e.target.value)} /></label>
+            <label style={{ fontSize: 11, color: "var(--muted)" }}>Nascimento<input className="campo" type="date" style={{ padding: "7px 10px", fontSize: 13, marginTop: 3 }} value={f.nascimento || ""} onChange={(e) => campo("nascimento", e.target.value)} /></label>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="Salário (ex.: 1850,00)" value={f.salario} onChange={(e) => campo("salario", e.target.value)} />
+            <select className="campo" style={{ padding: "8px 10px", fontSize: 13 }} value={f.status} onChange={(e) => campo("status", e.target.value)}>
+              <option value="ativo">Ativo</option><option value="ferias">Férias</option><option value="afastado">Afastado</option><option value="desligado">Desligado</option>
+            </select>
+          </div>
+          <input className="campo" style={{ padding: "8px 10px", fontSize: 13, marginBottom: 8 }} placeholder="Observações" value={f.observacoes} onChange={(e) => campo("observacoes", e.target.value)} />
+          <div style={{ display: "flex", gap: 8 }}>
+            <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar"}</button>
+            <button className="btn-fantasma" style={{ width: "auto", padding: "0 10px" }} onClick={() => setFormAberto(false)}>cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--marca-texto)" }}>{msg}</div>}
+
+      {!lista && <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+      {lista && visiveis.length === 0 && (
+        <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+          {lista.length === 0 ? "Nenhum colaborador ainda." + (podeEditar ? " Cadastre o primeiro ou importe a planilha." : "") : "Ninguém encontrado com esses filtros."}
+        </div>
+      )}
+
+      {lista && visiveis.length > 0 && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {visiveis.map((c) => {
+            const st = STATUS_COLAB[c.status] || STATUS_COLAB.ativo;
+            return (
+              <div key={c.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap", cursor: podeEditar ? "pointer" : "default" }}
+                onClick={() => podeEditar && abrirForm(c)}>
+                <div style={{ width: 34, height: 34, borderRadius: "50%", background: c.status === "desligado" ? "#C3CCD6" : "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(c.nome)}</div>
+                <div style={{ flex: 1, minWidth: 150 }}>
+                  <div style={{ fontSize: 13, fontWeight: 600 }}>{c.nome}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{[c.cargo, c.setor, c.unidade].filter(Boolean).join(" · ") || "sem cargo definido"}</div>
+                </div>
+                {c.regime && <span className="chip" style={{ background: "var(--roxo-bg)", color: "var(--roxo)" }}>{c.regime}</span>}
+                <span className="chip" style={{ background: st.bg, color: st.cor }}>{st.r}</span>
+                {podeEditar && (
+                  <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Excluir" title="Excluir"
+                    onClick={(e) => { e.stopPropagation(); excluir(c); }}>
+                    <i className="ti ti-trash" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                  </button>
+                )}
+              </div>
+            );
+          })}
+          <div style={{ padding: "8px 14px", fontSize: 11, color: "var(--muted)" }}>{visiveis.length} de {lista.length} colaborador(es)</div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+function PaginaRH({ ctx }) {
+  const abas = [
+    { id: "colaboradores", r: "Colaboradores" },
+    { id: "faltas", r: "Faltas e atestados" },
+    { id: "alertas", r: "Alertas e pendências" },
+  ].filter((a) => nivelAba(ctx, "rh", a.id) !== "oculto");
+  const [aba, setAba] = useState(abas.length ? abas[0].id : "colaboradores");
+
+  return (
+    <div>
+      <div className="aba-linha">
+        {abas.map((a) => (
+          <div key={a.id} className={"aba" + (aba === a.id ? " on" : "")} onClick={() => setAba(a.id)}>{a.r}</div>
+        ))}
+      </div>
+      {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
+      {aba !== "colaboradores" && (
+        <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+          Esta aba chega no próximo sprint — o banco já está pronto para ela.
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
 // Modelos: arquivos prontos da casa
 // ------------------------------------------------------------
 const CORES_CATEGORIA = [
@@ -1518,6 +1801,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaArquivos ctx={ctx} />;
   } else if (pagina === "modelos") {
     conteudo = <PaginaModelos ctx={ctx} />;
+  } else if (pagina === "rh") {
+    conteudo = <PaginaRH ctx={ctx} />;
   } else if (pagina === "auditoria") {
     conteudo = <PaginaAuditoria />;
   } else if (pagina === "outros_cortex") {
