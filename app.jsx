@@ -330,6 +330,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v15</div>
       </aside>
     </React.Fragment>
   );
@@ -822,9 +823,13 @@ function PaginaArquivos({ ctx }) {
           {pastas && pastas.length > 0 && (
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(150px, 1fr))", gap: 10, marginBottom: 12 }}>
               {pastas.map((p, i) => (
-                <div key={p.id} className="card-fl clicavel anim-sobe" onClick={() => entrar(p)} style={{ padding: "12px 13px", animationDelay: (i * 40) + "ms", position: "relative" }}>
-                  <div style={{ width: 30, height: 30, borderRadius: 9, background: "var(--tint)", color: "var(--marca-texto)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 8 }}>
-                    <i className={"ti " + (p.restrita ? "ti-folder-cog" : "ti-folder")} style={{ fontSize: 16 }} aria-hidden="true"></i>
+                <div key={p.id} className="card-fl clicavel anim-sobe pasta-cartao" onClick={() => entrar(p)} style={{ padding: "12px 13px", animationDelay: (i * 40) + "ms", position: "relative" }}>
+                  <div className="pasta3d" aria-hidden="true">
+                    <div className="aba-p"></div>
+                    <div className="corpo"></div>
+                    <div className="papel"></div>
+                    <div className="frente"></div>
+                    {p.restrita && <i className="ti ti-lock cadeado" aria-hidden="true"></i>}
                   </div>
                   <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
                   <div style={{ fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 5 }}>
@@ -1744,6 +1749,447 @@ function AbaPonto({ ctx }) {
   );
 }
 
+function AbaFaltas({ ctx }) {
+  const podeEditar = nivelAba(ctx, "rh", "faltas") === "editar";
+  const [visao, setVisao] = useState("faltas");
+  const [colabs, setColabs] = useState([]);
+  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [colabSel, setColabSel] = useState("");
+  const [faltas, setFaltas] = useState(null);
+  const [atestados, setAtestados] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [novo, setNovo] = useState(null);
+  const [edit, setEdit] = useState(null);
+
+  useEffect(() => { (async () => {
+    const { data } = await sb.from("colaboradores").select("id, nome, status").order("nome");
+    setColabs(data || []);
+  })(); }, []);
+
+  function fimMes(m) { return m + "-" + String(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate()).padStart(2, "0"); }
+
+  async function carregarFaltas() {
+    let q = sb.from("faltas").select("id, colaborador_id, data, tipo, justificada, motivo, colaboradores(nome)")
+      .gte("data", mes + "-01").lte("data", fimMes(mes))
+      .order("data", { ascending: false }).limit(20000);
+    if (colabSel) q = q.eq("colaborador_id", colabSel);
+    const { data, error } = await q;
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setFaltas(data || []);
+  }
+  async function carregarAtestados() {
+    let q = sb.from("atestados").select("id, colaborador_id, inicio, fim, dias, cid, observacao, colaboradores(nome)")
+      .lte("inicio", fimMes(mes)).gte("fim", mes + "-01")
+      .order("inicio", { ascending: false }).limit(20000);
+    if (colabSel) q = q.eq("colaborador_id", colabSel);
+    const { data, error } = await q;
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setAtestados(data || []);
+  }
+  useEffect(() => { setNovo(null); setEdit(null); if (visao === "faltas") carregarFaltas(); else carregarAtestados(); }, [visao, mes, colabSel]);
+
+  const rotTipo = { falta: "Falta", atraso: "Atraso", saida_antecipada: "Saída antecipada" };
+  const corTipo = {
+    falta: ["var(--vermelho-bg, #FDEBEB)", "var(--vermelho)"],
+    atraso: ["var(--ambar-bg, #FFF7E6)", "var(--ambar)"],
+    saida_antecipada: ["var(--azul-bg)", "var(--azul)"],
+  };
+
+  function diasEntre(a, b) { return Math.round((new Date(b + "T12:00:00") - new Date(a + "T12:00:00")) / 86400000) + 1; }
+
+  async function salvarNovo() {
+    if (visao === "faltas") {
+      if (!novo.colaborador_id || !novo.data) { setMsg("Escolha colaborador e data."); return; }
+      const { error } = await sb.from("faltas").insert({
+        colaborador_id: novo.colaborador_id, data: novo.data, tipo: novo.tipo,
+        justificada: !!novo.justificada, motivo: (novo.motivo || "").trim() || null,
+        registrado_por: ctx.profile.id,
+      });
+      if (error) { setMsg("Erro: " + error.message); return; }
+      setMsg(""); setNovo(null); carregarFaltas();
+    } else {
+      if (!novo.colaborador_id || !novo.inicio || !novo.fim) { setMsg("Escolha colaborador, início e fim."); return; }
+      if (novo.fim < novo.inicio) { setMsg("O fim não pode vir antes do início."); return; }
+      const { error } = await sb.from("atestados").insert({
+        colaborador_id: novo.colaborador_id, inicio: novo.inicio, fim: novo.fim,
+        dias: diasEntre(novo.inicio, novo.fim),
+        cid: (novo.cid || "").trim() || null, observacao: (novo.observacao || "").trim() || null,
+        registrado_por: ctx.profile.id,
+      });
+      if (error) { setMsg("Erro: " + error.message); return; }
+      setMsg(""); setNovo(null); carregarAtestados();
+    }
+  }
+
+  async function salvarEdit() {
+    if (visao === "faltas") {
+      if (!edit.data) { setMsg("A data é obrigatória."); return; }
+      const { error } = await sb.from("faltas").update({
+        data: edit.data, tipo: edit.tipo, justificada: !!edit.justificada,
+        motivo: (edit.motivo || "").trim() || null,
+      }).eq("id", edit.id);
+      if (error) { setMsg("Erro: " + error.message); return; }
+      setMsg(""); setEdit(null); carregarFaltas();
+    } else {
+      if (!edit.inicio || !edit.fim || edit.fim < edit.inicio) { setMsg("Confira as datas do atestado."); return; }
+      const { error } = await sb.from("atestados").update({
+        inicio: edit.inicio, fim: edit.fim, dias: diasEntre(edit.inicio, edit.fim),
+        cid: (edit.cid || "").trim() || null, observacao: (edit.observacao || "").trim() || null,
+      }).eq("id", edit.id);
+      if (error) { setMsg("Erro: " + error.message); return; }
+      setMsg(""); setEdit(null); carregarAtestados();
+    }
+  }
+
+  async function excluir(item) {
+    if (!window.confirm("Excluir este registro? A exclusão fica na auditoria.")) return;
+    const { error } = await sb.from(visao === "faltas" ? "faltas" : "atestados").delete().eq("id", item.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    if (visao === "faltas") carregarFaltas(); else carregarAtestados();
+  }
+
+  async function alternarJustificada(f) {
+    const { error } = await sb.from("faltas").update({ justificada: !f.justificada }).eq("id", f.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregarFaltas();
+  }
+
+  const selColab = (valor, aoMudar, flexivel) => (
+    <select className="campo" style={{ flex: flexivel ? 1 : "none", minWidth: 170, padding: "7px 9px", fontSize: 12.5 }} value={valor} onChange={aoMudar}>
+      <option value="">colaborador…</option>
+      {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+    </select>
+  );
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["faltas", "Faltas"], ["atestados", "Atestados"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setVisao(v)}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={mes} onChange={(e) => setMes(e.target.value)} />
+        <select className="campo" style={{ flex: 1, minWidth: 180, padding: "8px 10px", fontSize: 13 }} value={colabSel} onChange={(e) => setColabSel(e.target.value)}>
+          <option value="">todos os colaboradores</option>
+          {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+        </select>
+        {podeEditar && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+            onClick={() => setNovo(novo ? null : (visao === "faltas"
+              ? { colaborador_id: colabSel || "", data: hojeLocalISO(), tipo: "falta", justificada: false, motivo: "" }
+              : { colaborador_id: colabSel || "", inicio: hojeLocalISO(), fim: hojeLocalISO(), cid: "", observacao: "" }))}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>{visao === "faltas" ? "Nova falta" : "Novo atestado"}
+          </button>
+        )}
+      </div>
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {novo && podeEditar && visao === "faltas" && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          {selColab(novo.colaborador_id, (e) => setNovo({ ...novo, colaborador_id: e.target.value }), true)}
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.data} onChange={(e) => setNovo({ ...novo, data: e.target.value })} />
+          <select className="campo" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} value={novo.tipo} onChange={(e) => setNovo({ ...novo, tipo: e.target.value })}>
+            <option value="falta">Falta</option><option value="atraso">Atraso</option><option value="saida_antecipada">Saída antecipada</option>
+          </select>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--sec)" }}>
+            <button type="button" className={"sw" + (novo.justificada ? " on" : "")} onClick={() => setNovo({ ...novo, justificada: !novo.justificada })} aria-label="Justificada"></button>justificada
+          </label>
+          <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="motivo (opcional)" value={novo.motivo} onChange={(e) => setNovo({ ...novo, motivo: e.target.value })} />
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Registrar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {novo && podeEditar && visao === "atestados" && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          {selColab(novo.colaborador_id, (e) => setNovo({ ...novo, colaborador_id: e.target.value }), true)}
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.inicio} onChange={(e) => setNovo({ ...novo, inicio: e.target.value })} />
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.fim} onChange={(e) => setNovo({ ...novo, fim: e.target.value })} />
+          <input className="campo" style={{ width: 110, padding: "7px 9px", fontSize: 12.5 }} placeholder="CID (opcional)" value={novo.cid} onChange={(e) => setNovo({ ...novo, cid: e.target.value })} />
+          <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação (opcional)" value={novo.observacao} onChange={(e) => setNovo({ ...novo, observacao: e.target.value })} />
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Registrar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {visao === "faltas" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {!faltas && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+          {faltas && faltas.length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhuma falta neste mês.</div>
+          )}
+          {faltas && faltas.map((f) => (
+            <div key={f.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, width: 84, flex: "none" }}>{dataBr(f.data)}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{f.colaboradores ? f.colaboradores.nome : "—"}</span>
+                <span className="chip" style={{ background: corTipo[f.tipo][0], color: corTipo[f.tipo][1] }}>{rotTipo[f.tipo] || f.tipo}</span>
+                <span className="chip" title={podeEditar ? "Clique para alternar" : ""}
+                  onClick={podeEditar ? () => alternarJustificada(f) : undefined}
+                  style={{ cursor: podeEditar ? "pointer" : "default", background: f.justificada ? "var(--verde-bg)" : "var(--branco)", color: f.justificada ? "var(--verde)" : "var(--muted)", border: "1px solid " + (f.justificada ? "var(--verde-bg)" : "var(--linha)") }}>
+                  {f.justificada ? "Justificada" : "Não justificada"}
+                </span>
+                <span style={{ flex: 1 }}></span>
+                {podeEditar && (
+                  <span style={{ display: "flex", gap: 10, flex: "none" }}>
+                    <i className="ti ti-pencil" title="Editar" aria-label="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                      onClick={() => setEdit(edit && edit.id === f.id ? null : { id: f.id, data: f.data, tipo: f.tipo, justificada: f.justificada, motivo: f.motivo || "" })}></i>
+                    <i className="ti ti-trash" title="Excluir" aria-label="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(f)}></i>
+                  </span>
+                )}
+              </div>
+              {f.motivo && (!edit || edit.id !== f.id) && (
+                <div style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 4, whiteSpace: "pre-wrap" }}>{f.motivo}</div>
+              )}
+              {edit && edit.id === f.id && (
+                <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.data} onChange={(e) => setEdit({ ...edit, data: e.target.value })} />
+                  <select className="campo" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} value={edit.tipo} onChange={(e) => setEdit({ ...edit, tipo: e.target.value })}>
+                    <option value="falta">Falta</option><option value="atraso">Atraso</option><option value="saida_antecipada">Saída antecipada</option>
+                  </select>
+                  <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--sec)" }}>
+                    <button type="button" className={"sw" + (edit.justificada ? " on" : "")} onClick={() => setEdit({ ...edit, justificada: !edit.justificada })} aria-label="Justificada"></button>justificada
+                  </label>
+                  <input className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} value={edit.motivo} onChange={(e) => setEdit({ ...edit, motivo: e.target.value })} />
+                  <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
+                  <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {visao === "atestados" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {!atestados && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+          {atestados && atestados.length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhum atestado tocando este mês.</div>
+          )}
+          {atestados && atestados.map((a) => (
+            <div key={a.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, flex: "none" }}>{dataBr(a.inicio)} – {dataBr(a.fim)}</span>
+                <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{a.dias || diasEntre(a.inicio, a.fim)} dia(s)</span>
+                <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{a.colaboradores ? a.colaboradores.nome : "—"}</span>
+                {a.cid && <span className="chip" style={{ background: "var(--azul-bg)", color: "var(--azul)" }}>CID {a.cid}</span>}
+                <span style={{ flex: 1 }}></span>
+                {podeEditar && (
+                  <span style={{ display: "flex", gap: 10, flex: "none" }}>
+                    <i className="ti ti-pencil" title="Editar" aria-label="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                      onClick={() => setEdit(edit && edit.id === a.id ? null : { id: a.id, inicio: a.inicio, fim: a.fim, cid: a.cid || "", observacao: a.observacao || "" })}></i>
+                    <i className="ti ti-trash" title="Excluir" aria-label="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(a)}></i>
+                  </span>
+                )}
+              </div>
+              {a.observacao && (!edit || edit.id !== a.id) && (
+                <div style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 4, whiteSpace: "pre-wrap" }}>{a.observacao}</div>
+              )}
+              {edit && edit.id === a.id && (
+                <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.inicio} onChange={(e) => setEdit({ ...edit, inicio: e.target.value })} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.fim} onChange={(e) => setEdit({ ...edit, fim: e.target.value })} />
+                  <input className="campo" style={{ width: 110, padding: "7px 9px", fontSize: 12.5 }} placeholder="CID" value={edit.cid} onChange={(e) => setEdit({ ...edit, cid: e.target.value })} />
+                  <input className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação" value={edit.observacao} onChange={(e) => setEdit({ ...edit, observacao: e.target.value })} />
+                  <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
+                  <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function AbaAlertas({ ctx }) {
+  const podeEditar = nivelAba(ctx, "rh", "alertas") === "editar";
+  const [visao, setVisao] = useState("alertas");
+  const [colabs, setColabs] = useState([]);
+  const [mostrarFechados, setMostrarFechados] = useState(false);
+  const [lista, setLista] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [novo, setNovo] = useState(null);
+  const [edit, setEdit] = useState(null);
+
+  useEffect(() => { (async () => {
+    const { data } = await sb.from("colaboradores").select("id, nome, status").order("nome");
+    setColabs(data || []);
+  })(); }, []);
+
+  const ehAlerta = visao === "alertas";
+  const tabela = ehAlerta ? "alertas" : "pendencias";
+  const flag = ehAlerta ? "resolvido" : "concluida";
+
+  async function carregar() {
+    let q = sb.from(tabela).select("*, colaboradores(nome)")
+      .order("prazo", { ascending: true, nullsFirst: false })
+      .order("created_at", { ascending: false }).limit(20000);
+    if (!mostrarFechados) q = q.eq(flag, false);
+    const { data, error } = await q;
+    if (error) { setMsg("Erro: " + error.message); return; }
+    const d = (data || []).slice().sort((a, b) => Number(a[flag]) - Number(b[flag]));
+    setMsg(""); setLista(d);
+  }
+  useEffect(() => { setNovo(null); setEdit(null); carregar(); }, [visao, mostrarFechados]);
+
+  const corCrit = {
+    critico: ["var(--vermelho-bg, #FDEBEB)", "var(--vermelho)", "Crítico"],
+    atencao: ["var(--ambar-bg, #FFF7E6)", "var(--ambar)", "Atenção"],
+    info: ["var(--azul-bg)", "var(--azul)", "Informativo"],
+  };
+
+  async function salvarNovo() {
+    if (!novo.titulo.trim()) { setMsg("Dê um título."); return; }
+    const base = {
+      titulo: novo.titulo.trim(), descricao: (novo.descricao || "").trim() || null,
+      prazo: novo.prazo || null, colaborador_id: novo.colaborador_id || null, criado_por: ctx.profile.id,
+    };
+    if (ehAlerta) base.criticidade = novo.criticidade || "atencao";
+    const { error } = await sb.from(tabela).insert(base);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setNovo(null); carregar();
+  }
+
+  async function salvarEdit() {
+    if (!edit.titulo.trim()) { setMsg("O título não pode ficar vazio."); return; }
+    const base = {
+      titulo: edit.titulo.trim(), descricao: (edit.descricao || "").trim() || null,
+      prazo: edit.prazo || null, colaborador_id: edit.colaborador_id || null,
+    };
+    if (ehAlerta) base.criticidade = edit.criticidade || "atencao";
+    const { error } = await sb.from(tabela).update(base).eq("id", edit.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setEdit(null); carregar();
+  }
+
+  async function alternarFeito(item) {
+    const patch = ehAlerta
+      ? { resolvido: !item.resolvido, resolvido_em: !item.resolvido ? new Date().toISOString() : null }
+      : { concluida: !item.concluida, concluida_em: !item.concluida ? new Date().toISOString() : null };
+    const { error } = await sb.from(tabela).update(patch).eq("id", item.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  async function excluir(item) {
+    if (!window.confirm("Excluir este registro? A exclusão fica na auditoria.")) return;
+    const { error } = await sb.from(tabela).delete().eq("id", item.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["alertas", "Alertas"], ["pendencias", "Pendências"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setVisao(v)}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--sec)" }}>
+          <button type="button" className={"sw" + (mostrarFechados ? " on" : "")} onClick={() => setMostrarFechados(!mostrarFechados)} aria-label="Mostrar também os fechados"></button>
+          mostrar {ehAlerta ? "resolvidos" : "concluídas"}
+        </label>
+        {podeEditar && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+            onClick={() => setNovo(novo ? null : { titulo: "", descricao: "", prazo: "", colaborador_id: "", criticidade: "atencao" })}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>{ehAlerta ? "Novo alerta" : "Nova pendência"}
+          </button>
+        )}
+      </div>
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {novo && podeEditar && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="título" value={novo.titulo} onChange={(e) => setNovo({ ...novo, titulo: e.target.value })} />
+          <select className="campo" style={{ flex: 1, minWidth: 160, padding: "7px 9px", fontSize: 12.5 }} value={novo.colaborador_id} onChange={(e) => setNovo({ ...novo, colaborador_id: e.target.value })}>
+            <option value="">sem colaborador</option>
+            {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+          </select>
+          {ehAlerta && (
+            <select className="campo" style={{ width: 130, padding: "7px 9px", fontSize: 12.5 }} value={novo.criticidade} onChange={(e) => setNovo({ ...novo, criticidade: e.target.value })}>
+              <option value="critico">Crítico</option><option value="atencao">Atenção</option><option value="info">Informativo</option>
+            </select>
+          )}
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.prazo} onChange={(e) => setNovo({ ...novo, prazo: e.target.value })} title="prazo (opcional)" />
+          <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="descrição (opcional)" value={novo.descricao} onChange={(e) => setNovo({ ...novo, descricao: e.target.value })} />
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Registrar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
+      <div className="card-fl" style={{ overflow: "hidden" }}>
+        {!lista && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+        {lista && lista.length === 0 && (
+          <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+            {ehAlerta ? "Nenhum alerta em aberto." : "Nenhuma pendência em aberto."}
+          </div>
+        )}
+        {lista && lista.map((item) => {
+          const feito = !!item[flag];
+          const vencido = item.prazo && !feito && item.prazo < hojeLocalISO();
+          return (
+            <div key={item.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", opacity: feito ? .62 : 1 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                <button type="button" title={podeEditar ? (feito ? "Reabrir" : (ehAlerta ? "Marcar como resolvido" : "Concluir")) : ""}
+                  onClick={podeEditar ? () => alternarFeito(item) : undefined}
+                  style={{ width: 20, height: 20, borderRadius: "50%", flex: "none", cursor: podeEditar ? "pointer" : "default", border: "2px solid " + (feito ? "var(--verde)" : "var(--linha)"), background: feito ? "var(--verde)" : "transparent", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", padding: 0 }}>
+                  {feito && <i className="ti ti-check" style={{ fontSize: 12 }} aria-hidden="true"></i>}
+                </button>
+                <span style={{ fontSize: 13, fontWeight: 600, textDecoration: feito ? "line-through" : "none", color: feito ? "var(--muted)" : "var(--ink)" }}>{item.titulo}</span>
+                {ehAlerta && corCrit[item.criticidade] && (
+                  <span className="chip" style={{ background: corCrit[item.criticidade][0], color: corCrit[item.criticidade][1] }}>{corCrit[item.criticidade][2]}</span>
+                )}
+                {item.colaboradores && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{item.colaboradores.nome}</span>}
+                {item.prazo && (
+                  <span className="chip" style={{ background: vencido ? "var(--vermelho-bg, #FDEBEB)" : "var(--branco)", color: vencido ? "var(--vermelho)" : "var(--muted)", border: vencido ? "none" : "1px solid var(--linha)" }}>
+                    {vencido ? "venceu " : "até "}{dataBr(item.prazo)}
+                  </span>
+                )}
+                <span style={{ flex: 1 }}></span>
+                {podeEditar && (
+                  <span style={{ display: "flex", gap: 10, flex: "none" }}>
+                    <i className="ti ti-pencil" title="Editar" aria-label="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                      onClick={() => setEdit(edit && edit.id === item.id ? null : { id: item.id, titulo: item.titulo, descricao: item.descricao || "", prazo: item.prazo || "", colaborador_id: item.colaborador_id || "", criticidade: item.criticidade || "atencao" })}></i>
+                    <i className="ti ti-trash" title="Excluir" aria-label="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(item)}></i>
+                  </span>
+                )}
+              </div>
+              {item.descricao && (!edit || edit.id !== item.id) && (
+                <div style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 4, marginLeft: 29, whiteSpace: "pre-wrap" }}>{item.descricao}</div>
+              )}
+              {edit && edit.id === item.id && (
+                <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7, marginLeft: 29 }}>
+                  <input className="campo" style={{ flex: 2, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} value={edit.titulo} onChange={(e) => setEdit({ ...edit, titulo: e.target.value })} />
+                  <select className="campo" style={{ flex: 1, minWidth: 150, padding: "7px 9px", fontSize: 12.5 }} value={edit.colaborador_id} onChange={(e) => setEdit({ ...edit, colaborador_id: e.target.value })}>
+                    <option value="">sem colaborador</option>
+                    {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
+                  </select>
+                  {ehAlerta && (
+                    <select className="campo" style={{ width: 130, padding: "7px 9px", fontSize: 12.5 }} value={edit.criticidade} onChange={(e) => setEdit({ ...edit, criticidade: e.target.value })}>
+                      <option value="critico">Crítico</option><option value="atencao">Atenção</option><option value="info">Informativo</option>
+                    </select>
+                  )}
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.prazo} onChange={(e) => setEdit({ ...edit, prazo: e.target.value })} />
+                  <input className="campo" style={{ flex: 2, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} placeholder="descrição" value={edit.descricao} onChange={(e) => setEdit({ ...edit, descricao: e.target.value })} />
+                  <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
+                  <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+                </div>
+              )}
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 function PaginaRH({ ctx }) {
   const abas = [
     { id: "colaboradores", r: "Colaboradores" },
@@ -1772,7 +2218,9 @@ function PaginaRH({ ctx }) {
       </div>
       {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
       {aba === "ponto" && <AbaPonto ctx={ctx} />}
-      {aba !== "colaboradores" && aba !== "ponto" && (
+      {aba === "faltas" && <AbaFaltas ctx={ctx} />}
+      {aba === "alertas" && <AbaAlertas ctx={ctx} />}
+      {["colaboradores", "ponto", "faltas", "alertas"].indexOf(aba) === -1 && (
         <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
           Esta aba chega no próximo sprint — o banco já está pronto para ela.
         </div>

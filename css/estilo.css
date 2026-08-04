@@ -369,3 +369,19 @@ body {
     transition-duration: .01ms !important;
   }
 }
+
+
+/* ===== Pastas do drive: pasta de verdade, que abre no hover ===== */
+.pasta-cartao { transition: transform .22s ease, box-shadow .22s ease; }
+.pasta-cartao:hover { transform: translateY(-3px); box-shadow: 0 10px 26px rgba(16, 104, 176, .14); }
+.pasta3d { position: relative; width: 58px; height: 46px; margin-bottom: 8px; perspective: 300px; }
+.pasta3d .aba-p { position: absolute; top: 0; left: 0; width: 26px; height: 12px; border-radius: 6px 6px 0 0; background: #B7D7F0; }
+.pasta3d .corpo { position: absolute; top: 6px; left: 0; right: 0; bottom: 0; border-radius: 6px; background: #C7E0F5; }
+.pasta3d .papel { position: absolute; top: 9px; left: 7px; right: 7px; height: 26px; border-radius: 3px; background: #fff; box-shadow: 0 1px 3px rgba(28, 37, 48, .14); transition: transform .25s ease; }
+.pasta3d .frente { position: absolute; left: 0; right: 0; bottom: 0; height: 30px; border-radius: 6px 8px 6px 6px; background: linear-gradient(180deg, #DDEBF8, #CFE4F6); border: 1px solid #C1DCF3; transform-origin: bottom center; transition: transform .28s ease; }
+.pasta3d .cadeado { position: absolute; right: -3px; bottom: -3px; font-size: 13px; color: var(--marca-texto); background: #fff; border-radius: 50%; padding: 2px; box-shadow: 0 1px 4px rgba(28, 37, 48, .18); z-index: 2; }
+.pasta-cartao:hover .pasta3d .frente { transform: rotateX(-32deg); }
+.pasta-cartao:hover .pasta3d .papel { transform: translateY(-6px); }
+@media (prefers-reduced-motion: reduce) {
+  .pasta-cartao, .pasta3d .frente, .pasta3d .papel { transition: none; }
+}
