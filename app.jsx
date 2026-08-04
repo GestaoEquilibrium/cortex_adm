@@ -67,6 +67,13 @@ function exibirPerfil(nome) {
   return NOMES_PERFIL[nome] || nome || "sem perfil";
 }
 
+function urlAbsoluta(u) {
+  const t = String(u || "").trim();
+  if (!t) return "";
+  if (/^[a-z][a-z0-9+.-]*:\/\//i.test(t)) return t;
+  return "https://" + t;
+}
+
 function tempoRelativo(ts) {
   const s = Math.floor((Date.now() - new Date(ts).getTime()) / 1000);
   if (s < 60) return "agora mesmo";
@@ -498,7 +505,7 @@ function PaginaOutros() {
   function abrir(l) {
     if (!l.url) return;
     registrarEvento("visualizar", "outros_cortex", l.nome, l.id);
-    window.open(l.url, "_blank", "noopener");
+    window.open(urlAbsoluta(l.url), "_blank", "noopener");
   }
 
   return (
@@ -831,9 +838,9 @@ function AbaLinks({ podeEditar }) {
   }
 
   async function salvarLinha(l) {
-    const { error } = await sb.from("cortex_links").update({ nome: l.nome, descricao: l.descricao, url: l.url, cor: l.cor, ordem: Number(l.ordem) || 0, ativo: l.ativo }).eq("id", l.id);
+    const { error } = await sb.from("cortex_links").update({ nome: l.nome, descricao: l.descricao, url: urlAbsoluta(l.url), cor: l.cor, ordem: Number(l.ordem) || 0, ativo: l.ativo }).eq("id", l.id);
     setMsg(error ? "Erro: " + error.message : "Link salvo.");
-    if (!error) setTimeout(() => setMsg(""), 3000);
+    if (!error) { setTimeout(() => setMsg(""), 3000); carregar(); }
   }
 
   async function excluir(l) {
