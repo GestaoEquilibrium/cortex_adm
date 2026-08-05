@@ -30,6 +30,7 @@ const MODULOS = [
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
+  { id: "conta",          rotulo: "Minha conta",    icone: "ti-user-circle",      cor: "var(--marca-texto)",   fundo: "var(--tint)",        status: "ativo" },
   { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#ECF1F6",            status: "ativo" },
 ];
 
@@ -130,6 +131,7 @@ function registrarEvento(acao, modulo, entidade, entidadeId, detalhes) {
 // Nivel efetivo de um modulo para o usuario logado.
 function nivelModulo(ctx, moduloId) {
   if (!ctx || !ctx.profile) return "oculto";
+  if (moduloId === "conta") return ctx.acessoTotal ? "editar" : "ver";
   if (ctx.acessoTotal) return "editar";
   const regra = (ctx.permissoes || []).find((p) => p.modulo === moduloId && !p.aba);
   return regra ? regra.nivel : "oculto";
@@ -267,10 +269,11 @@ function TelaLogin() {
 // ------------------------------------------------------------
 // Sidebar flutuante (3 estados: exp, rail, oculta)
 // ------------------------------------------------------------
-function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
+function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard }) {
   const visiveis = MODULOS.filter((m) => nivelModulo(ctx, m.id) !== "oculto");
-  const principais = visiveis.filter((m) => m.id !== "configuracoes");
+  const principais = visiveis.filter((m) => m.id !== "configuracoes" && m.id !== "conta");
   const config = visiveis.find((m) => m.id === "configuracoes");
+  const conta = visiveis.find((m) => m.id === "conta");
 
   function Item({ m }) {
     const ativo = pagina === m.id;
@@ -318,11 +321,16 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
 
         <div style={{ flex: 1, minHeight: 12 }}></div>
 
+        {conta && <Item m={conta} />}
         {config && <Item m={config} />}
 
         <div className="user-card" title={ctx.profile.nome}>
-          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 2px 8px rgba(16,104,176,.28)" }}>
-            {iniciais(ctx.profile.nome)}
+          <div style={{ width: 32, height: 32, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 12, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", boxShadow: "0 2px 8px rgba(16,104,176,.28)", overflow: "hidden", cursor: "pointer" }}
+            onClick={() => setPagina("conta")} title="Minha conta" role="button" tabIndex={0}
+            onKeyDown={(e) => { if (e.key === "Enter") setPagina("conta"); }}>
+            {meuCard && meuCard.foto_url
+              ? <img src={meuCard.foto_url} alt="" style={{ width: "100%", height: "100%", objectFit: "cover" }} />
+              : iniciais(ctx.profile.nome)}
           </div>
           <div className="rotulo" style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ctx.profile.nome}</div>
@@ -332,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v24</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v25</div>
       </aside>
     </React.Fragment>
   );
@@ -3846,10 +3854,13 @@ function AbaPessoas({ ctx, podeEditar }) {
   const [novo, setNovo] = useState(null);
   const [criando, setCriando] = useState(false);
   const [feito, setFeito] = useState(null);
+  const [colabs, setColabs] = useState([]);
 
   async function carregar() {
     const { data: ps } = await sb.from("perfis").select("id, nome, acesso_total").order("acesso_total", { ascending: false }).order("nome");
-    const { data: gente } = await sb.from("profiles").select("id, nome, email, ativo, perfil_id").order("nome");
+    const { data: gente } = await sb.from("profiles").select("id, nome, email, ativo, perfil_id, colaborador_id").order("nome");
+    const { data: cs } = await sb.from("colaboradores").select("id, nome, cargo, setor, foto_url").order("nome").limit(2000);
+    setColabs(cs || []);
     setPerfis(ps || []);
     setPessoas(gente || []);
   }
@@ -3861,6 +3872,17 @@ function AbaPessoas({ ctx, podeEditar }) {
     if (error) { setMsg("Erro: " + error.message); return; }
     setMsg("");
     carregar();
+  }
+
+  async function vincular(p, colabId) {
+    const { error } = await sb.from("profiles").update({ colaborador_id: colabId }).eq("id", p.id);
+    if (error) {
+      if (error.message.indexOf("colaborador_id") !== -1) setMsg("Rode o 19_usuarios_prestadores.sql no Supabase para ativar o vínculo.");
+      else if (error.message.indexOf("profiles_colaborador_unico") !== -1) setMsg("Esse prestador já está vinculado a outro acesso.");
+      else setMsg("Erro: " + error.message);
+      return;
+    }
+    setMsg(""); carregar();
   }
 
   async function alternarAtivo(p) {
@@ -3956,6 +3978,16 @@ function AbaPessoas({ ctx, podeEditar }) {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nome || "(sem nome)"}{euMesmo && <span style={{ fontWeight: 400, color: "var(--muted)" }}> · você</span>}</div>
                 <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.email}</div>
               </div>
+              <div style={{ width: 216, flex: "none", display: "flex", alignItems: "center", gap: 5 }}>
+                <div style={{ flex: 1, minWidth: 0, pointerEvents: podeEditar ? "auto" : "none", opacity: podeEditar ? 1 : .6 }}>
+                  <SeletorPessoa pessoas={colabs} valor={p.colaborador_id || null}
+                    aoEscolher={(c) => vincular(p, c ? c.id : null)}
+                    rotuloVazio="vincular prestador…" />
+                </div>
+                {p.colaborador_id && podeEditar && (
+                  <i className="ti ti-x" title="Desvincular prestador" style={{ fontSize: 14, color: "var(--muted)", cursor: "pointer", flex: "none" }} onClick={() => vincular(p, null)}></i>
+                )}
+              </div>
               <select className="campo" style={{ width: 170, padding: "7px 10px", fontSize: 12.5 }}
                 value={p.perfil_id || ""} disabled={!podeEditar || euMesmo}
                 title={euMesmo ? "Você não pode alterar o próprio perfil" : undefined}
@@ -3973,7 +4005,7 @@ function AbaPessoas({ ctx, podeEditar }) {
       </div>
       {msg && <div className="anim-pop" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
       <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
-        Crie os acessos aqui mesmo: a pessoa entra na hora com o e-mail e a senha que você definir, já no perfil escolhido. Trocar de perfil ou desativar continua nesta lista.
+        Crie os acessos aqui mesmo: a pessoa entra na hora com o e-mail e a senha que você definir, já no perfil escolhido. Vincule cada acesso ao prestador correspondente — é isso que liga o login ao card: a pessoa passa a editar a própria foto e os próprios dados em "Minha conta".
       </p>
     </div>
   );
@@ -4056,6 +4088,216 @@ function CampoFicha({ r, filho, largo }) {
   return <div style={{ gridColumn: largo ? "1 / -1" : "auto" }}><label style={ROT_FICHA}>{r}</label>{filho}</div>;
 }
 
+// ------------------------------------------------------------
+// Recorte de foto: pop-up para enquadrar antes de enviar
+// ------------------------------------------------------------
+function RecorteFoto({ arquivo, aoUsar, aoCancelar }) {
+  const VP = 300;
+  const [img, setImg] = useState(null);
+  const [zoom, setZoom] = useState(1);
+  const [pos, setPos] = useState({ x: 0, y: 0 });
+  const [ocupado, setOcupado] = useState(false);
+  const arrasto = useRef(null);
+
+  useEffect(() => {
+    const url = URL.createObjectURL(arquivo);
+    const i = new Image();
+    i.onload = () => { setImg(i); setZoom(1); setPos({ x: 0, y: 0 }); };
+    i.onerror = () => aoCancelar();
+    i.src = url;
+    return () => URL.revokeObjectURL(url);
+  }, [arquivo]);
+
+  function geo(z) {
+    const base = Math.max(VP / img.width, VP / img.height);
+    const esc = base * z;
+    return { w: img.width * esc, h: img.height * esc };
+  }
+  function prender(p, z) {
+    const { w, h } = geo(z);
+    const mx = Math.max(0, (w - VP) / 2), my = Math.max(0, (h - VP) / 2);
+    return { x: Math.min(mx, Math.max(-mx, p.x)), y: Math.min(my, Math.max(-my, p.y)) };
+  }
+  function baixou(e) {
+    arrasto.current = { x: e.clientX, y: e.clientY, px: pos.x, py: pos.y };
+    e.currentTarget.setPointerCapture(e.pointerId);
+  }
+  function moveu(e) {
+    if (!arrasto.current || !img) return;
+    const a = arrasto.current;
+    setPos(prender({ x: a.px + (e.clientX - a.x), y: a.py + (e.clientY - a.y) }, zoom));
+  }
+  function soltou() { arrasto.current = null; }
+  function mudarZoom(v) {
+    const z = Number(v);
+    setZoom(z);
+    setPos((p) => prender(p, z));
+  }
+  function confirmar() {
+    if (!img || ocupado) return;
+    setOcupado(true);
+    const S = 512, cv = document.createElement("canvas");
+    cv.width = S; cv.height = S;
+    const g = cv.getContext("2d");
+    g.fillStyle = "#fff"; g.fillRect(0, 0, S, S);
+    const { w, h } = geo(zoom);
+    const f = S / VP;
+    g.drawImage(img, ((VP - w) / 2 + pos.x) * f, ((VP - h) / 2 + pos.y) * f, w * f, h * f);
+    cv.toBlob((b) => { if (b) aoUsar(b); else setOcupado(false); }, "image/jpeg", .9);
+  }
+
+  const g0 = img ? geo(zoom) : { w: 0, h: 0 };
+  return (
+    <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget && !ocupado) aoCancelar(); }}>
+      <div className="org-modal anim-pop" style={{ maxWidth: 356, padding: 18 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+          <div style={{ fontSize: 14, fontWeight: 800 }}>Enquadrar a foto</div>
+          <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={aoCancelar} aria-label="Fechar"></i>
+        </div>
+        <div
+          onPointerDown={baixou} onPointerMove={moveu} onPointerUp={soltou} onPointerCancel={soltou}
+          style={{ width: VP, height: VP, margin: "0 auto", position: "relative", overflow: "hidden", borderRadius: 16, background: "#EEF2F6", cursor: "grab", touchAction: "none", userSelect: "none" }}>
+          {img && (
+            <img src={img.src} alt="" draggable={false}
+              style={{ position: "absolute", left: (VP - g0.w) / 2 + pos.x, top: (VP - g0.h) / 2 + pos.y, width: g0.w, height: g0.h, maxWidth: "none", pointerEvents: "none" }} />
+          )}
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", boxShadow: "0 0 0 400px rgba(247, 250, 253, .78)", pointerEvents: "none" }}></div>
+          <div style={{ position: "absolute", inset: 0, borderRadius: "50%", border: "2px solid rgba(16, 104, 176, .55)", pointerEvents: "none" }}></div>
+          {!img && <div style={{ position: "absolute", inset: 0, display: "flex", alignItems: "center", justifyContent: "center", fontSize: 12.5, color: "var(--muted)" }}>Carregando…</div>}
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "13px 2px 0" }}>
+          <i className="ti ti-photo" style={{ fontSize: 13, color: "var(--muted)" }} aria-hidden="true"></i>
+          <input type="range" min="1" max="3" step="0.01" value={zoom} onChange={(e) => mudarZoom(e.target.value)} style={{ flex: 1, accentColor: "var(--azul, #1068B0)" }} aria-label="Aproximar" />
+          <i className="ti ti-photo" style={{ fontSize: 18, color: "var(--muted)" }} aria-hidden="true"></i>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--muted)", textAlign: "center", marginTop: 6 }}>Arraste a foto para posicionar · use a barra para aproximar</div>
+        <div style={{ display: "flex", gap: 8, marginTop: 13 }}>
+          <button className="btn-primaria" style={{ flex: 1, padding: "9px 0", fontSize: 12.5 }} disabled={!img || ocupado} onClick={confirmar}>{ocupado ? "Preparando…" : "Usar foto"}</button>
+          <button className="btn-contorno" style={{ padding: "9px 15px", fontSize: 12.5 }} disabled={ocupado} onClick={aoCancelar}>Cancelar</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ------------------------------------------------------------
+// Minha conta: o proprio card, editavel por quem esta logado
+// ------------------------------------------------------------
+function PaginaMinhaConta({ ctx }) {
+  const [card, setCard] = useState(undefined);
+  const [form, setForm] = useState(null);
+  const [fotoBruta, setFotoBruta] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [enviandoMinhaFoto, setEnviandoMinhaFoto] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    const { data, error } = await sb.rpc("meu_card");
+    if (error) {
+      setMsg(error.message.indexOf("meu_card") !== -1 ? "Rode o 19_usuarios_prestadores.sql no Supabase para ativar esta página." : "Erro: " + error.message);
+      setCard(null);
+      return;
+    }
+    const c = data && data[0];
+    setCard(c || null);
+    if (c) setForm({
+      telefone: c.telefone || "", email: c.email || "", nascimento: c.nascimento || "",
+      formacao: c.formacao || "", registro_profissional: c.registro_profissional || "",
+    });
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function salvar() {
+    setSalvando(true); setMsg("");
+    const { error } = await sb.rpc("meu_card_atualizar", { dados: form });
+    setSalvando(false);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg("✓ Salvo. Seu card já aparece atualizado no organograma.");
+    registrarEvento("update", "rh", "meu_card", card.colaborador_id, {});
+    carregar();
+  }
+
+  async function usarFoto(blob) {
+    setFotoBruta(null); setEnviandoMinhaFoto(true); setMsg("");
+    try {
+      const caminho = card.colaborador_id + "-" + Date.now() + ".jpg";
+      const up = await sb.storage.from("fotos").upload(caminho, blob, { contentType: "image/jpeg", upsert: true });
+      if (up.error) throw up.error;
+      const url = sb.storage.from("fotos").getPublicUrl(caminho).data.publicUrl;
+      const { error } = await sb.rpc("meu_card_atualizar", { dados: { foto_url: url } });
+      if (error) throw error;
+      setMsg("✓ Foto atualizada.");
+      carregar();
+    } catch (e2) { setMsg("Erro na foto: " + e2.message); }
+    setEnviandoMinhaFoto(false);
+  }
+
+  const cx = { width: "100%", padding: "8px 10px", fontSize: 12.5 };
+
+  if (card === undefined) return <div className="card-fl" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>;
+
+  if (card === null) return (
+    <div className="card-fl" style={{ maxWidth: 560, padding: "26px 24px" }}>
+      <div style={{ fontSize: 15, fontWeight: 800, marginBottom: 8 }}>Seu login ainda não está ligado a um prestador</div>
+      <div style={{ fontSize: 13, color: "var(--sec)", lineHeight: 1.65 }}>
+        Quando a Direção vincular o seu acesso ao seu cadastro (em Configurações → Pessoas), esta página vira o seu card:
+        você mesmo atualiza a sua foto, telefone, e-mail, formação e registro profissional — e tudo aparece na hora no organograma.
+      </div>
+      {msg && <div className="anim-pop" style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+    </div>
+  );
+
+  return (
+    <div style={{ maxWidth: 620 }}>
+      {fotoBruta && <RecorteFoto arquivo={fotoBruta} aoCancelar={() => setFotoBruta(null)} aoUsar={usarFoto} />}
+
+      <div className="card-fl" style={{ padding: "20px 22px" }}>
+        <div style={{ display: "flex", gap: 16, alignItems: "center", flexWrap: "wrap", marginBottom: 16 }}>
+          <div style={{ position: "relative", flex: "none" }}>
+            {card.foto_url
+              ? <img src={card.foto_url} alt="" style={{ width: 92, height: 92, borderRadius: "50%", objectFit: "cover", boxShadow: "0 0 0 3px #fff, 0 0 0 6px var(--tint-borda)" }} />
+              : <div style={{ width: 92, height: 92, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 26, display: "flex", alignItems: "center", justifyContent: "center" }}>{iniciais(card.nome)}</div>}
+            <label title="Trocar foto" style={{ position: "absolute", right: -2, bottom: -2, width: 30, height: 30, borderRadius: "50%", background: "var(--marca-texto)", color: "#fff", display: "flex", alignItems: "center", justifyContent: "center", cursor: "pointer", boxShadow: "0 2px 8px rgba(11, 47, 78, .35)" }}>
+              <i className={"ti " + (enviandoMinhaFoto ? "ti-loader-2" : "ti-camera")} style={{ fontSize: 15 }} aria-hidden="true"></i>
+              <input type="file" accept="image/*" style={{ display: "none" }} disabled={enviandoMinhaFoto}
+                onChange={(e) => { const f = e.target.files && e.target.files[0]; e.target.value = ""; if (f) { setMsg(""); setFotoBruta(f); } }} />
+            </label>
+          </div>
+          <div style={{ flex: 1, minWidth: 180 }}>
+            <div style={{ fontSize: 17, fontWeight: 800, textTransform: "uppercase", letterSpacing: .3 }}>{card.nome}</div>
+            <div style={{ fontSize: 13, color: "var(--sec)", marginTop: 2 }}>{card.cargo || "—"}</div>
+            <div style={{ display: "flex", gap: 6, marginTop: 7, flexWrap: "wrap" }}>
+              {card.setor && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{card.setor}</span>}
+              {card.unidade && <span className="chip" style={{ background: "var(--branco)", border: "1px solid var(--linha)", color: "var(--sec)" }}>{card.unidade}</span>}
+            </div>
+          </div>
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(200px, 1fr))", gap: 10 }}>
+          <div><label style={ROT_FICHA}>Telefone</label>
+            <input className="campo" style={cx} value={form.telefone} onChange={(e) => setForm({ ...form, telefone: e.target.value })} /></div>
+          <div><label style={ROT_FICHA}>E-mail de contato</label>
+            <input className="campo" style={cx} value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} /></div>
+          <div><label style={ROT_FICHA}>Aniversário</label>
+            <input className="campo" type="date" style={cx} value={form.nascimento} onChange={(e) => setForm({ ...form, nascimento: e.target.value })} /></div>
+          <div><label style={ROT_FICHA}>Registro profissional</label>
+            <input className="campo" style={cx} placeholder="CRP, CRM, CREFONO…" value={form.registro_profissional} onChange={(e) => setForm({ ...form, registro_profissional: e.target.value })} /></div>
+          <div style={{ gridColumn: "1 / -1" }}><label style={ROT_FICHA}>Formação</label>
+            <input className="campo" style={cx} placeholder="graduação, especializações…" value={form.formacao} onChange={(e) => setForm({ ...form, formacao: e.target.value })} /></div>
+        </div>
+
+        <div style={{ display: "flex", alignItems: "center", gap: 10, marginTop: 15 }}>
+          <button className="btn-primaria" style={{ padding: "9px 17px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar"}</button>
+          {msg && <span className="anim-pop" style={{ fontSize: 12.5, fontWeight: 600, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)" }}>{msg}</span>}
+        </div>
+        <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 12, lineHeight: 1.6 }}>
+          Estes dados alimentam o seu card no organograma e o seu dossiê. Cargo, setor e os dados de RH continuam com a Direção.
+        </p>
+      </div>
+    </div>
+  );
+}
+
 async function reduzirFoto(arq, max) {
   try {
     const img = await createImageBitmap(arq);
@@ -4106,13 +4348,20 @@ function AbaFichas({ ctx, podeEditar }) {
     setMsg("✓ Ficha salva."); carregar();
   }
 
-  async function trocarFoto(e) {
+  const [fotoBruta, setFotoBruta] = useState(null);
+
+  function trocarFoto(e) {
     const f = e.target.files && e.target.files[0];
     e.target.value = "";
     if (!f || !sel) return;
+    setMsg("");
+    setFotoBruta(f);
+  }
+
+  async function enviarFotoRecortada(blob) {
+    setFotoBruta(null);
     setEnviandoFoto(true); setMsg("");
     try {
-      const blob = await reduzirFoto(f, 512);
       const caminho = sel.id + "-" + Date.now() + ".jpg";
       const up = await sb.storage.from("fotos").upload(caminho, blob, { contentType: "image/jpeg", upsert: true });
       if (up.error) throw up.error;
@@ -4130,6 +4379,7 @@ function AbaFichas({ ctx, podeEditar }) {
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+      {fotoBruta && <RecorteFoto arquivo={fotoBruta} aoCancelar={() => setFotoBruta(null)} aoUsar={enviarFotoRecortada} />}
       <div className="card-fl" style={{ width: 270, flex: "none", overflow: "hidden" }}>
         <div style={{ padding: 10, borderBottom: "1px solid var(--linha-suave)" }}>
           <input className="campo" style={cx} placeholder="buscar pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
@@ -4253,6 +4503,11 @@ function PaginaStub({ m }) {
 // Shell
 // ------------------------------------------------------------
 function Shell({ ctx, aoSair }) {
+  const [meuCard, setMeuCard] = useState(null);
+  useEffect(() => {
+    if (!sb) return;
+    sb.rpc("meu_card").then(({ data }) => { if (data && data[0]) setMeuCard(data[0]); }).catch(() => {});
+  }, []);
   const [pagina, setPaginaRaw] = useState(() => {
     try {
       const v = localStorage.getItem("cg_pagina");
@@ -4288,6 +4543,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaModelos ctx={ctx} />;
   } else if (pagina === "rh") {
     conteudo = <PaginaRH ctx={ctx} />;
+  } else if (pagina === "conta") {
+    conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
   } else if (pagina === "salas") {
@@ -4306,7 +4563,7 @@ function Shell({ ctx, aoSair }) {
 
   return (
     <div style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
-      <Sidebar ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
+      <Sidebar meuCard={meuCard} ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
       <main style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
         <Topo ctx={ctx} />
         {pagina !== "painel" && (
