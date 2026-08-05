@@ -270,6 +270,7 @@ function TelaLogin() {
 // Sidebar flutuante (3 estados: exp, rail, oculta)
 // ------------------------------------------------------------
 function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard }) {
+  const [celAberta, setCelAberta] = useState(false);
   const visiveis = MODULOS.filter((m) => nivelModulo(ctx, m.id) !== "oculto");
   const principais = visiveis.filter((m) => m.id !== "configuracoes" && m.id !== "conta");
   const config = visiveis.find((m) => m.id === "configuracoes");
@@ -301,13 +302,19 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
         </div>
       )}
 
-      <aside className={"sb" + (estado === "rail" ? " rail" : "") + (estado === "oculta" ? " oculta" : "")}>
+      <button className="botao-celular so-celular" aria-label="Abrir menu" onClick={() => setCelAberta(true)}>
+        <i className="ti ti-menu-2" style={{ fontSize: 20 }} aria-hidden="true"></i>
+      </button>
+      {celAberta && <div className="pano-celular so-celular" onClick={() => setCelAberta(false)}></div>}
+
+      <aside className={"sb" + (estado === "rail" ? " rail" : "") + (estado === "oculta" ? " oculta" : "") + (celAberta ? " aberta-cel" : "")}
+             onClickCapture={() => { if (window.innerWidth <= 820) setCelAberta(false); }}>
         <div className="logo-area" style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 8px 10px", minHeight: 34 }}>
           <Asterisco tam={20} />
           <span className="rotulo" style={{ fontWeight: 700, fontSize: 15.5 }}>CORTEX <span style={{ color: "var(--marca-escuro)" }}>Gestão</span></span>
         </div>
 
-        <div style={{ display: "flex", gap: 6, padding: "0 6px 10px", flexWrap: "wrap" }}>
+        <div className="controles-sb" style={{ display: "flex", gap: 6, padding: "0 6px 10px", flexWrap: "wrap" }}>
           <button className="btn-fantasma" onClick={() => setEstado(estado === "rail" ? "exp" : "rail")}
                   aria-label={estado === "rail" ? "Expandir menu" : "Minimizar menu"}>
             <i className={"ti " + (estado === "rail" ? "ti-layout-sidebar-left-expand" : "ti-layout-sidebar-left-collapse")} style={{ fontSize: 16 }} aria-hidden="true"></i>
@@ -340,7 +347,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v33</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v34</div>
       </aside>
     </React.Fragment>
   );
