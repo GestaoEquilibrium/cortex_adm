@@ -28,6 +28,7 @@ const MODULOS = [
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
+  { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
@@ -348,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v41</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v42</div>
       </aside>
     </React.Fragment>
   );
@@ -5204,6 +5205,186 @@ function AbaIntegracoes({ ctx }) {
   );
 }
 
+function PaginaDemandas({ ctx }) {
+  const podeEditar = nivelModulo(ctx, "demandas") === "editar";
+  const [lista, setLista] = useState(null);
+  const [colabs, setColabs] = useState([]);
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("abertas");
+  const [setorF, setSetorF] = useState("");
+  const [form, setForm] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+
+  async function carregar() {
+    const { data, error } = await sb.rpc("demandas_listar");
+    if (error) { setMsg("Erro: " + error.message + " — o 26_demandas.sql já rodou?"); setLista([]); return; }
+    setLista(data || []);
+  }
+  useEffect(() => {
+    carregar();
+    if (podeEditar) {
+      sb.from("colaboradores").select("id, nome, setor").eq("status", "ativo").order("nome").limit(2000)
+        .then(({ data }) => setColabs(data || []));
+    }
+  }, []);
+
+  const hojeStr = hojeISO();
+  function farolPrazo(d) {
+    if (!d.prazo || d.status === "concluida") return null;
+    if (d.prazo < hojeStr) {
+      const dias = Math.max(1, Math.round((new Date(hojeStr) - new Date(d.prazo)) / 86400000));
+      return { cor: "var(--vermelho)", fundo: "rgba(220,38,38,.10)", rotulo: "atrasada " + dias + "d" };
+    }
+    if (d.prazo === hojeStr) return { cor: "#B45309", fundo: "#FFFBEB", rotulo: "vence hoje" };
+    return null;
+  }
+
+  const setores = useMemo(() => {
+    const s = {}; (lista || []).forEach((d) => { if (d.setor) s[d.setor] = 1; });
+    return Object.keys(s).sort();
+  }, [lista]);
+
+  const visiveis = (lista || []).filter((d) =>
+    (filtro === "todas" || (filtro === "abertas" ? d.status === "aberta" : d.status === "concluida"))
+    && (!setorF || d.setor === setorF)
+    && ((d.titulo + " " + (d.descricao || "") + " " + d.nome).toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0)
+  );
+  const nAbertas = (lista || []).filter((d) => d.status === "aberta").length;
+  const nAtrasadas = (lista || []).filter((d) => d.status === "aberta" && d.prazo && d.prazo < hojeStr).length;
+
+  function abrirNova() { setMsg(""); setForm({ id: null, titulo: "", colaborador_id: "", prazo: "", descricao: "" }); }
+  function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "" }); }
+
+  async function salvar() {
+    if (!form.titulo.trim()) { setMsg("Dê um título à demanda."); return; }
+    if (!form.colaborador_id) { setMsg("Atribua a demanda a alguém."); return; }
+    setOcupado(true); setMsg("");
+    const dados = {
+      titulo: form.titulo.trim(),
+      descricao: form.descricao.trim() || null,
+      colaborador_id: form.colaborador_id,
+      prazo: form.prazo || null,
+      atualizado_em: new Date().toISOString(),
+    };
+    let r;
+    if (form.id) r = await sb.from("demandas").update(dados).eq("id", form.id);
+    else r = await sb.from("demandas").insert({ ...dados, criado_por: ctx.profile.id });
+    setOcupado(false);
+    if (r.error) { setMsg("Erro ao salvar: " + r.error.message); return; }
+    setForm(null); carregar();
+  }
+
+  async function marcar(d, novo) {
+    const { error } = await sb.from("demandas").update({
+      status: novo,
+      concluida_em: novo === "concluida" ? new Date().toISOString() : null,
+      atualizado_em: new Date().toISOString(),
+    }).eq("id", d.id);
+    if (error) setMsg("Erro: " + error.message); else carregar();
+  }
+
+  async function excluir(d) {
+    if (!window.confirm('Excluir a demanda "' + d.titulo + '"? A exclusão fica na auditoria.')) return;
+    const { error } = await sb.from("demandas").delete().eq("id", d.id);
+    if (error) setMsg("Erro: " + error.message); else carregar();
+  }
+
+  return (
+    <div>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <div style={{ position: "relative", flex: "1 1 200px", maxWidth: 320 }}>
+          <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }}
+            placeholder="Buscar demanda ou pessoa..." value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        <select className="campo" style={{ width: 130, padding: "8px 10px", fontSize: 12.5 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
+          <option value="abertas">Abertas</option><option value="todas">Todas</option><option value="concluidas">Concluídas</option>
+        </select>
+        <select className="campo" style={{ width: 160, padding: "8px 10px", fontSize: 12.5 }} value={setorF} onChange={(e) => setSetorF(e.target.value)}>
+          <option value="">Todos os setores</option>
+          {setores.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700 }}>{nAbertas} aberta(s)</span>
+        {nAtrasadas > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.10)", color: "var(--vermelho)", fontWeight: 700 }}>{nAtrasadas} atrasada(s)</span>}
+        <span style={{ flex: 1 }}></span>
+        {podeEditar && (
+          <button className="btn-primaria" style={{ padding: "9px 15px", fontSize: 12.5 }} onClick={() => (form ? setForm(null) : abrirNova())}>
+            <i className="ti ti-plus" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Nova demanda
+          </button>
+        )}
+      </div>
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {form && podeEditar && (
+        <div className="card-fl anim-pop" style={{ padding: 16, marginBottom: 12 }}>
+          <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>{form.id ? "Editar demanda" : "Nova demanda"}</div>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} placeholder="O que precisa ser feito?" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} />
+            <select className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.colaborador_id} onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}>
+              <option value="">Atribuir a...</option>
+              {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.setor ? " · " + c.setor : ""}</option>)}
+            </select>
+            <input className="campo" type="date" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
+          </div>
+          <textarea className="campo" style={{ width: "100%", marginTop: 10, padding: "8px 10px", fontSize: 12.5, minHeight: 64, resize: "vertical" }}
+            placeholder="Detalhes (opcional)" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} />
+          <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+            <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} disabled={ocupado} onClick={salvar}>{ocupado ? "Salvando…" : (form.id ? "Salvar" : "Adicionar")}</button>
+            <button className="btn-contorno" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={() => setForm(null)}>Cancelar</button>
+          </div>
+        </div>
+      )}
+
+      {!lista && <div className="card-fl" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+
+      {lista && visiveis.length === 0 && (
+        <div className="card-fl" style={{ padding: "24px 18px", fontSize: 13, color: "var(--muted)", lineHeight: 1.6, textAlign: "center" }}>
+          Nenhuma demanda por aqui.{!podeEditar && <span><br />Você enxerga as demandas do seu setor — se algo deveria aparecer, confirme com a direção se o seu login está vinculado ao seu cadastro (Configurações → Pessoas).</span>}
+        </div>
+      )}
+
+      {lista && visiveis.map((d) => {
+        const farol = farolPrazo(d);
+        const feita = d.status === "concluida";
+        return (
+          <div key={d.id} className="card-fl" style={{ padding: "12px 14px", marginBottom: 8, display: "flex", gap: 11, alignItems: "flex-start", opacity: feita ? .68 : 1 }}>
+            {podeEditar ? (
+              <button onClick={() => marcar(d, feita ? "aberta" : "concluida")} aria-label={feita ? "Reabrir" : "Concluir"} title={feita ? "Reabrir" : "Concluir"}
+                style={{ width: 24, height: 24, borderRadius: 8, flex: "none", marginTop: 2, cursor: "pointer", border: "1.5px solid " + (feita ? "var(--verde)" : "var(--linha)"), background: feita ? "rgba(22,163,74,.12)" : "var(--campo)", color: "var(--verde)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {feita && <i className="ti ti-check" style={{ fontSize: 14 }} aria-hidden="true"></i>}
+              </button>
+            ) : (
+              <div style={{ width: 24, height: 24, borderRadius: 8, flex: "none", marginTop: 2, border: "1.5px solid " + (feita ? "var(--verde)" : "var(--linha)"), background: feita ? "rgba(22,163,74,.12)" : "var(--campo)", color: "var(--verde)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+                {feita && <i className="ti ti-check" style={{ fontSize: 14 }} aria-hidden="true"></i>}
+              </div>
+            )}
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+                <span style={{ fontSize: 13.5, fontWeight: 700, textDecoration: feita ? "line-through" : "none" }}>{d.titulo}</span>
+                {farol && <span className="chip" style={{ background: farol.fundo, color: farol.cor, fontWeight: 700, fontSize: 10.5 }}>{farol.rotulo}</span>}
+                {d.setor && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700, fontSize: 10.5 }}>{d.setor}</span>}
+              </div>
+              <div style={{ fontSize: 12, color: "var(--sec)", marginTop: 3 }}>
+                <i className="ti ti-user" style={{ fontSize: 12, marginRight: 4 }} aria-hidden="true"></i>{d.nome}{d.cargo ? " · " + d.cargo : ""}
+                {d.prazo && <span> · <i className="ti ti-calendar" style={{ fontSize: 12, marginRight: 3 }} aria-hidden="true"></i>{feita ? "prazo era " : "até "}{dataBr(d.prazo)}</span>}
+                {feita && d.concluida_em && <span> · concluída em {dataBr(d.concluida_em.slice(0, 10))}</span>}
+              </div>
+              {d.descricao && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, whiteSpace: "pre-wrap" }}>{d.descricao}</div>}
+            </div>
+            {podeEditar && (
+              <div style={{ display: "flex", gap: 9, flex: "none", marginTop: 3 }}>
+                <i className="ti ti-pencil" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => abrirEdicao(d)} aria-label="Editar" title="Editar"></i>
+                <i className="ti ti-trash" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(d)} aria-label="Excluir" title="Excluir"></i>
+              </div>
+            )}
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -5297,6 +5478,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
+  } else if (pagina === "demandas") {
+    conteudo = <PaginaDemandas ctx={ctx} />;
   } else if (pagina === "infinity") {
     conteudo = <PaginaInfinity ctx={ctx} />;
   } else if (pagina === "relatorios") {
