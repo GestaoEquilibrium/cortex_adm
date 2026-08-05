@@ -450,3 +450,15 @@ body {
 .sel-pessoa-caixa { position: absolute; top: calc(100% + 6px); left: 0; right: 0; z-index: 95; background: #fff; border: 1px solid var(--linha); border-radius: 12px; padding: 8px; box-shadow: 0 16px 44px rgba(28, 37, 48, .16); }
 .sel-pessoa-op { display: flex; align-items: center; gap: 8px; padding: 7px 8px; border-radius: 8px; cursor: pointer; font-size: 12.5px; }
 .sel-pessoa-op:hover { background: var(--tint); }
+
+
+/* ===== Salas: grade P1/P2/P3 no formato do croqui ===== */
+.gs { width: 100%; border-collapse: separate; border-spacing: 2px; table-layout: fixed; }
+.gs th { font-size: 9px; color: var(--muted); font-weight: 700; text-transform: uppercase; padding: 0 0 3px; }
+.gs td.rot { font-size: 10px; font-weight: 800; color: var(--sec); width: 24px; text-align: center; }
+.gs-cel { border: 1px solid var(--linha-suave); min-height: 34px; height: 36px; vertical-align: top; padding: 2px 3px; font-size: 9.5px; cursor: pointer; border-radius: 5px; overflow: hidden; background: #fff; transition: outline-color .12s ease; outline: 2px solid transparent; }
+.gs-cel.livre { background: var(--verde-bg); }
+.gs-cel:hover { outline-color: var(--tint-borda); }
+.gs-oc { font-weight: 700; text-transform: uppercase; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.gs-oc .h { display: block; font-weight: 500; color: var(--muted); font-size: 8.5px; }
+.gs-badge { min-width: 34px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; padding: 0 9px; flex: none; }

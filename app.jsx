@@ -24,7 +24,7 @@ const MODULOS = [
   { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
-  { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "fase2" },
+  { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "fase2" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)",    status: "fase3" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
@@ -332,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v21</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v22</div>
       </aside>
     </React.Fragment>
   );
@@ -2586,6 +2586,349 @@ function AbaAlertas({ ctx }) {
   );
 }
 
+const DIAS_SALAS = [[1, "Seg"], [2, "Ter"], [3, "Qua"], [4, "Qui"], [5, "Sex"], [6, "Sáb"]];
+const PERIODOS_SALAS = [[1, "P1"], [2, "P2"], [3, "P3"]];
+const HORA_PERIODO = { 1: "7h", 2: "12h", 3: "16h" };
+
+function PaginaSalas({ ctx }) {
+  const podeCad = nivelAba(ctx, "salas", "cadastro") === "editar";
+  const podeGrade = nivelAba(ctx, "salas", "grade") === "editar";
+  const [visao, setVisao] = useState("grade");
+  const [salas, setSalas] = useState(null);
+  const [ocupacoes, setOcupacoes] = useState([]);
+  const [pessoas, setPessoas] = useState([]);
+  const [unidade, setUnidade] = useState("EQ1");
+  const [andar, setAndar] = useState("");
+  const [msg, setMsg] = useState("");
+  const [celula, setCelula] = useState(null);   // { sala, dia, periodo }
+  const [novaOc, setNovaOc] = useState({ colaborador_id: "", rotulo: "", horario: "" });
+  const [editSala, setEditSala] = useState(null);
+
+  async function carregar() {
+    const [rs, ro, rp] = await Promise.all([
+      sb.from("salas").select("*").order("unidade").order("andar").order("numero").limit(2000),
+      sb.from("salas_ocupacoes").select("*").order("periodo").order("created_at").limit(20000),
+      sb.from("colaboradores_basico").select("*").order("nome").limit(20000),
+    ]);
+    if (rs.error) { setMsg("Erro: " + rs.error.message + (rs.error.message.indexOf("salas") !== -1 ? " — rode o 12_salas.sql no Supabase." : "")); return; }
+    if (ro.error || rp.error) { setMsg("Erro: " + (ro.error || rp.error).message); return; }
+    setMsg(""); setSalas(rs.data || []); setOcupacoes(ro.data || []); setPessoas(rp.data || []);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const pessoaPorId = useMemo(() => {
+    const m = {}; pessoas.forEach((p) => { m[p.id] = p; }); return m;
+  }, [pessoas]);
+
+  const mapa = useMemo(() => {
+    const m = {};
+    ocupacoes.forEach((o) => {
+      const k = o.dia_semana + "-" + o.periodo;
+      (m[o.sala_id] = m[o.sala_id] || {});
+      (m[o.sala_id][k] = m[o.sala_id][k] || []).push(o);
+    });
+    return m;
+  }, [ocupacoes]);
+
+  const pesoAndar = (a) => { const n = parseInt(a || "", 10); return isNaN(n) ? 0 : n; };
+  const andares = useMemo(() => {
+    if (!salas) return [];
+    const vistos = {};
+    salas.filter((s) => s.ativa && s.unidade === unidade && s.andar).forEach((s) => { vistos[s.andar] = 1; });
+    return Object.keys(vistos).sort((a, b) => pesoAndar(b) - pesoAndar(a) || a.localeCompare(b));
+  }, [salas, unidade]);
+  useEffect(() => {
+    if (andares.length && andares.indexOf(andar) === -1) setAndar(andares[0]);
+    if (!andares.length && andar) setAndar("");
+  }, [andares]);
+
+  const salasVista = useMemo(() => {
+    if (!salas) return [];
+    return salas
+      .filter((s) => s.ativa && s.unidade === unidade && (!andar || (s.andar || "") === andar))
+      .slice()
+      .sort((a, b) => (parseInt(a.numero, 10) || 999) - (parseInt(b.numero, 10) || 999) || a.numero.localeCompare(b.numero));
+  }, [salas, unidade, andar]);
+
+  const livres = useMemo(() => {
+    let ocupadas = 0;
+    salasVista.forEach((s) => {
+      DIAS_SALAS.forEach(([d]) => PERIODOS_SALAS.forEach(([p]) => {
+        if (((mapa[s.id] || {})[d + "-" + p] || []).length) ocupadas++;
+      }));
+    });
+    return salasVista.length * 18 - ocupadas;
+  }, [salasVista, mapa]);
+
+  const primeiroNome = (n) => (n || "").trim().split(/\s+/)[0];
+
+  function abrirCelula(s, d, p) {
+    const ocs = ((mapa[s.id] || {})[d + "-" + p] || []);
+    if (!podeGrade && !ocs.length) return;
+    setMsg(""); setNovaOc({ colaborador_id: "", rotulo: "", horario: "" });
+    setCelula({ sala: s, dia: d, periodo: p });
+  }
+
+  async function addOc() {
+    const temPessoa = !!novaOc.colaborador_id;
+    if (!temPessoa && !novaOc.rotulo.trim()) { setMsg("Escolha um profissional ou dê um rótulo."); return; }
+    const ocs = ((mapa[celula.sala.id] || {})[celula.dia + "-" + celula.periodo] || []);
+    if (temPessoa && ocs.some((o) => o.colaborador_id === novaOc.colaborador_id)) { setMsg("Essa pessoa já está nesta célula."); return; }
+    const { error } = await sb.from("salas_ocupacoes").insert({
+      sala_id: celula.sala.id, colaborador_id: novaOc.colaborador_id || null,
+      rotulo: temPessoa ? null : novaOc.rotulo.trim(),
+      dia_semana: celula.dia, periodo: celula.periodo,
+      horario: (novaOc.horario || "").trim() || null,
+      criado_por: ctx.profile.id,
+    });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setNovaOc({ colaborador_id: "", rotulo: "", horario: "" }); carregar();
+  }
+
+  async function delOc(o) {
+    const nome = o.colaborador_id ? (pessoaPorId[o.colaborador_id] || {}).nome : o.rotulo;
+    if (!window.confirm('Tirar "' + (nome || "esta ocupação") + '" desta célula?')) return;
+    const { error } = await sb.from("salas_ocupacoes").delete().eq("id", o.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  async function salvarSala() {
+    if (!editSala.numero.trim()) { setMsg("Dê o número (ou nome) da sala."); return; }
+    const campos = {
+      numero: editSala.numero.trim(), unidade: editSala.unidade,
+      andar: (editSala.andar || "").trim() || null,
+      especialidade: (editSala.especialidade || "").trim() || null,
+      cor: editSala.cor || null,
+      observacoes: (editSala.observacoes || "").trim() || null,
+    };
+    const r = editSala.id
+      ? await sb.from("salas").update(campos).eq("id", editSala.id)
+      : await sb.from("salas").insert(campos);
+    if (r.error) { setMsg("Erro: " + r.error.message); return; }
+    setMsg(""); setEditSala(null); carregar();
+  }
+
+  async function alternarAtiva(s) {
+    const { error } = await sb.from("salas").update({ ativa: !s.ativa }).eq("id", s.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  async function excluirSala(s) {
+    if (!window.confirm('Excluir a sala "' + s.numero + '"? A grade dela some junto. A exclusão fica na auditoria.')) return;
+    const { error } = await sb.from("salas").delete().eq("id", s.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  const Badge = ({ s, tam }) => (
+    <span className="gs-badge" style={{ background: s.cor || "var(--tint)", color: s.cor ? "#fff" : "var(--marca-texto)", fontSize: tam || 14 }}>{s.numero}</span>
+  );
+
+  const ocsCelula = celula ? (((mapa[celula.sala.id] || {})[celula.dia + "-" + celula.periodo]) || []) : [];
+
+  return (
+    <div>
+      {/* ---------- janela da celula ---------- */}
+      {celula && (
+        <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setCelula(null); }}>
+          <div className="org-modal anim-pop">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <Badge s={celula.sala} />
+              <div style={{ fontSize: 13.5, fontWeight: 800 }}>
+                {DIAS_SALAS.find(([d]) => d === celula.dia)[1]} · P{celula.periodo}
+                <span style={{ fontWeight: 500, color: "var(--muted)", fontSize: 12 }}> ({HORA_PERIODO[celula.periodo]})</span>
+              </div>
+              <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => setCelula(null)} aria-label="Fechar"></i>
+            </div>
+            {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+            {ocsCelula.length === 0 && <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 10 }}>Período livre.</div>}
+            {ocsCelula.map((o) => {
+              const p = o.colaborador_id ? pessoaPorId[o.colaborador_id] : null;
+              return (
+                <div key={o.id} style={{ display: "flex", alignItems: "center", gap: 9, padding: "7px 4px", borderBottom: "1px solid var(--linha-suave)" }}>
+                  {p && p.foto_url
+                    ? <img src={p.foto_url} alt="" style={{ width: 26, height: 26, borderRadius: "50%", objectFit: "cover", flex: "none" }} />
+                    : <span style={{ width: 26, height: 26, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 9, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(p ? p.nome : (o.rotulo || "?"))}</span>}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 12, fontWeight: 700, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p ? p.nome : o.rotulo}</span>
+                    <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)" }}>{o.horario || (p ? (p.cargo || "") : "")}</span>
+                  </span>
+                  {podeGrade && <i className="ti ti-trash" title="Tirar da célula" style={{ fontSize: 14, cursor: "pointer", color: "var(--vermelho)", flex: "none" }} onClick={() => delOc(o)}></i>}
+                </div>
+              );
+            })}
+
+            {podeGrade && (
+              <div style={{ marginTop: 12, display: "flex", flexDirection: "column", gap: 8 }}>
+                <div><label style={ROT_FICHA}>Profissional</label>
+                  <SeletorPessoa pessoas={pessoas} valor={novaOc.colaborador_id} rotuloVazio="sem profissional (usar rótulo)"
+                    aoEscolher={(v) => setNovaOc({ ...novaOc, colaborador_id: v })} /></div>
+                {!novaOc.colaborador_id && (
+                  <div><label style={ROT_FICHA}>Rótulo</label>
+                    <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} placeholder="ex.: Reunião de equipe" value={novaOc.rotulo} onChange={(e) => setNovaOc({ ...novaOc, rotulo: e.target.value })} /></div>
+                )}
+                <div><label style={ROT_FICHA}>Horário (opcional)</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} placeholder="ex.: 7h-13h ou início 8h30" value={novaOc.horario} onChange={(e) => setNovaOc({ ...novaOc, horario: e.target.value })} /></div>
+                <div><button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={addOc}>Colocar na célula</button></div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- janela da sala (cadastro) ---------- */}
+      {editSala && podeCad && (
+        <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setEditSala(null); }}>
+          <div className="org-modal anim-pop">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>{editSala.id ? "Editar sala" : "Nova sala"}</div>
+              <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => setEditSala(null)} aria-label="Fechar"></i>
+            </div>
+            {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", gap: 8 }}>
+                <div style={{ flex: 1 }}><label style={ROT_FICHA}>Número / nome</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editSala.numero} onChange={(e) => setEditSala({ ...editSala, numero: e.target.value })} /></div>
+                <div style={{ width: 110 }}><label style={ROT_FICHA}>Unidade</label>
+                  <select className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editSala.unidade} onChange={(e) => setEditSala({ ...editSala, unidade: e.target.value })}>
+                    <option value="EQ1">EQ1</option><option value="EQ2">EQ2</option>
+                  </select></div>
+              </div>
+              <div><label style={ROT_FICHA}>Andar</label>
+                <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} placeholder="ex.: 3º andar, Térreo" value={editSala.andar} onChange={(e) => setEditSala({ ...editSala, andar: e.target.value })} /></div>
+              <div><label style={ROT_FICHA}>Especialidade</label>
+                <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} placeholder="ex.: Neuropsicologia, Fono…" value={editSala.especialidade} onChange={(e) => setEditSala({ ...editSala, especialidade: e.target.value })} /></div>
+              <div style={{ display: "flex", gap: 10, alignItems: "flex-end" }}>
+                <div><label style={ROT_FICHA}>Cor do cartão</label>
+                  <input type="color" value={editSala.cor || "#1068B0"} onChange={(e) => setEditSala({ ...editSala, cor: e.target.value })} style={{ width: 52, height: 34, border: "1px solid var(--linha)", borderRadius: 8, padding: 2, background: "#fff", cursor: "pointer" }} /></div>
+                {editSala.cor && <button className="btn-contorno" style={{ padding: "7px 11px", fontSize: 11.5 }} onClick={() => setEditSala({ ...editSala, cor: null })}>sem cor</button>}
+              </div>
+              <div><label style={ROT_FICHA}>Observações</label>
+                <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editSala.observacoes || ""} onChange={(e) => setEditSala({ ...editSala, observacoes: e.target.value })} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 15 }}>
+              <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={salvarSala}>{editSala.id ? "Salvar" : "Criar sala"}</button>
+              <button className="btn-contorno" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={() => setEditSala(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- filtros ---------- */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["grade", "Grade da semana"], ["cadastro", "Salas"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setVisao(v)}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ width: 6 }}></span>
+        {["EQ1", "EQ2"].map((u) => (
+          <span key={u} className="chip" onClick={() => setUnidade(u)}
+            style={{ cursor: "pointer", background: unidade === u ? "var(--teal-bg)" : "var(--branco)", color: unidade === u ? "var(--teal)" : "var(--sec)", border: "1px solid " + (unidade === u ? "var(--teal-bg)" : "var(--linha)") }}>{u}</span>
+        ))}
+        {visao === "grade" && andares.map((a) => (
+          <span key={a} className="chip" onClick={() => setAndar(a)}
+            style={{ cursor: "pointer", background: andar === a ? "var(--tint)" : "var(--branco)", color: andar === a ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (andar === a ? "var(--tint-borda)" : "var(--linha)") }}>{a}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        {visao === "grade" && salasVista.length > 0 && (
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>{salasVista.length} sala(s) · <b style={{ color: "var(--verde)" }}>{livres}</b> períodos livres</span>
+        )}
+        {visao === "grade" && (
+          <span style={{ fontSize: 11, color: "var(--muted)" }}>P1 7h · P2 12h · P3 16h</span>
+        )}
+        {visao === "cadastro" && podeCad && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+            onClick={() => { setMsg(""); setEditSala({ numero: "", unidade: unidade, andar: andar || "", especialidade: "", cor: null, observacoes: "" }); }}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova sala
+          </button>
+        )}
+      </div>
+
+      {msg && !celula && !editSala && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {!salas && <div className="card-fl" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+
+      {/* ---------- GRADE ---------- */}
+      {salas && visao === "grade" && (
+        salasVista.length === 0 ? (
+          <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+            Nenhuma sala ativa em {unidade}{andar ? " · " + andar : ""}. {podeCad ? "Cadastre na visão Salas." : ""}
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
+            {salasVista.map((s) => (
+              <div key={s.id} className="card-fl" style={{ padding: "11px 12px" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 8 }}>
+                  <Badge s={s} />
+                  <div style={{ minWidth: 0 }}>
+                    <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{s.especialidade || "Sala " + s.numero}</div>
+                    <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{s.unidade}{s.andar ? " · " + s.andar : ""}</div>
+                  </div>
+                </div>
+                <table className="gs">
+                  <thead><tr><th></th>{DIAS_SALAS.map(([d, r]) => <th key={d}>{r}</th>)}</tr></thead>
+                  <tbody>
+                    {PERIODOS_SALAS.map(([p, rp]) => (
+                      <tr key={p}>
+                        <td className="rot" title={HORA_PERIODO[p]}>{rp}</td>
+                        {DIAS_SALAS.map(([d]) => {
+                          const ocs = ((mapa[s.id] || {})[d + "-" + p] || []);
+                          return (
+                            <td key={d} className={"gs-cel" + (ocs.length ? "" : " livre")} onClick={() => abrirCelula(s, d, p)}
+                              title={ocs.map((o) => (o.colaborador_id ? (pessoaPorId[o.colaborador_id] || {}).nome : o.rotulo) + (o.horario ? " (" + o.horario + ")" : "")).join(", ") || "Livre"}>
+                              {ocs.map((o) => (
+                                <div key={o.id} className="gs-oc">
+                                  {o.colaborador_id ? primeiroNome((pessoaPorId[o.colaborador_id] || {}).nome) : (o.rotulo || "?")}
+                                  {o.horario && <span className="h">{o.horario}</span>}
+                                </div>
+                              ))}
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            ))}
+          </div>
+        )
+      )}
+
+      {/* ---------- CADASTRO ---------- */}
+      {salas && visao === "cadastro" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {salas.filter((s) => s.unidade === unidade).length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhuma sala em {unidade} ainda.</div>
+          )}
+          {salas.filter((s) => s.unidade === unidade)
+            .slice()
+            .sort((a, b) => pesoAndar(b.andar) - pesoAndar(a.andar) || (parseInt(a.numero, 10) || 999) - (parseInt(b.numero, 10) || 999))
+            .map((s) => (
+              <div key={s.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 14px", borderBottom: "1px solid var(--linha-suave)", flexWrap: "wrap", opacity: s.ativa ? 1 : .5 }}>
+                <Badge s={s} tam={13} />
+                <div style={{ flex: 1, minWidth: 130 }}>
+                  <div style={{ fontSize: 12.5, fontWeight: 700 }}>{s.especialidade || "Sala " + s.numero}</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)" }}>{s.andar || "—"}{s.observacoes ? " · " + s.observacoes : ""}</div>
+                </div>
+                {podeCad && (
+                  <span style={{ display: "flex", gap: 10, alignItems: "center", flex: "none" }}>
+                    <button type="button" className={"sw" + (s.ativa ? " on" : "")} title={s.ativa ? "Desativar" : "Ativar"} aria-label={s.ativa ? "Desativar sala" : "Ativar sala"} onClick={() => alternarAtiva(s)}></button>
+                    <i className="ti ti-pencil" title="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => { setMsg(""); setEditSala({ ...s }); }}></i>
+                    <i className="ti ti-trash" title="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluirSala(s)}></i>
+                  </span>
+                )}
+              </div>
+            ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function PaginaRH({ ctx }) {
   const abas = [
     { id: "colaboradores", r: "Colaboradores" },
@@ -3460,6 +3803,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaModelos ctx={ctx} />;
   } else if (pagina === "rh") {
     conteudo = <PaginaRH ctx={ctx} />;
+  } else if (pagina === "salas") {
+    conteudo = <PaginaSalas ctx={ctx} />;
   } else if (pagina === "auditoria") {
     conteudo = <PaginaAuditoria />;
   } else if (pagina === "outros_cortex") {
