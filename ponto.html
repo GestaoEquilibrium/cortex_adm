@@ -224,7 +224,7 @@ function App(){
 
   // Valida sozinho quando o PIN completa 4 dígitos.
   useEffect(() => {
-    if (tela !== "pin" || pin.length !== 4 || ocupado || !sel) return;
+    if (tela !== "pin" || pin.length !== 4 || !sel) return;
     let vivo = true;
     (async () => {
       setOcupado(true);
@@ -247,7 +247,7 @@ function App(){
       if (vivo) setOcupado(false);
     })();
     return () => { vivo = false; };
-  }, [pin, tela, ocupado, sel]);
+  }, [pin, tela, sel]);
 
   async function bater(tipo){
     if (ocupado || !logado) return;
@@ -510,7 +510,7 @@ function App(){
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v31</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v32</div>
     </div>
   );
 }
