@@ -308,7 +308,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
       {celAberta && <div className="pano-celular so-celular" onClick={() => setCelAberta(false)}></div>}
 
       <aside className={"sb" + (estado === "rail" ? " rail" : "") + (estado === "oculta" ? " oculta" : "") + (celAberta ? " aberta-cel" : "")}
-             onClickCapture={() => { if (window.innerWidth <= 820) setCelAberta(false); }}>
+             onClick={() => { if (window.innerWidth <= 820) setCelAberta(false); }}>
         <div className="logo-area" style={{ display: "flex", alignItems: "center", gap: 9, padding: "2px 8px 10px", minHeight: 34 }}>
           <Asterisco tam={20} />
           <span className="rotulo" style={{ fontWeight: 700, fontSize: 15.5 }}>CORTEX <span style={{ color: "var(--marca-escuro)" }}>Gestão</span></span>
@@ -347,7 +347,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v35</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v36</div>
       </aside>
     </React.Fragment>
   );
@@ -4621,9 +4621,9 @@ function Shell({ ctx, aoSair }) {
   }
 
   return (
-    <div style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
+    <div className="casca-app" style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
       <Sidebar meuCard={meuCard} ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
-      <main style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
+      <main className="conteudo-app" style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
         <Topo ctx={ctx} />
         {pagina !== "painel" && (
           <div style={{ display: "flex", alignItems: "center", gap: 9, margin: "0 0 14px" }}>
