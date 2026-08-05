@@ -347,7 +347,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v36</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v37</div>
       </aside>
     </React.Fragment>
   );
@@ -4517,6 +4517,170 @@ function AbaFichas({ ctx, podeEditar }) {
   );
 }
 
+const VAPID_PUBLICA = "BDDEPgSTxarUAAyXXwYEA6xxX5YWRuGfZ4Srd5OB5XOEExSw8jRGyid4cQRQnaPAlZv9-L-dzUJScYxCPkPmGpQ";
+
+function b64ParaU8(b) {
+  const pad = "=".repeat((4 - (b.length % 4)) % 4);
+  const s = (b + pad).replace(/-/g, "+").replace(/_/g, "/");
+  const raw = atob(s);
+  const arr = new Uint8Array(raw.length);
+  for (let i = 0; i < raw.length; i++) arr[i] = raw.charCodeAt(i);
+  return arr;
+}
+
+function nomeAparelho() {
+  const ua = navigator.userAgent;
+  const os = /iPhone|iPad/.test(ua) ? "iPhone" : /Android/.test(ua) ? "Android" : /Windows/.test(ua) ? "Windows" : /Mac/.test(ua) ? "Mac" : "Aparelho";
+  const nv = /CriOS|Chrome/.test(ua) ? "Chrome" : /FxiOS|Firefox/.test(ua) ? "Firefox" : /Safari/.test(ua) ? "Safari" : "";
+  return (os + " " + nv).trim();
+}
+
+function AbaNotificacoes({ ctx }) {
+  const TIPOS = [
+    { id: "ponto_ocorrencia", rotulo: "Ocorrência registrada no relógio", desc: "Alguém registrou uma ocorrência no ponto.", vivo: true },
+    { id: "rh_alerta", rotulo: "Alertas e pendências do RH", desc: "Alertas legais e pendências da equipe.", vivo: false },
+    { id: "pee_vencimento", rotulo: "Documento do PEE vencendo", desc: "Avisos de vencimento de documentos.", vivo: false },
+  ];
+  const [prefs, setPrefs] = useState(null);
+  const [aparelhos, setAparelhos] = useState(null);
+  const [endpointAtual, setEndpointAtual] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const suporta = ("serviceWorker" in navigator) && ("PushManager" in window) && ("Notification" in window);
+  const ehIphone = /iPhone|iPad/.test(navigator.userAgent);
+  const instalado = (window.matchMedia && window.matchMedia("(display-mode: standalone)").matches) || window.navigator.standalone === true;
+
+  async function carregar() {
+    const [p, a] = await Promise.all([
+      sb.from("notificacao_preferencias").select("tipo, ativo"),
+      sb.from("push_inscricoes").select("id, endpoint, aparelho, created_at").order("created_at"),
+    ]);
+    const m = {}; (p.data || []).forEach((x) => { m[x.tipo] = x.ativo; });
+    setPrefs(m); setAparelhos(a.data || []);
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && (await reg.pushManager.getSubscription());
+      setEndpointAtual(sub ? sub.endpoint : null);
+    } catch (e) { setEndpointAtual(null); }
+  }
+  useEffect(() => { carregar(); }, []);
+
+  async function alternar(t) {
+    const novo = !(prefs && prefs[t.id]);
+    setPrefs({ ...prefs, [t.id]: novo });
+    const { error } = await sb.from("notificacao_preferencias")
+      .upsert({ profile_id: ctx.profile.id, tipo: t.id, ativo: novo }, { onConflict: "profile_id,tipo" });
+    if (error) setMsg("Erro: " + error.message + " — o 23_notificacoes.sql já rodou?");
+  }
+
+  async function ativarAparelho() {
+    setMsg(""); setOcupado(true);
+    try {
+      if (!suporta) throw new Error("Este navegador não suporta notificações push.");
+      const perm = await Notification.requestPermission();
+      if (perm !== "granted") throw new Error("Permissão negada no aparelho.");
+      const reg = await navigator.serviceWorker.ready;
+      const sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: b64ParaU8(VAPID_PUBLICA) });
+      const j = sub.toJSON();
+      const { error } = await sb.from("push_inscricoes").upsert({
+        profile_id: ctx.profile.id, endpoint: sub.endpoint,
+        p256dh: j.keys.p256dh, auth: j.keys.auth, aparelho: nomeAparelho(),
+      }, { onConflict: "endpoint" });
+      if (error) throw error;
+      setMsg("✓ Notificações ativadas neste aparelho.");
+      carregar();
+    } catch (e) { setMsg("Erro: " + e.message); }
+    setOcupado(false);
+  }
+
+  async function desativarAparelho() {
+    setOcupado(true); setMsg("");
+    try {
+      const reg = await navigator.serviceWorker.getRegistration();
+      const sub = reg && (await reg.pushManager.getSubscription());
+      if (sub) { await sb.from("push_inscricoes").delete().eq("endpoint", sub.endpoint); await sub.unsubscribe(); }
+      setMsg("Notificações desativadas neste aparelho.");
+      carregar();
+    } catch (e) { setMsg("Erro: " + e.message); }
+    setOcupado(false);
+  }
+
+  async function removerAparelho(a) {
+    if (!window.confirm("Remover este aparelho? Ele para de receber avisos.")) return;
+    await sb.from("push_inscricoes").delete().eq("id", a.id);
+    carregar();
+  }
+
+  async function testar() {
+    setOcupado(true); setMsg("");
+    try {
+      const { data, error } = await sb.functions.invoke("notificar", {
+        body: { tipo: "teste", titulo: "CORTEX Gestão", corpo: "Notificação de teste — tudo funcionando por aqui.", url: "./" },
+      });
+      if (error) throw error;
+      setMsg("✓ Teste enviado para " + ((data && data.enviadas) || 0) + " aparelho(s). Olhe a barra de notificações.");
+    } catch (e) { setMsg("Erro no teste: " + e.message + " — a Edge Function 'notificar' já foi criada?"); }
+    setOcupado(false);
+  }
+
+  const esteAtivo = endpointAtual && (aparelhos || []).some((a) => a.endpoint === endpointAtual);
+
+  return (
+    <div style={{ display: "grid", gap: 12, maxWidth: 640 }}>
+      {ehIphone && !instalado && (
+        <div className="card-fl" style={{ padding: "12px 14px", fontSize: 12.5, color: "var(--sec)" }}>
+          <b>iPhone:</b> instale o CORTEX na tela inicial (Safari → Compartilhar → "Adicionar à Tela de Início") e abra por lá — a Apple só permite notificações para o app instalado.
+        </div>
+      )}
+
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Este aparelho</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
+          {esteAtivo ? "Recebendo notificações neste aparelho." : "Este aparelho ainda não recebe notificações."}
+        </div>
+        <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+          {!esteAtivo
+            ? <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={ocupado} onClick={ativarAparelho}><i className="ti ti-bell" style={{ fontSize: 14, marginRight: 6 }} aria-hidden="true"></i>Ativar neste aparelho</button>
+            : <button className="btn-fantasma" style={{ width: "auto", padding: "9px 14px", fontSize: 12.5 }} disabled={ocupado} onClick={desativarAparelho}>Desativar neste aparelho</button>}
+          <button className="btn-contorno" style={{ padding: "9px 14px", fontSize: 12.5 }} disabled={ocupado || !esteAtivo} onClick={testar}><i className="ti ti-send" style={{ fontSize: 14, marginRight: 6 }} aria-hidden="true"></i>Enviar teste</button>
+        </div>
+      </div>
+
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>O que você quer receber</div>
+        {TIPOS.map((t) => (
+          <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid var(--linha-suave)" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 600 }}>{t.rotulo}{!t.vivo && <span className="chip" style={{ marginLeft: 7, fontSize: 10, background: "var(--tint)", color: "var(--marca-texto)" }}>em breve</span>}</div>
+              <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{t.desc}</div>
+            </div>
+            <span className="chip" onClick={() => alternar(t)}
+              style={{ cursor: "pointer", fontWeight: 700, background: prefs && prefs[t.id] ? "rgba(22,163,74,.12)" : "var(--branco)", color: prefs && prefs[t.id] ? "var(--verde)" : "var(--muted)", border: "1px solid " + (prefs && prefs[t.id] ? "rgba(22,163,74,.35)" : "var(--linha)") }}>
+              {prefs && prefs[t.id] ? "Ativado" : "Desativado"}
+            </span>
+          </div>
+        ))}
+      </div>
+
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>Aparelhos autorizados</div>
+        {!aparelhos && <div style={{ fontSize: 12, color: "var(--muted)" }}>Carregando…</div>}
+        {aparelhos && aparelhos.length === 0 && <div style={{ fontSize: 12, color: "var(--muted)" }}>Nenhum aparelho ainda.</div>}
+        {(aparelhos || []).map((a) => (
+          <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 8, padding: "7px 0", borderTop: "1px solid var(--linha-suave)", fontSize: 12.5 }}>
+            <i className="ti ti-device-mobile" style={{ fontSize: 15, color: "var(--marca-texto)", flex: "none" }} aria-hidden="true"></i>
+            <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.aparelho || "Aparelho"}{a.endpoint === endpointAtual ? " · este aqui" : ""}</span>
+            <span style={{ color: "var(--muted)", fontSize: 11, flex: "none" }}>{dataBr(a.created_at.slice(0, 10))}</span>
+            <i className="ti ti-trash" style={{ fontSize: 14, cursor: "pointer", color: "var(--vermelho)", flex: "none" }} onClick={() => removerAparelho(a)} aria-label="Remover aparelho"></i>
+          </div>
+        ))}
+      </div>
+
+      {msg && <div className="anim-pop" style={{ fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</div>}
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -4526,11 +4690,13 @@ function PaginaConfiguracoes({ ctx }) {
         <div className={"aba" + (aba === "perfis" ? " on" : "")} onClick={() => setAba("perfis")}>Perfis e permissões</div>
         <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
         <div className={"aba" + (aba === "fichas" ? " on" : "")} onClick={() => setAba("fichas")}>Fichas da equipe</div>
+        <div className={"aba" + (aba === "notificacoes" ? " on" : "")} onClick={() => setAba("notificacoes")}>Notificações</div>
         <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
       </div>
       {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
       {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
       {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={podeEditar} />}
+      {aba === "notificacoes" && <AbaNotificacoes ctx={ctx} />}
       {aba === "links" && <AbaLinks podeEditar={podeEditar} />}
     </div>
   );
