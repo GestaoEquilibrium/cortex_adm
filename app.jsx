@@ -13,6 +13,8 @@ const CONFIG_OK =
   CFG.SUPABASE_ANON_KEY.indexOf("COLE_AQUI") === -1;
 
 const sb = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY) : null;
+// Cliente irmao usado so para criar logins novos: nao guarda sessao e nao mexe na sua.
+const sbCadastro = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CFG.SUPABASE_ANON_KEY, { auth: { persistSession: false, autoRefreshToken: false, detectSessionInUrl: false, storageKey: "cg_cadastro" } }) : null;
 
 // ------------------------------------------------------------
 // Registro dos modulos (id = chave usada na tabela permissoes)
@@ -330,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v18</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v19</div>
       </aside>
     </React.Fragment>
   );
@@ -2912,10 +2914,20 @@ function AbaPerfis({ ctx, podeEditar }) {
   );
 }
 
+function gerarSenha() {
+  const c = "abcdefghjkmnpqrstuvwxyz23456789";
+  let s = "";
+  for (let i = 0; i < 10; i++) s += c[Math.floor(Math.random() * c.length)];
+  return s;
+}
+
 function AbaPessoas({ ctx, podeEditar }) {
   const [pessoas, setPessoas] = useState(null);
   const [perfis, setPerfis] = useState([]);
   const [msg, setMsg] = useState("");
+  const [novo, setNovo] = useState(null);
+  const [criando, setCriando] = useState(false);
+  const [feito, setFeito] = useState(null);
 
   async function carregar() {
     const { data: ps } = await sb.from("perfis").select("id, nome, acesso_total").order("acesso_total", { ascending: false }).order("nome");
@@ -2940,10 +2952,82 @@ function AbaPessoas({ ctx, podeEditar }) {
     carregar();
   }
 
+  async function criarAcesso() {
+    const email = (novo.email || "").trim().toLowerCase();
+    if (!novo.nome.trim()) { setMsg("Dê o nome da pessoa."); return; }
+    if (!email || email.indexOf("@") === -1) { setMsg("E-mail inválido."); return; }
+    if ((novo.senha || "").length < 6) { setMsg("A senha precisa de pelo menos 6 caracteres."); return; }
+    setCriando(true); setMsg("");
+    const { data, error } = await sbCadastro.auth.signUp({
+      email, password: novo.senha,
+      options: { data: { nome: novo.nome.trim() } },
+    });
+    if (error) {
+      setCriando(false);
+      setMsg("Erro: " + (error.message.toLowerCase().indexOf("already") !== -1 ? "este e-mail já tem login." : error.message));
+      return;
+    }
+    if (data.user && data.user.identities && data.user.identities.length === 0) {
+      setCriando(false);
+      setMsg("Erro: este e-mail já tem login.");
+      return;
+    }
+    const uid = data.user && data.user.id;
+    if (uid) {
+      const { error: e2 } = await sb.from("profiles").update({
+        nome: novo.nome.trim(), perfil_id: novo.perfil || null, ativo: true,
+      }).eq("id", uid);
+      if (e2) setMsg("Login criado, mas não consegui aplicar o perfil: " + e2.message);
+    }
+    setCriando(false);
+    setFeito({ email, senha: novo.senha, pendente: !data.session });
+    setNovo(null);
+    carregar();
+  }
+
   if (!pessoas) return <div style={{ fontSize: 13, color: "var(--muted)" }}>Carregando…</div>;
 
   return (
     <div>
+      {podeEditar && (
+        <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: 10 }}>
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+            onClick={() => { setFeito(null); setMsg(""); setNovo(novo ? null : { nome: "", email: "", senha: gerarSenha(), perfil: "" }); }}>
+            <i className="ti ti-user-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Novo acesso
+          </button>
+        </div>
+      )}
+
+      {novo && podeEditar && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <input className="campo" style={{ flex: 1.4, minWidth: 170, padding: "7px 9px", fontSize: 12.5 }} placeholder="nome completo" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+          <input className="campo" style={{ flex: 1.4, minWidth: 190, padding: "7px 9px", fontSize: 12.5 }} placeholder="e-mail de login" value={novo.email} onChange={(e) => setNovo({ ...novo, email: e.target.value })} />
+          <span style={{ display: "flex", alignItems: "center", gap: 5 }}>
+            <input className="campo" style={{ width: 128, padding: "7px 9px", fontSize: 12.5, fontFamily: "var(--mono, monospace)" }} placeholder="senha inicial" value={novo.senha} onChange={(e) => setNovo({ ...novo, senha: e.target.value })} />
+            <i className="ti ti-refresh" title="Gerar outra senha" aria-label="Gerar outra senha" style={{ cursor: "pointer", color: "var(--muted)", fontSize: 15 }} onClick={() => setNovo({ ...novo, senha: gerarSenha() })}></i>
+          </span>
+          <select className="campo" style={{ width: 158, padding: "7px 9px", fontSize: 12.5 }} value={novo.perfil} onChange={(e) => setNovo({ ...novo, perfil: e.target.value })}>
+            <option value="">sem perfil (depois)</option>
+            {perfis.map((pf) => <option key={pf.id} value={pf.id}>{exibirPerfil(pf.nome)}</option>)}
+          </select>
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} disabled={criando} onClick={criarAcesso}>{criando ? "Criando…" : "Criar acesso"}</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {feito && (
+        <div className="card-fl anim-pop" style={{ padding: "12px 14px", marginBottom: 12, background: "var(--verde-bg)", borderColor: "var(--verde-bg)" }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--verde)", marginBottom: 4 }}>✓ Acesso criado — anote e entregue para a pessoa:</div>
+          <div style={{ fontSize: 13, fontFamily: "var(--mono, monospace)", userSelect: "all" }}>{feito.email} · senha: {feito.senha}</div>
+          {feito.pendente && (
+            <div style={{ fontSize: 11.5, color: "var(--ambar)", marginTop: 6, lineHeight: 1.5 }}>
+              O Supabase pediu confirmação por e-mail antes do primeiro login. Para os acessos entrarem direto, desligue "Confirm email" uma única vez no painel: Authentication → Sign In / Providers → Email.
+            </div>
+          )}
+          <div style={{ marginTop: 7 }}><button className="btn-contorno" style={{ padding: "5px 10px", fontSize: 11.5 }} onClick={() => setFeito(null)}>fechar</button></div>
+        </div>
+      )}
+
       <div className="card-fl" style={{ overflow: "hidden" }}>
         {pessoas.map((p) => {
           const euMesmo = p.id === ctx.profile.id;
@@ -2971,7 +3055,7 @@ function AbaPessoas({ ctx, podeEditar }) {
       </div>
       {msg && <div className="anim-pop" style={{ marginTop: 8, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
       <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 10 }}>
-        Novos logins são criados no painel do Supabase (Authentication, Users) por enquanto; a pessoa aparece aqui na hora, aguardando perfil.
+        Crie os acessos aqui mesmo: a pessoa entra na hora com o e-mail e a senha que você definir, já no perfil escolhido. Trocar de perfil ou desativar continua nesta lista.
       </p>
     </div>
   );
