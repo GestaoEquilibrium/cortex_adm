@@ -340,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v26</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v27</div>
       </aside>
     </React.Fragment>
   );
@@ -3958,7 +3958,7 @@ function AbaPessoas({ ctx, podeEditar }) {
 
       {vinculando && (
         <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setVinculando(null); }}>
-          <div className="org-modal anim-pop" style={{ maxWidth: 430 }}>
+          <div className="org-modal anim-pop" style={{ maxWidth: 540 }}>
             <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
               <div style={{ fontSize: 14, fontWeight: 800 }}>Vincular prestador</div>
               <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => setVinculando(null)} aria-label="Fechar"></i>
@@ -3966,9 +3966,11 @@ function AbaPessoas({ ctx, podeEditar }) {
             <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 11 }}>
               Acesso: <b style={{ color: "var(--ink)" }}>{vinculando.nome || vinculando.email}</b>
             </div>
-            <SeletorPessoa pessoas={colabs} valor={vinculando.colaborador_id || null}
-              aoEscolher={(id) => vincular(vinculando, id || null)}
-              rotuloVazio="sem vínculo (remover)" />
+            <div style={{ minHeight: 340 }}>
+              <SeletorPessoa pessoas={colabs} valor={vinculando.colaborador_id || null}
+                aoEscolher={(id) => vincular(vinculando, id || null)}
+                rotuloVazio="sem vínculo (remover)" />
+            </div>
             {msg && <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
             <div style={{ marginTop: 12, textAlign: "right" }}>
               <button className="btn-contorno" style={{ padding: "8px 14px", fontSize: 12.5 }} onClick={() => setVinculando(null)}>Fechar</button>
