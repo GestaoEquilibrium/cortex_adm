@@ -330,7 +330,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v16</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v17</div>
       </aside>
     </React.Fragment>
   );
@@ -1749,18 +1749,33 @@ function AbaPonto({ ctx }) {
   );
 }
 
+const CORES_SETOR = {
+  diretoria:   ["var(--tint)",     "var(--marca-texto)"],
+  clinico:     ["var(--roxo-bg)",  "var(--roxo)"],
+  atendimento: ["var(--teal-bg)",  "var(--teal)"],
+  financeiro:  ["var(--verde-bg)", "var(--verde)"],
+  terapeutico: ["var(--rosa-bg)",  "var(--rosa)"],
+};
+function corSetor(s) {
+  const k = (s || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "").trim();
+  return CORES_SETOR[k] || ["var(--branco, #fff)", "var(--sec)"];
+}
+
 function AbaOrganograma({ ctx }) {
   const podeEditar = nivelAba(ctx, "rh", "organograma") === "editar";
   const [colabs, setColabs] = useState(null);
   const [visao, setVisao] = useState("arvore");
   const [msg, setMsg] = useState("");
   const [edit, setEdit] = useState(null);
+  const [novo, setNovo] = useState(null);
+  const [pop, setPop] = useState(null);
+  const popTimer = useRef(null);
 
   async function carregar() {
     const { data, error } = await sb.from("colaboradores")
-      .select("id, nome, cargo, setor, status, responde_para")
+      .select("id, nome, cargo, setor, status, responde_para, foto_url, formacao, registro_profissional, unidade, telefone, email, nascimento, admissao, origem_ponto_id")
       .neq("status", "desligado").order("nome").limit(20000);
-    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("responde_para") !== -1 ? " — rode o 08_organograma.sql no Supabase." : "")); return; }
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("foto_url") !== -1 || error.message.indexOf("responde_para") !== -1 ? " — rode o 08 e o 10 no Supabase." : "")); return; }
     setMsg(""); setColabs(data || []);
   }
   useEffect(() => { carregar(); }, []);
@@ -1802,10 +1817,41 @@ function AbaOrganograma({ ctx }) {
     return s;
   }
 
-  function abrirEdicao(c) {
-    setEdit(edit && edit.id === c.id ? null : { id: c.id, responde_para: c.responde_para || "", cargo: c.cargo || "", setor: c.setor || "" });
+  // ---- dossie flutuante ----
+  function abrirPop(c, el, fixo) {
+    clearTimeout(popTimer.current);
+    const r = el.getBoundingClientRect();
+    let x = r.right + 12;
+    if (x + 310 > window.innerWidth) x = Math.max(8, r.left - 322);
+    const y = Math.max(8, Math.min(r.top - 8, window.innerHeight - 430));
+    if (fixo) { setPop(pop && pop.c.id === c.id && pop.fixo ? null : { c, x, y, fixo: true }); return; }
+    popTimer.current = setTimeout(() => setPop((p) => (p && p.fixo ? p : { c, x, y, fixo: false })), 260);
+  }
+  function agendarFecharPop() {
+    clearTimeout(popTimer.current);
+    popTimer.current = setTimeout(() => setPop((p) => (p && p.fixo ? p : null)), 220);
   }
 
+  // ---- acoes ----
+  function abrirEdicao(c) {
+    setPop(null); setNovo(null);
+    setEdit(edit && edit.id === c.id ? null : { id: c.id, responde_para: c.responde_para || "", cargo: c.cargo || "", setor: c.setor || "" });
+  }
+  function abrirNovo(chefeId) {
+    setPop(null); setEdit(null);
+    const chefe = chefeId && arvore ? arvore.porId[chefeId] : null;
+    setNovo({ nome: "", cargo: "", setor: chefe ? (chefe.setor || "") : "", responde_para: chefeId || "" });
+  }
+  async function salvarNovo() {
+    if (!novo.nome.trim()) { setMsg("Dê o nome da pessoa."); return; }
+    const { error } = await sb.from("colaboradores").insert({
+      nome: novo.nome.trim(), cargo: (novo.cargo || "").trim() || null,
+      setor: (novo.setor || "").trim() || null, responde_para: novo.responde_para || null,
+      status: "ativo",
+    });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setNovo(null); carregar();
+  }
   async function salvarEdit() {
     const { error } = await sb.from("colaboradores").update({
       responde_para: edit.responde_para || null,
@@ -1815,19 +1861,37 @@ function AbaOrganograma({ ctx }) {
     if (error) { setMsg("Erro: " + error.message); return; }
     setMsg(""); setEdit(null); carregar();
   }
-
-  const Lapis = ({ c }) => (podeEditar
-    ? <i className="ti ti-pencil org-lapis" title="Editar vínculo" aria-label="Editar vínculo" onClick={(e) => { e.stopPropagation(); abrirEdicao(c); }}></i>
-    : null);
+  async function remover(c) {
+    setPop(null);
+    const criadoAMao = !c.origem_ponto_id;
+    const aviso = criadoAMao
+      ? 'Excluir "' + c.nome + '" do sistema? (pessoa criada à mão, sem histórico de ponto; os subordinados passam a responder ao chefe dela)'
+      : 'Tirar "' + c.nome + '" do organograma? A pessoa continua no sistema — ponto e RH intactos — e os subordinados passam a responder ao chefe dela.';
+    if (!window.confirm(aviso)) return;
+    const { error: e1 } = await sb.from("colaboradores").update({ responde_para: c.responde_para || null }).eq("responde_para", c.id);
+    if (e1) { setMsg("Erro: " + e1.message); return; }
+    const { error: e2 } = criadoAMao
+      ? await sb.from("colaboradores").delete().eq("id", c.id)
+      : await sb.from("colaboradores").update({ responde_para: null }).eq("id", c.id);
+    if (e2) { setMsg("Erro: " + e2.message); return; }
+    setMsg(""); carregar();
+  }
 
   const Cartao = ({ c }) => (
-    <div className="org-no">
-      <div className="org-avatar">{iniciais(c.nome)}</div>
-      <div style={{ minWidth: 0 }}>
-        <div className="org-nome">{c.nome}{c.status !== "ativo" ? " · " + c.status : ""}</div>
-        <div className="org-cargo">{c.cargo || "—"}{c.setor ? " · " + c.setor : ""}</div>
-      </div>
-      <Lapis c={c} />
+    <div className="org-no" onMouseEnter={(e) => abrirPop(c, e.currentTarget, false)} onMouseLeave={agendarFecharPop} onClick={(e) => abrirPop(c, e.currentTarget, true)}>
+      {podeEditar && (
+        <span className="org-acoes" onClick={(e) => e.stopPropagation()} onMouseEnter={() => clearTimeout(popTimer.current)}>
+          <i className="ti ti-user-plus" title="Adicionar subordinado" aria-label="Adicionar subordinado" onClick={() => abrirNovo(c.id)}></i>
+          <i className="ti ti-pencil" title="Editar vínculo" aria-label="Editar vínculo" onClick={() => abrirEdicao(c)}></i>
+          <i className="ti ti-trash" title="Remover" aria-label="Remover" onClick={() => remover(c)}></i>
+        </span>
+      )}
+      {c.foto_url
+        ? <img className="org-foto" src={c.foto_url} alt="" />
+        : <div className="org-foto org-foto-ini">{iniciais(c.nome)}</div>}
+      <div className="org-nome">{c.nome}</div>
+      <div className="org-cargo">{c.cargo || "—"}</div>
+      {c.setor && <span className="chip org-chip-setor" style={{ background: corSetor(c.setor)[0], color: corSetor(c.setor)[1] }}>{c.setor}</span>}
     </div>
   );
 
@@ -1843,8 +1907,43 @@ function AbaOrganograma({ ctx }) {
   const editando = edit && arvore && arvore.porId[edit.id];
   const desc = editando ? descendentesDe(edit.id) : {};
 
+  const linhasPop = pop ? [
+    ["Unidade", pop.c.unidade],
+    ["Formação", pop.c.formacao],
+    ["Registro", pop.c.registro_profissional],
+    ["Admissão", pop.c.admissao ? dataBr(pop.c.admissao) : null],
+    ["Aniversário", pop.c.nascimento ? pop.c.nascimento.slice(5).split("-").reverse().join("/") : null],
+    ["Telefone", pop.c.telefone],
+    ["E-mail", pop.c.email],
+  ].filter((l) => l[1]) : [];
+
   return (
     <div>
+      {pop && (
+        <div className="org-pop anim-pop" style={{ left: pop.x, top: pop.y }}
+          onMouseEnter={() => clearTimeout(popTimer.current)} onMouseLeave={agendarFecharPop}>
+          <div style={{ display: "flex", gap: 12, alignItems: "center", marginBottom: 10 }}>
+            {pop.c.foto_url
+              ? <img className="org-foto" style={{ width: 68, height: 68 }} src={pop.c.foto_url} alt="" />
+              : <div className="org-foto org-foto-ini" style={{ width: 68, height: 68, fontSize: 19 }}>{iniciais(pop.c.nome)}</div>}
+            <div style={{ minWidth: 0 }}>
+              <div className="org-pop-nome">{pop.c.nome}</div>
+              <div style={{ fontSize: 12, color: "var(--sec)" }}>{pop.c.cargo || "—"}</div>
+              <div style={{ display: "flex", gap: 5, marginTop: 5, flexWrap: "wrap" }}>
+                {pop.c.setor && <span className="chip org-chip-setor" style={{ background: corSetor(pop.c.setor)[0], color: corSetor(pop.c.setor)[1] }}>{pop.c.setor}</span>}
+                {pop.c.status !== "ativo" && <span className="chip org-chip-setor" style={{ background: "var(--ambar-bg, #FFF7E6)", color: "var(--ambar)" }}>{pop.c.status}</span>}
+              </div>
+            </div>
+            {pop.fixo && <i className="ti ti-x" style={{ marginLeft: "auto", alignSelf: "flex-start", cursor: "pointer", color: "var(--muted)" }} onClick={() => setPop(null)} aria-label="Fechar"></i>}
+          </div>
+          {linhasPop.length > 0 ? linhasPop.map((l) => (
+            <div key={l[0]} className="org-pop-lin"><b>{l[0]}</b><span style={{ minWidth: 0, overflowWrap: "anywhere" }}>{l[1]}</span></div>
+          )) : (
+            <div style={{ fontSize: 12, color: "var(--muted)" }}>Sem dados na ficha ainda — preencha em Configurações → Fichas da equipe.</div>
+          )}
+        </div>
+      )}
+
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
         {[["arvore", "Hierarquia"], ["setores", "Por setor"]].map(([v, r]) => (
           <span key={v} className="chip" onClick={() => setVisao(v)}
@@ -1856,13 +1955,34 @@ function AbaOrganograma({ ctx }) {
             {colabs.length} pessoa(s) · {colabs.length - arvore.soltos.length} no organograma · {arvore.soltos.length} sem vínculo
           </span>
         )}
+        {podeEditar && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={() => (novo ? setNovo(null) : abrirNovo(""))}>
+            <i className="ti ti-user-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Adicionar pessoa
+          </button>
+        )}
       </div>
 
       {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
 
+      {novo && podeEditar && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12, color: "var(--sec)", fontWeight: 600 }}>Nova pessoa:</span>
+          <input className="campo" style={{ flex: 2, minWidth: 190, padding: "7px 9px", fontSize: 12.5 }} placeholder="nome completo" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
+          <input className="campo" style={{ width: 170, padding: "7px 9px", fontSize: 12.5 }} placeholder="cargo" value={novo.cargo} onChange={(e) => setNovo({ ...novo, cargo: e.target.value })} />
+          <input className="campo" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} placeholder="setor" value={novo.setor} onChange={(e) => setNovo({ ...novo, setor: e.target.value })} />
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
+          <select className="campo" style={{ flex: 1, minWidth: 170, padding: "7px 9px", fontSize: 12.5 }} value={novo.responde_para} onChange={(e) => setNovo({ ...novo, responde_para: e.target.value })}>
+            <option value="">ninguém (topo)</option>
+            {(colabs || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Adicionar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
       {editando && podeEditar && (
         <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{arvore.porId[edit.id].nome}</span>
+          <span style={{ fontSize: 12.5, fontWeight: 600, textTransform: "uppercase" }}>{arvore.porId[edit.id].nome}</span>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
           <select className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
             <option value="">ninguém (topo do organograma)</option>
@@ -1901,7 +2021,7 @@ function AbaOrganograma({ ctx }) {
               <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sec)", textTransform: "uppercase", letterSpacing: .5, margin: "0 2px 8px" }}>
                 Sem vínculo no organograma
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {arvore.soltos.map((c) => <Cartao key={c.id} c={c} />)}
               </div>
             </div>
@@ -1913,11 +2033,11 @@ function AbaOrganograma({ ctx }) {
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           {setores.map((g) => (
             <div key={g.setor} className="card-fl" style={{ padding: "12px 13px" }}>
-              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 9, display: "flex", alignItems: "center", gap: 7 }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 9, display: "flex", alignItems: "center", gap: 7, textTransform: "uppercase", letterSpacing: .4 }}>
                 {g.setor}
-                <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{g.pessoas.length}</span>
+                <span className="chip" style={{ background: corSetor(g.setor)[0], color: corSetor(g.setor)[1] }}>{g.pessoas.length}</span>
               </div>
-              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8 }}>
+              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
                 {g.pessoas.map((c) => <Cartao key={c.id} c={c} />)}
               </div>
             </div>
@@ -2924,6 +3044,162 @@ function AbaLinks({ podeEditar }) {
   );
 }
 
+async function reduzirFoto(arq, max) {
+  try {
+    const img = await createImageBitmap(arq);
+    const esc = Math.min(1, (max || 512) / Math.max(img.width, img.height));
+    const cv = document.createElement("canvas");
+    cv.width = Math.max(1, Math.round(img.width * esc));
+    cv.height = Math.max(1, Math.round(img.height * esc));
+    cv.getContext("2d").drawImage(img, 0, 0, cv.width, cv.height);
+    return await new Promise((res, rej) => cv.toBlob((b) => (b ? res(b) : rej(new Error("conversão falhou"))), "image/jpeg", 0.85));
+  } catch (e) { return arq; }
+}
+
+function AbaFichas({ ctx, podeEditar }) {
+  const [lista, setLista] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [sel, setSel] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [salvando, setSalvando] = useState(false);
+  const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const ro = !podeEditar;
+
+  async function carregar() {
+    const { data, error } = await sb.from("colaboradores").select("*").order("nome").limit(20000);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setLista(data || []);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const filtrada = (lista || []).filter((c) => c.nome.toLowerCase().indexOf(busca.toLowerCase()) !== -1);
+  const vz = (t) => (t || "").trim() || null;
+
+  function abrir(c) { setSel({ ...c }); setMsg(""); }
+
+  async function salvar() {
+    if (!sel.nome || !sel.nome.trim()) { setMsg("O nome é obrigatório."); return; }
+    setSalvando(true);
+    const { error } = await sb.from("colaboradores").update({
+      nome: sel.nome.trim(), status: sel.status,
+      cargo: vz(sel.cargo), setor: vz(sel.setor), unidade: vz(sel.unidade), regime: vz(sel.regime),
+      cpf: vz(sel.cpf), telefone: vz(sel.telefone), email: vz(sel.email),
+      admissao: sel.admissao || null, nascimento: sel.nascimento || null,
+      formacao: vz(sel.formacao), registro_profissional: vz(sel.registro_profissional),
+      salario: sel.salario === "" || sel.salario === null || sel.salario === undefined ? null : sel.salario,
+      observacoes: vz(sel.observacoes),
+    }).eq("id", sel.id);
+    setSalvando(false);
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("formacao") !== -1 ? " — rode o 10_ficha_profissional.sql." : "")); return; }
+    setMsg("✓ Ficha salva."); carregar();
+  }
+
+  async function trocarFoto(e) {
+    const f = e.target.files && e.target.files[0];
+    e.target.value = "";
+    if (!f || !sel) return;
+    setEnviandoFoto(true); setMsg("");
+    try {
+      const blob = await reduzirFoto(f, 512);
+      const caminho = sel.id + "-" + Date.now() + ".jpg";
+      const up = await sb.storage.from("fotos").upload(caminho, blob, { contentType: "image/jpeg", upsert: true });
+      if (up.error) throw up.error;
+      const pub = sb.storage.from("fotos").getPublicUrl(caminho);
+      const url = pub.data.publicUrl;
+      const { error } = await sb.from("colaboradores").update({ foto_url: url }).eq("id", sel.id);
+      if (error) throw error;
+      setSel((s) => ({ ...s, foto_url: url }));
+      setMsg("✓ Foto atualizada."); carregar();
+    } catch (e2) { setMsg("Erro na foto: " + e2.message + " — o 10_ficha_profissional.sql já rodou?"); }
+    setEnviandoFoto(false);
+  }
+
+  const rot = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .6, marginBottom: 4 };
+  const cx = { width: "100%", padding: "8px 10px", fontSize: 12.5 };
+  const Campo = ({ r, filho, largo }) => (
+    <div style={{ gridColumn: largo ? "1 / -1" : "auto" }}><label style={rot}>{r}</label>{filho}</div>
+  );
+
+  return (
+    <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
+      <div className="card-fl" style={{ width: 270, flex: "none", overflow: "hidden" }}>
+        <div style={{ padding: 10, borderBottom: "1px solid var(--linha-suave)" }}>
+          <input className="campo" style={cx} placeholder="buscar pelo nome…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        <div style={{ maxHeight: 520, overflowY: "auto" }}>
+          {!lista && <div style={{ padding: 14, fontSize: 12.5, color: "var(--muted)" }}>Carregando…</div>}
+          {lista && filtrada.length === 0 && <div style={{ padding: 14, fontSize: 12.5, color: "var(--muted)" }}>Ninguém com esse nome.</div>}
+          {filtrada.map((c) => (
+            <div key={c.id} className="linha-hover" onClick={() => abrir(c)}
+              style={{ display: "flex", alignItems: "center", gap: 9, padding: "8px 11px", cursor: "pointer", borderBottom: "1px solid var(--linha-suave)", background: sel && sel.id === c.id ? "var(--tint)" : "transparent", opacity: c.status === "desligado" ? .55 : 1 }}>
+              {c.foto_url
+                ? <img src={c.foto_url} alt="" style={{ width: 28, height: 28, borderRadius: "50%", objectFit: "cover", flex: "none" }} />
+                : <div style={{ width: 28, height: 28, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 10, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{iniciais(c.nome)}</div>}
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 11.5, fontWeight: 700, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</div>
+                <div style={{ fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.cargo || "—"}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
+
+      <div className="card-fl" style={{ flex: 1, minWidth: 320, padding: 16 }}>
+        {!sel ? (
+          <div style={{ padding: "40px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+            Escolha alguém na lista ao lado para abrir a ficha.
+          </div>
+        ) : (
+          <div>
+            <div style={{ display: "flex", gap: 14, alignItems: "center", marginBottom: 16, flexWrap: "wrap" }}>
+              {sel.foto_url
+                ? <img src={sel.foto_url} alt="" style={{ width: 76, height: 76, borderRadius: "50%", objectFit: "cover", boxShadow: "0 0 0 2.5px #fff, 0 0 0 5px var(--tint-borda)" }} />
+                : <div style={{ width: 76, height: 76, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 21, display: "flex", alignItems: "center", justifyContent: "center" }}>{iniciais(sel.nome)}</div>}
+              <div style={{ flex: 1, minWidth: 160 }}>
+                <div style={{ fontSize: 15, fontWeight: 800, textTransform: "uppercase", letterSpacing: .3 }}>{sel.nome}</div>
+                <div style={{ fontSize: 12.5, color: "var(--sec)" }}>{sel.cargo || "—"}{sel.setor ? " · " + sel.setor : ""}</div>
+              </div>
+              {podeEditar && (
+                <label className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5, cursor: "pointer" }}>
+                  <i className="ti ti-camera" style={{ fontSize: 14 }} aria-hidden="true"></i>{enviandoFoto ? "Enviando…" : "Trocar foto"}
+                  <input type="file" accept="image/*" style={{ display: "none" }} onChange={trocarFoto} disabled={enviandoFoto} />
+                </label>
+              )}
+            </div>
+
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 11 }}>
+              <Campo r="Nome completo" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.nome || ""} onChange={(e) => setSel({ ...sel, nome: e.target.value })} />} />
+              <Campo r="Status" filho={
+                <select className="campo" style={cx} disabled={ro} value={sel.status} onChange={(e) => setSel({ ...sel, status: e.target.value })}>
+                  <option value="ativo">Ativo</option><option value="ferias">Férias</option>
+                  <option value="afastado">Afastado</option><option value="desligado">Desligado</option>
+                </select>} />
+              <Campo r="Cargo" filho={<input className="campo" style={cx} disabled={ro} value={sel.cargo || ""} onChange={(e) => setSel({ ...sel, cargo: e.target.value })} />} />
+              <Campo r="Setor" filho={<input className="campo" style={cx} disabled={ro} value={sel.setor || ""} onChange={(e) => setSel({ ...sel, setor: e.target.value })} />} />
+              <Campo r="Unidade" filho={<input className="campo" style={cx} disabled={ro} placeholder="EQ1 / EQ2" value={sel.unidade || ""} onChange={(e) => setSel({ ...sel, unidade: e.target.value })} />} />
+              <Campo r="Regime" filho={<input className="campo" style={cx} disabled={ro} placeholder="CLT / PJ / Estágio" value={sel.regime || ""} onChange={(e) => setSel({ ...sel, regime: e.target.value })} />} />
+              <Campo r="Admissão" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.admissao || ""} onChange={(e) => setSel({ ...sel, admissao: e.target.value })} />} />
+              <Campo r="Nascimento" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.nascimento || ""} onChange={(e) => setSel({ ...sel, nascimento: e.target.value })} />} />
+              <Campo r="CPF" filho={<input className="campo" style={cx} disabled={ro} value={sel.cpf || ""} onChange={(e) => setSel({ ...sel, cpf: e.target.value })} />} />
+              <Campo r="Telefone" filho={<input className="campo" style={cx} disabled={ro} value={sel.telefone || ""} onChange={(e) => setSel({ ...sel, telefone: e.target.value })} />} />
+              <Campo r="E-mail" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.email || ""} onChange={(e) => setSel({ ...sel, email: e.target.value })} />} />
+              <Campo r="Formação" largo filho={<input className="campo" style={cx} disabled={ro} placeholder="ex.: Psicologia — UFU, especialização em neuropsicologia" value={sel.formacao || ""} onChange={(e) => setSel({ ...sel, formacao: e.target.value })} />} />
+              <Campo r="Registro profissional" filho={<input className="campo" style={cx} disabled={ro} placeholder="CRP / CRM / CREFITO…" value={sel.registro_profissional || ""} onChange={(e) => setSel({ ...sel, registro_profissional: e.target.value })} />} />
+              <Campo r="Salário (R$)" filho={<input className="campo" type="number" step="0.01" style={cx} disabled={ro} value={sel.salario === null || sel.salario === undefined ? "" : sel.salario} onChange={(e) => setSel({ ...sel, salario: e.target.value })} />} />
+              <Campo r="Observações" largo filho={<textarea className="campo" style={{ ...cx, minHeight: 70, resize: "vertical" }} disabled={ro} value={sel.observacoes || ""} onChange={(e) => setSel({ ...sel, observacoes: e.target.value })} />} />
+            </div>
+
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
+              {podeEditar && <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar ficha"}</button>}
+              {msg && <span className="anim-pop" style={{ fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</span>}
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -2932,10 +3208,12 @@ function PaginaConfiguracoes({ ctx }) {
       <div className="aba-linha">
         <div className={"aba" + (aba === "perfis" ? " on" : "")} onClick={() => setAba("perfis")}>Perfis e permissões</div>
         <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
+        <div className={"aba" + (aba === "fichas" ? " on" : "")} onClick={() => setAba("fichas")}>Fichas da equipe</div>
         <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
       </div>
       {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
       {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
+      {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={podeEditar} />}
       {aba === "links" && <AbaLinks podeEditar={podeEditar} />}
     </div>
   );
