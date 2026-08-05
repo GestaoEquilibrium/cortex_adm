@@ -332,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v19</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v20</div>
       </aside>
     </React.Fragment>
   );
@@ -1967,40 +1967,57 @@ function AbaOrganograma({ ctx }) {
 
       {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
 
-      {novo && podeEditar && (
-        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12, color: "var(--sec)", fontWeight: 600 }}>Nova pessoa:</span>
-          <input className="campo" style={{ flex: 2, minWidth: 190, padding: "7px 9px", fontSize: 12.5 }} placeholder="nome completo" value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} />
-          <input className="campo" style={{ width: 170, padding: "7px 9px", fontSize: 12.5 }} placeholder="cargo" value={novo.cargo} onChange={(e) => setNovo({ ...novo, cargo: e.target.value })} />
-          <input className="campo" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} placeholder="setor" value={novo.setor} onChange={(e) => setNovo({ ...novo, setor: e.target.value })} />
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
-          <select className="campo" style={{ flex: 1, minWidth: 170, padding: "7px 9px", fontSize: 12.5 }} value={novo.responde_para} onChange={(e) => setNovo({ ...novo, responde_para: e.target.value })}>
-            <option value="">ninguém (topo)</option>
-            {(colabs || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-          </select>
-          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Adicionar</button>
-          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
-        </div>
-      )}
+      {(novo || editando) && podeEditar && (
+        <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) { setNovo(null); setEdit(null); } }}>
+          <div className="org-modal anim-pop">
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800, textTransform: "uppercase", letterSpacing: .3, minWidth: 0 }}>
+                {novo ? "Nova pessoa" : arvore.porId[edit.id].nome}
+              </div>
+              <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => { setNovo(null); setEdit(null); }} aria-label="Fechar"></i>
+            </div>
 
-      {editando && podeEditar && (
-        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
-          <span style={{ fontSize: 12.5, fontWeight: 600, textTransform: "uppercase" }}>{arvore.porId[edit.id].nome}</span>
-          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--sec)" }}>
-            <button type="button" className={"sw" + (edit.no_topo ? " on" : "")} onClick={() => setEdit({ ...edit, no_topo: !edit.no_topo, responde_para: edit.no_topo ? edit.responde_para : "" })} aria-label="Fixar no topo"></button>
-            topo (fundador/diretor)
-          </label>
-          <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
-          <select className="campo" disabled={edit.no_topo} style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5, opacity: edit.no_topo ? .55 : 1 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
-            <option value="">ninguém (topo do organograma)</option>
-            {colabs.filter((c) => c.id !== edit.id && !desc[c.id]).map((c) => (
-              <option key={c.id} value={c.id}>{c.nome}</option>
-            ))}
-          </select>
-          <input className="campo" style={{ width: 170, padding: "7px 9px", fontSize: 12.5 }} placeholder="cargo" value={edit.cargo} onChange={(e) => setEdit({ ...edit, cargo: e.target.value })} />
-          <input className="campo" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} placeholder="setor" value={edit.setor} onChange={(e) => setEdit({ ...edit, setor: e.target.value })} />
-          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
-          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+            {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+            {novo ? (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <div><label style={ROT_FICHA}>Nome completo</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.nome} onChange={(e) => setNovo({ ...novo, nome: e.target.value })} /></div>
+                <div><label style={ROT_FICHA}>Cargo</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.cargo} onChange={(e) => setNovo({ ...novo, cargo: e.target.value })} /></div>
+                <div><label style={ROT_FICHA}>Setor</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.setor} onChange={(e) => setNovo({ ...novo, setor: e.target.value })} /></div>
+                <div><label style={ROT_FICHA}>Responde para</label>
+                  <select className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.responde_para} onChange={(e) => setNovo({ ...novo, responde_para: e.target.value })}>
+                    <option value="">ninguém (topo)</option>
+                    {(colabs || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+                  </select></div>
+              </div>
+            ) : (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <label style={{ display: "flex", alignItems: "center", gap: 7, fontSize: 12.5, color: "var(--sec)" }}>
+                  <button type="button" className={"sw" + (edit.no_topo ? " on" : "")} onClick={() => setEdit({ ...edit, no_topo: !edit.no_topo, responde_para: edit.no_topo ? edit.responde_para : "" })} aria-label="Fixar no topo"></button>
+                  topo (fundador/diretor)
+                </label>
+                <div><label style={ROT_FICHA}>Responde para</label>
+                  <select className="campo" disabled={edit.no_topo} style={{ width: "100%", padding: "8px 10px", fontSize: 12.5, opacity: edit.no_topo ? .55 : 1 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
+                    <option value="">ninguém (topo do organograma)</option>
+                    {colabs.filter((c) => c.id !== edit.id && !desc[c.id]).map((c) => (
+                      <option key={c.id} value={c.id}>{c.nome}</option>
+                    ))}
+                  </select></div>
+                <div><label style={ROT_FICHA}>Cargo</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={edit.cargo} onChange={(e) => setEdit({ ...edit, cargo: e.target.value })} /></div>
+                <div><label style={ROT_FICHA}>Setor</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={edit.setor} onChange={(e) => setEdit({ ...edit, setor: e.target.value })} /></div>
+              </div>
+            )}
+
+            <div style={{ display: "flex", gap: 8, marginTop: 15 }}>
+              <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={novo ? salvarNovo : salvarEdit}>{novo ? "Adicionar" : "Salvar"}</button>
+              <button className="btn-contorno" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={() => { setNovo(null); setEdit(null); }}>Cancelar</button>
+            </div>
+          </div>
         </div>
       )}
 

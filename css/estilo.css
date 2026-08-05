@@ -439,3 +439,8 @@ body {
   overflow-y: auto;
   overflow-x: hidden;
 }
+
+
+/* ===== Janela central do organograma (editar vinculo / nova pessoa) ===== */
+.org-modal-fundo { position: fixed; inset: 0; background: rgba(28, 37, 48, .38); z-index: 80; display: flex; align-items: center; justify-content: center; padding: 20px; }
+.org-modal { width: 100%; max-width: 400px; background: #fff; border: 1px solid var(--linha); border-radius: 16px; padding: 18px 20px; box-shadow: 0 24px 70px rgba(28, 37, 48, .24); max-height: 90vh; overflow-y: auto; }
