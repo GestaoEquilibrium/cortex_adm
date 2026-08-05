@@ -340,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v25</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v26</div>
       </aside>
     </React.Fragment>
   );
@@ -3855,6 +3855,7 @@ function AbaPessoas({ ctx, podeEditar }) {
   const [criando, setCriando] = useState(false);
   const [feito, setFeito] = useState(null);
   const [colabs, setColabs] = useState([]);
+  const [vinculando, setVinculando] = useState(null);
 
   async function carregar() {
     const { data: ps } = await sb.from("perfis").select("id, nome, acesso_total").order("acesso_total", { ascending: false }).order("nome");
@@ -3882,7 +3883,7 @@ function AbaPessoas({ ctx, podeEditar }) {
       else setMsg("Erro: " + error.message);
       return;
     }
-    setMsg(""); carregar();
+    setMsg(""); setVinculando(null); carregar();
   }
 
   async function alternarAtivo(p) {
@@ -3955,6 +3956,27 @@ function AbaPessoas({ ctx, podeEditar }) {
         </div>
       )}
 
+      {vinculando && (
+        <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setVinculando(null); }}>
+          <div className="org-modal anim-pop" style={{ maxWidth: 430 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 4 }}>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>Vincular prestador</div>
+              <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => setVinculando(null)} aria-label="Fechar"></i>
+            </div>
+            <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 11 }}>
+              Acesso: <b style={{ color: "var(--ink)" }}>{vinculando.nome || vinculando.email}</b>
+            </div>
+            <SeletorPessoa pessoas={colabs} valor={vinculando.colaborador_id || null}
+              aoEscolher={(id) => vincular(vinculando, id || null)}
+              rotuloVazio="sem vínculo (remover)" />
+            {msg && <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+            <div style={{ marginTop: 12, textAlign: "right" }}>
+              <button className="btn-contorno" style={{ padding: "8px 14px", fontSize: 12.5 }} onClick={() => setVinculando(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {feito && (
         <div className="card-fl anim-pop" style={{ padding: "12px 14px", marginBottom: 12, background: "var(--verde-bg)", borderColor: "var(--verde-bg)" }}>
           <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--verde)", marginBottom: 4 }}>✓ Acesso criado — anote e entregue para a pessoa:</div>
@@ -3978,16 +4000,31 @@ function AbaPessoas({ ctx, podeEditar }) {
                 <div style={{ fontSize: 13, fontWeight: 600 }}>{p.nome || "(sem nome)"}{euMesmo && <span style={{ fontWeight: 400, color: "var(--muted)" }}> · você</span>}</div>
                 <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{p.email}</div>
               </div>
-              <div style={{ width: 216, flex: "none", display: "flex", alignItems: "center", gap: 5 }}>
-                <div style={{ flex: 1, minWidth: 0, pointerEvents: podeEditar ? "auto" : "none", opacity: podeEditar ? 1 : .6 }}>
-                  <SeletorPessoa pessoas={colabs} valor={p.colaborador_id || null}
-                    aoEscolher={(c) => vincular(p, c ? c.id : null)}
-                    rotuloVazio="vincular prestador…" />
-                </div>
-                {p.colaborador_id && podeEditar && (
-                  <i className="ti ti-x" title="Desvincular prestador" style={{ fontSize: 14, color: "var(--muted)", cursor: "pointer", flex: "none" }} onClick={() => vincular(p, null)}></i>
-                )}
-              </div>
+              {(() => {
+                const cv = p.colaborador_id ? colabs.find((c) => c.id === p.colaborador_id) : null;
+                const miniV = { width: 20, height: 20, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" };
+                return (
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, flex: "none", maxWidth: 250 }}>
+                    {cv ? (
+                      <span className="chip" title={cv.nome + (podeEditar ? " — clique para trocar" : "")}
+                        onClick={() => { if (podeEditar) { setMsg(""); setVinculando(p); } }}
+                        style={{ display: "flex", alignItems: "center", gap: 6, background: "var(--tint)", color: "var(--marca-texto)", cursor: podeEditar ? "pointer" : "default", maxWidth: 210, padding: "4px 9px" }}>
+                        {cv.foto_url ? <img src={cv.foto_url} alt="" style={{ ...miniV, objectFit: "cover" }} /> : <span style={miniV}>{iniciais(cv.nome)}</span>}
+                        <span style={{ fontSize: 10.5, fontWeight: 700, textTransform: "uppercase", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{cv.nome}</span>
+                      </span>
+                    ) : (
+                      podeEditar
+                        ? <button className="btn-contorno" style={{ padding: "6px 11px", fontSize: 11.5 }} onClick={() => { setMsg(""); setVinculando(p); }}>
+                            <i className="ti ti-link" style={{ fontSize: 13 }} aria-hidden="true"></i>vincular prestador
+                          </button>
+                        : <span style={{ fontSize: 11, color: "var(--muted)" }}>sem vínculo</span>
+                    )}
+                    {cv && podeEditar && (
+                      <i className="ti ti-x" title="Desvincular prestador" style={{ fontSize: 14, color: "var(--muted)", cursor: "pointer", flex: "none" }} onClick={() => vincular(p, null)}></i>
+                    )}
+                  </div>
+                );
+              })()}
               <select className="campo" style={{ width: 170, padding: "7px 10px", fontSize: 12.5 }}
                 value={p.perfil_id || ""} disabled={!podeEditar || euMesmo}
                 title={euMesmo ? "Você não pode alterar o próprio perfil" : undefined}
