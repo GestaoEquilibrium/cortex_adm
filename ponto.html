@@ -23,11 +23,17 @@
     body{font-family:'Outfit',sans-serif;background:var(--fundo);color:var(--ink);-webkit-font-smoothing:antialiased}
     input,select,button,textarea{font-family:inherit}
     input:focus,select:focus,textarea:focus{border-color:var(--marca)!important;box-shadow:0 0 0 3px rgba(16,104,176,.13);outline:none}
-    button{transition:all .15s ease}button:hover{opacity:.9}button:active{transform:scale(.98)}
+    button{transition:all .15s ease}button:hover{opacity:.92}button:active{transform:scale(.97)}
+    .cracha{cursor:pointer;transition:transform .13s ease,border-color .13s ease,box-shadow .13s ease}
+    .cracha:hover{transform:translateY(-3px);border-color:var(--marca)!important;box-shadow:0 8px 22px rgba(16,104,176,.14)}
     @keyframes spin{to{transform:rotate(360deg)}}
     @keyframes toastIn{from{opacity:0;transform:translate(-50%,-16px)}to{opacity:1;transform:translate(-50%,0)}}
     @keyframes fadeUp{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
     @keyframes modalIn{from{opacity:0;transform:scale(.95)}to{opacity:1;transform:scale(1)}}
+    @keyframes pulsa{0%,100%{box-shadow:0 4px 16px rgba(16,104,176,.25),0 0 0 0 rgba(16,104,176,.30)}50%{box-shadow:0 4px 16px rgba(16,104,176,.25),0 0 0 13px rgba(16,104,176,0)}}
+    @keyframes aparece{from{transform:scale(.4);opacity:0}to{transform:scale(1);opacity:1}}
+    @keyframes treme{0%,100%{transform:translateX(0)}20%{transform:translateX(-9px)}40%{transform:translateX(9px)}60%{transform:translateX(-6px)}80%{transform:translateX(6px)}}
+    .treme{animation:treme .35s ease}
     ::-webkit-scrollbar{width:6px}::-webkit-scrollbar-track{background:transparent}::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:3px}
     @media (prefers-reduced-motion: reduce){*{animation:none!important;transition-duration:.01ms!important}}
   </style>
@@ -52,6 +58,13 @@ function totalDoDia(batidas){
 }
 function fmtMin(t){ const h = Math.floor(t/60), m = t%60; return h + "h " + String(m).padStart(2,"0") + "min"; }
 function hojeISO(){ const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth()+1).padStart(2,"0") + "-" + String(n.getDate()).padStart(2,"0"); }
+function iniciais(nome){
+  const p = String(nome||"").trim().split(/\s+/).filter(Boolean);
+  if (!p.length) return "?";
+  return (p[0][0] + (p.length > 1 ? p[p.length-1][0] : "")).toUpperCase();
+}
+function saudacao(){ const h = new Date().getHours(); return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"; }
+function primeiroNome(nome){ return String(nome||"").trim().split(/\s+/)[0] || ""; }
 
 // ─── estilos ───
 const labelSt = {display:"block",fontSize:11,fontWeight:700,color:"var(--muted)",marginBottom:5,textTransform:"uppercase",letterSpacing:1};
@@ -64,9 +77,9 @@ const btnGhost = {padding:"7px 14px",background:"var(--campo)",color:"var(--mute
 function Marca(){
   const [semLogo, setSemLogo] = useState(false);
   return (
-    <div style={{textAlign:"center",marginBottom:12}}>
+    <div style={{textAlign:"center",marginBottom:10}}>
       {!semLogo ? (
-        <img src="logo.png" alt="Grupo Equilibrium" style={{maxWidth:220,maxHeight:96,objectFit:"contain"}} onError={()=>setSemLogo(true)} />
+        <img src="logo.png" alt="Grupo Equilibrium" style={{maxWidth:200,maxHeight:84,objectFit:"contain"}} onError={()=>setSemLogo(true)} />
       ) : (
         <div style={{display:"inline-flex",alignItems:"center",gap:10}}>
           <svg width="34" height="34" viewBox="0 0 24 24"><path d="M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4" stroke="#1068B0" strokeWidth="2.6" strokeLinecap="round" fill="none"/></svg>
@@ -80,17 +93,31 @@ function Marca(){
   );
 }
 
-function Relogio(){
+function Relogio({compacto}){
   const [agora, setAgora] = useState(new Date());
   useEffect(()=>{ const t = setInterval(()=>setAgora(new Date()), 1000); return ()=>clearInterval(t); },[]);
   return (
-    <div style={{textAlign:"center",margin:"6px 0 18px"}}>
-      <div style={{fontSize:56,fontWeight:800,fontFamily:"var(--mono)",color:"var(--marca)",letterSpacing:-3,lineHeight:1}}>
+    <div style={{textAlign:"center",margin:compacto?"2px 0 14px":"6px 0 18px"}}>
+      <div style={{fontSize:compacto?42:56,fontWeight:800,fontFamily:"var(--mono)",color:"var(--marca)",letterSpacing:-3,lineHeight:1}}>
         {agora.toLocaleTimeString("pt-BR",{hour:"2-digit",minute:"2-digit",second:"2-digit"})}
       </div>
-      <div style={{fontSize:14,color:"var(--muted)",marginTop:6,fontWeight:500,textTransform:"capitalize"}}>
+      <div style={{fontSize:13,color:"var(--muted)",marginTop:5,fontWeight:500,textTransform:"capitalize"}}>
         {agora.toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long",year:"numeric"})}
       </div>
+    </div>
+  );
+}
+
+function Avatar({colab, tam, fonte}){
+  const [erroFoto, setErroFoto] = useState(false);
+  const base = {width:tam,height:tam,borderRadius:"50%",flexShrink:0};
+  if (colab && colab.foto_url && !erroFoto) {
+    return <img src={colab.foto_url} alt={colab.nome} onError={()=>setErroFoto(true)}
+                style={{...base,objectFit:"cover",border:"2.5px solid var(--tint-borda)",background:"var(--tint)"}} />;
+  }
+  return (
+    <div style={{...base,background:"linear-gradient(135deg,var(--marca),var(--marca-claro))",color:"#fff",display:"flex",alignItems:"center",justifyContent:"center",fontWeight:800,fontSize:fonte}}>
+      {iniciais(colab ? colab.nome : "")}
     </div>
   );
 }
@@ -134,17 +161,27 @@ function TelaConfig(){
 
 // ─── aplicativo ───
 function App(){
+  const [tela, setTela] = useState("mural");         // mural | pin | registro | sucesso
   const [colabs, setColabs] = useState([]);
   const [carregando, setCarregando] = useState(true);
-  const [selId, setSelId] = useState("");
+  const [busca, setBusca] = useState("");
+  const [sel, setSel] = useState(null);              // colaborador escolhido no mural
   const [pin, setPin] = useState("");
-  const [logado, setLogado] = useState(null);       // { colab, pin }
+  const [pinErro, setPinErro] = useState("");
+  const [tremer, setTremer] = useState(false);
+  const [logado, setLogado] = useState(null);        // { colab, pin }
   const [batidas, setBatidas] = useState([]);        // [{tipo, hora}]
+  const [ultima, setUltima] = useState(null);        // { tipo, hora } da batida recém-feita
+  const [conta, setConta] = useState(6);
   const [ocupado, setOcupado] = useState(false);
   const [toast, setToast] = useState(null);
   const [occModal, setOccModal] = useState(null);    // { data, descricao }
-  const pinRef = useRef(null);
+  const buscaRef = useRef(null);
   const avisar = (msg, tipo) => setToast({msg, tipo});
+
+  const sugestao = (batidas.length % 2 === 0) ? "entrada" : "saida";
+  const outroTipo = (sugestao === "entrada") ? "saida" : "entrada";
+  const rotulo = (t) => t === "entrada" ? "entrada" : "saída";
 
   // Lista de funcionários: carrega ao abrir, refaz a cada 5 min e ao voltar o foco.
   const carregar = useCallback(async () => {
@@ -167,42 +204,61 @@ function App(){
     return () => { clearInterval(t); window.removeEventListener("focus", aoFocar); };
   }, [carregar]);
 
-  // Foco automático na senha depois de escolher o nome.
-  useEffect(() => { if (selId && pinRef.current) pinRef.current.focus(); }, [selId]);
-
-  function sair(){ setLogado(null); setBatidas([]); setSelId(""); setPin(""); setOccModal(null); }
-
-  async function acessar(){
-    if (!selId) return avisar("Selecione um funcionário", "erro");
-    if (!pin) return avisar("Digite a senha", "erro");
-    setOcupado(true);
-    try {
-      const { data, error } = await sb.rpc("relogio_meu_dia", { p_colaborador: selId, p_pin: pin });
-      if (error) throw error;
-      if (!data.ok) { avisar(data.erro || "Senha incorreta!", "erro"); }
-      else {
-        const colab = colabs.find(c => c.id === selId) || { id: selId, nome: "" };
-        setBatidas(data.batidas || []);
-        setLogado({ colab, pin });
-      }
-    } catch (e) { avisar("Sem conexão. Tente de novo.", "erro"); }
-    setOcupado(false);
+  function concluir(){
+    setTela("mural"); setSel(null); setPin(""); setPinErro(""); setLogado(null);
+    setBatidas([]); setUltima(null); setBusca(""); setOccModal(null);
+    setTimeout(()=>{ if (buscaRef.current) buscaRef.current.focus(); }, 60);
   }
+
+  function abrirPin(c){ setSel(c); setPin(""); setPinErro(""); setTela("pin"); }
+  function voltarMural(){ setSel(null); setPin(""); setPinErro(""); setTela("mural"); setTimeout(()=>{ if (buscaRef.current) buscaRef.current.focus(); }, 60); }
+
+  function addDigito(d){ if (ocupado) return; setPinErro(""); setPin(p => (p.length < 4 ? p + d : p)); }
+  function apagaDigito(){ if (ocupado) return; setPinErro(""); setPin(p => p.slice(0,-1)); }
+
+  // Valida sozinho quando o PIN completa 4 dígitos.
+  useEffect(() => {
+    if (tela !== "pin" || pin.length !== 4 || ocupado || !sel) return;
+    let vivo = true;
+    (async () => {
+      setOcupado(true);
+      try {
+        const { data, error } = await sb.rpc("relogio_meu_dia", { p_colaborador: sel.id, p_pin: pin });
+        if (error) throw error;
+        if (!vivo) return;
+        if (!data.ok) {
+          setPinErro(data.erro || "PIN incorreto, tente de novo");
+          setTremer(true); setTimeout(()=>setTremer(false), 380);
+          setPin("");
+        } else {
+          setBatidas(data.batidas || []);
+          setLogado({ colab: sel, pin });
+          setTela("registro");
+        }
+      } catch (e) {
+        if (vivo) { setPinErro("Sem conexão. Tente de novo."); setPin(""); }
+      }
+      if (vivo) setOcupado(false);
+    })();
+    return () => { vivo = false; };
+  }, [pin, tela, ocupado, sel]);
 
   async function bater(tipo){
     if (ocupado || !logado) return;
-    const ultima = batidas[batidas.length - 1];
-    if (tipo === "entrada" && ultima && ultima.tipo === "entrada") return avisar("Registre a saída primeiro!", "erro");
-    if (tipo === "saida" && (!ultima || ultima.tipo === "saida")) return avisar("Registre a entrada primeiro!", "erro");
+    const ult = batidas[batidas.length - 1];
+    if (tipo === "entrada" && ult && ult.tipo === "entrada") return avisar("Registre a saída primeiro!", "erro");
+    if (tipo === "saida" && (!ult || ult.tipo === "saida")) return avisar("Registre a entrada primeiro!", "erro");
     setOcupado(true);
     try {
       const { data, error } = await sb.rpc("relogio_bater", { p_colaborador: logado.colab.id, p_pin: logado.pin, p_tipo: tipo });
       if (error) throw error;
       if (!data.ok) avisar(data.erro || "Não foi possível registrar.", "erro");
       else {
-        avisar(tipo === "entrada" ? "✓ Entrada registrada às " + data.hora + "!" : "✓ Saída registrada às " + data.hora + "!", "ok");
+        setUltima({ tipo, hora: data.hora });
         const dia = await sb.rpc("relogio_meu_dia", { p_colaborador: logado.colab.id, p_pin: logado.pin });
         if (!dia.error && dia.data.ok) setBatidas(dia.data.batidas || []);
+        else setBatidas(b => [...b, { tipo, hora: data.hora }]);
+        setTela("sucesso");
       }
     } catch (e) { avisar("Sem conexão. A batida NÃO foi registrada.", "erro"); }
     setOcupado(false);
@@ -221,6 +277,54 @@ function App(){
     setOcupado(false);
   }
 
+  // Retorno automático na tela de sucesso (pausa se o modal de ocorrência abrir).
+  useEffect(() => {
+    if (tela !== "sucesso" || occModal) return;
+    setConta(6);
+    const t = setInterval(() => {
+      setConta(c => {
+        if (c <= 1) { clearInterval(t); setTimeout(concluir, 0); return 0; }
+        return c - 1;
+      });
+    }, 1000);
+    return () => clearInterval(t);
+  }, [tela, occModal]);
+
+  // Teclado físico: letras buscam no mural; números digitam o PIN;
+  // Backspace apaga; Enter confirma; Esc volta.
+  useEffect(() => {
+    function aoTeclar(e){
+      if (occModal) return;
+      if (tela === "mural") {
+        if (e.key === "Escape") { setBusca(""); return; }
+        if (document.activeElement === buscaRef.current) return;
+        if (e.key === "Backspace") { setBusca(b => b.slice(0,-1)); return; }
+        if (e.key.length === 1 && /[\p{L}\p{N} ]/u.test(e.key)) {
+          setBusca(b => b + e.key);
+          if (buscaRef.current) buscaRef.current.focus();
+          e.preventDefault();
+        }
+        return;
+      }
+      if (tela === "pin") {
+        if (/^[0-9]$/.test(e.key)) { addDigito(e.key); e.preventDefault(); return; }
+        if (e.key === "Backspace") { apagaDigito(); e.preventDefault(); return; }
+        if (e.key === "Escape") { voltarMural(); return; }
+        return;
+      }
+      if (tela === "registro") {
+        if (e.key === "Enter") { bater(sugestao); return; }
+        if (e.key === "Escape") { concluir(); return; }
+        return;
+      }
+      if (tela === "sucesso") {
+        if (e.key === "Enter" || e.key === "Escape") { concluir(); return; }
+      }
+    }
+    window.addEventListener("keydown", aoTeclar);
+    return () => window.removeEventListener("keydown", aoTeclar);
+  }, [tela, occModal, ocupado, batidas, logado, sel, sugestao]);
+
   if (!configOk) return <TelaConfig/>;
 
   if (carregando) return (
@@ -231,6 +335,13 @@ function App(){
       </div>
     </div>
   );
+
+  const filtrados = colabs.filter(c => (c.nome || "").toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0);
+  const chipsDia = batidas.map((b,i) => (
+    <span key={i} style={{background:b.tipo==="entrada"?"rgba(22,163,74,.10)":"rgba(220,38,38,.08)",color:b.tipo==="entrada"?"var(--verde-esc)":"var(--vermelho-esc)",fontSize:13,fontWeight:700,padding:"6px 13px",borderRadius:999,fontFamily:"var(--mono)"}}>
+      {b.tipo==="entrada"?"▶ ":"■ "}{b.hora}
+    </span>
+  ));
 
   return (
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
@@ -251,67 +362,124 @@ function App(){
 
       <a href="./" style={{position:"fixed",top:14,right:14,...btnGhost,textDecoration:"none",fontSize:11,opacity:.55}}>⚙ Administração</a>
 
-      <div style={{width:"100%",maxWidth:440,background:"#fff",borderRadius:22,padding:"36px 32px 30px",boxShadow:"0 2px 6px rgba(28,37,48,.05), 0 16px 44px rgba(28,37,48,.09)",border:"1.5px solid var(--linha)"}}>
+      <div style={{width:"100%",maxWidth:tela==="mural"?880:470,background:"#fff",borderRadius:22,padding:"32px 32px 26px",boxShadow:"0 2px 6px rgba(28,37,48,.05), 0 16px 44px rgba(28,37,48,.09)",border:"1.5px solid var(--linha)",transition:"max-width .25s ease"}}>
         <Marca/>
-        <Relogio/>
+        <Relogio compacto={tela!=="mural"}/>
 
-        {!logado ? (
-          <div style={{animation:"fadeUp .4s ease"}}>
-            <div style={{marginBottom:14}}>
-              <label style={labelSt}>Funcionário</label>
-              <select value={selId} onChange={(e)=>{setSelId(e.target.value);setPin("");}} style={{...inputSt,cursor:"pointer"}}>
-                <option value="">Selecione seu nome...</option>
-                {colabs.map(c => <option key={c.id} value={c.id}>{c.nome}</option>)}
-              </select>
+        {tela === "mural" && (
+          <div style={{animation:"fadeUp .35s ease"}}>
+            <div style={{textAlign:"center",marginBottom:14}}>
+              <div style={{fontSize:19,fontWeight:800}}>Quem está batendo o ponto?</div>
+              <div style={{fontSize:13,color:"var(--muted)",marginTop:2}}>Toque no seu crachá ou digite seu nome</div>
             </div>
-            <div style={{marginBottom:22}}>
-              <label style={labelSt}>Senha</label>
-              <input ref={pinRef} type="password" value={pin} onChange={(e)=>setPin(e.target.value)} onKeyDown={(e)=>{if(e.key==="Enter")acessar();}} placeholder="••••••" style={inputSt}/>
+            <div style={{position:"relative",maxWidth:420,margin:"0 auto 18px"}}>
+              <span style={{position:"absolute",left:14,top:11,fontSize:16,color:"var(--muted)"}}>🔎</span>
+              <input ref={buscaRef} autoFocus value={busca} onChange={(e)=>setBusca(e.target.value)}
+                     placeholder="Buscar por nome..." style={{...inputSt,paddingLeft:40}} />
             </div>
-            <button onClick={acessar} disabled={ocupado} style={{...btnAzul,width:"100%",padding:15,fontSize:16,opacity:ocupado?.7:1}}>{ocupado?"Verificando...":"Acessar"}</button>
-          </div>
-        ) : (
-          <div style={{animation:"fadeUp .4s ease"}}>
-            <div style={{textAlign:"center",padding:"6px 0 16px",borderBottom:"1.5px solid var(--linha)",marginBottom:20}}>
-              <div style={{fontSize:12,color:"var(--muted)",marginBottom:2,fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Bem-vindo(a),</div>
-              <div style={{fontSize:24,fontWeight:800,color:"var(--ink)"}}>{logado.colab.nome}</div>
-              {logado.colab.cargo && <div style={{fontSize:13,color:"var(--muted)",marginTop:2}}>{logado.colab.cargo}</div>}
-            </div>
-
-            <div style={{display:"flex",gap:14,marginBottom:20}}>
-              <button onClick={()=>bater("entrada")} disabled={ocupado} style={{flex:1,padding:"20px 8px",background:"linear-gradient(135deg,var(--verde),var(--verde-esc))",color:"#fff",border:"none",borderRadius:16,cursor:ocupado?"wait":"pointer",fontSize:15,fontWeight:800,opacity:ocupado?.6:1,boxShadow:"0 4px 16px rgba(22,163,74,.25)"}}>
-                <span style={{fontSize:22,display:"block",marginBottom:4}}>▶</span>Entrada
-              </button>
-              <button onClick={()=>bater("saida")} disabled={ocupado} style={{flex:1,padding:"20px 8px",background:"linear-gradient(135deg,var(--vermelho),var(--vermelho-esc))",color:"#fff",border:"none",borderRadius:16,cursor:ocupado?"wait":"pointer",fontSize:15,fontWeight:800,opacity:ocupado?.6:1,boxShadow:"0 4px 16px rgba(220,38,38,.25)"}}>
-                <span style={{fontSize:22,display:"block",marginBottom:4}}>■</span>Saída
-              </button>
-            </div>
-
-            <button onClick={()=>setOccModal({data:hojeISO(),descricao:""})} disabled={ocupado} style={{width:"100%",padding:12,background:"#F59E0B",color:"#fff",border:"none",borderRadius:12,cursor:"pointer",fontSize:14,fontWeight:700,marginBottom:20,boxShadow:"0 2px 8px rgba(245,158,11,.25)"}}>
-              📝 Registrar Ocorrência
-            </button>
-
-            {batidas.length > 0 && (
-              <div style={{marginBottom:18}}>
-                <div style={{fontSize:11,fontWeight:700,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Registros de Hoje</div>
-                <div style={{background:"var(--campo)",border:"1px solid var(--linha)",borderRadius:12,padding:10,maxHeight:160,overflowY:"auto"}}>
-                  {batidas.map((b,i) => (
-                    <div key={i} style={{display:"flex",justifyContent:"space-between",alignItems:"center",padding:"8px 12px",borderRadius:8,marginBottom:3,background:b.tipo==="entrada"?"rgba(22,163,74,.07)":"rgba(220,38,38,.06)"}}>
-                      <span style={{fontSize:12,fontWeight:700,color:b.tipo==="entrada"?"var(--verde)":"var(--vermelho)"}}>{b.tipo==="entrada"?"▶ Entrada":"■ Saída"}</span>
-                      <span style={{fontSize:14,fontFamily:"var(--mono)",fontWeight:600,color:"var(--ink)"}}>{b.hora}</span>
-                    </div>
-                  ))}
-                </div>
-                <div style={{textAlign:"right",marginTop:10,fontSize:14,fontWeight:800,color:"var(--marca)"}}>Hoje: {fmtMin(totalDoDia(batidas))}</div>
+            {filtrados.length === 0 ? (
+              <div style={{textAlign:"center",padding:"26px 0",color:"var(--muted)",fontSize:14}}>Ninguém encontrado com “{busca}”.</div>
+            ) : (
+              <div style={{display:"grid",gridTemplateColumns:"repeat(auto-fill,minmax(150px,1fr))",gap:11,maxHeight:"46vh",overflowY:"auto",padding:"4px 2px"}}>
+                {filtrados.map(c => (
+                  <div key={c.id} className="cracha" onClick={()=>abrirPin(c)}
+                       style={{background:"var(--campo)",border:"1.5px solid var(--linha)",borderRadius:15,padding:"15px 10px",textAlign:"center"}}>
+                    <div style={{display:"flex",justifyContent:"center",marginBottom:9}}><Avatar colab={c} tam={58} fonte={19}/></div>
+                    <div style={{fontSize:13,fontWeight:700,lineHeight:1.25,color:"var(--ink)"}}>{c.nome}</div>
+                    {c.cargo && <div style={{fontSize:11,color:"var(--muted)",marginTop:3}}>{c.cargo}</div>}
+                  </div>
+                ))}
               </div>
             )}
+          </div>
+        )}
 
-            <button onClick={sair} style={{width:"100%",padding:12,background:"transparent",border:"1.5px solid var(--linha)",color:"var(--muted)",borderRadius:10,cursor:"pointer",fontSize:13,fontWeight:600}}>← Sair</button>
+        {tela === "pin" && sel && (
+          <div className={tremer ? "treme" : ""} style={{animation:"fadeUp .3s ease",textAlign:"center"}}>
+            <div style={{display:"flex",justifyContent:"center",marginBottom:10}}><Avatar colab={sel} tam={78} fonte={25}/></div>
+            <div style={{fontSize:20,fontWeight:800}}>{saudacao()}, {primeiroNome(sel.nome)}!</div>
+            {sel.cargo && <div style={{fontSize:13,color:"var(--muted)",marginTop:2}}>{sel.cargo}</div>}
+            <div style={{fontSize:12,color:"var(--muted)",margin:"14px 0 10px",fontWeight:600,textTransform:"uppercase",letterSpacing:1}}>Digite seu PIN</div>
+            <div style={{display:"flex",gap:13,justifyContent:"center",marginBottom:6}}>
+              {[0,1,2,3].map(i => (
+                <div key={i} style={{width:15,height:15,borderRadius:"50%",border:"2px solid "+(i<pin.length?"var(--marca)":"var(--linha)"),background:i<pin.length?"var(--marca)":"transparent",transition:"all .12s ease"}}></div>
+              ))}
+            </div>
+            <div style={{fontSize:12,color:"var(--vermelho)",height:18,fontWeight:600}}>{ocupado ? "Verificando..." : pinErro}</div>
+            <div style={{display:"grid",gridTemplateColumns:"repeat(3,64px)",gap:12,justifyContent:"center",marginTop:4}}>
+              {["1","2","3","4","5","6","7","8","9"].map(d => (
+                <button key={d} onClick={()=>addDigito(d)}
+                        style={{width:64,height:64,borderRadius:"50%",border:"1.5px solid var(--linha)",background:"var(--campo)",fontSize:22,fontWeight:700,color:"var(--ink)",cursor:"pointer"}}>{d}</button>
+              ))}
+              <button onClick={voltarMural} aria-label="Voltar"
+                      style={{width:64,height:64,borderRadius:"50%",border:"none",background:"transparent",fontSize:13,fontWeight:700,color:"var(--muted)",cursor:"pointer"}}>← Voltar</button>
+              <button onClick={()=>addDigito("0")}
+                      style={{width:64,height:64,borderRadius:"50%",border:"1.5px solid var(--linha)",background:"var(--campo)",fontSize:22,fontWeight:700,color:"var(--ink)",cursor:"pointer"}}>0</button>
+              <button onClick={apagaDigito} aria-label="Apagar"
+                      style={{width:64,height:64,borderRadius:"50%",border:"1.5px solid var(--linha)",background:"var(--campo)",fontSize:20,color:"var(--muted)",cursor:"pointer"}}>⌫</button>
+            </div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:14,opacity:.75}}>Pode usar os números do teclado · Backspace apaga · Esc volta</div>
+          </div>
+        )}
+
+        {tela === "registro" && logado && (
+          <div style={{animation:"fadeUp .3s ease",textAlign:"center"}}>
+            <div style={{display:"flex",alignItems:"center",justifyContent:"center",gap:12,marginBottom:6}}>
+              <Avatar colab={logado.colab} tam={52} fonte={17}/>
+              <div style={{textAlign:"left"}}>
+                <div style={{fontSize:19,fontWeight:800,lineHeight:1.15}}>{logado.colab.nome}</div>
+                {logado.colab.cargo && <div style={{fontSize:12,color:"var(--muted)"}}>{logado.colab.cargo}</div>}
+              </div>
+            </div>
+            <div style={{fontSize:13,color:"var(--sec)",marginBottom:16,minHeight:20}}>
+              {batidas.length === 0 ? "Primeira batida de hoje" : (
+                <span style={{display:"inline-flex",gap:7,flexWrap:"wrap",justifyContent:"center"}}>{chipsDia}</span>
+              )}
+            </div>
+            <button onClick={()=>bater(sugestao)} disabled={ocupado}
+                    style={{width:"100%",maxWidth:340,padding:"21px 20px",border:"none",borderRadius:17,cursor:ocupado?"wait":"pointer",fontSize:19,fontWeight:800,color:"#fff",opacity:ocupado?.65:1,
+                            background:sugestao==="entrada"?"linear-gradient(135deg,var(--verde),var(--verde-esc))":"linear-gradient(135deg,var(--vermelho),var(--vermelho-esc))",
+                            animation:ocupado?"none":"pulsa 1.7s ease-in-out infinite"}}>
+              {ocupado ? "Registrando..." : (sugestao==="entrada" ? "▶ Registrar entrada" : "■ Registrar saída")}
+            </button>
+            <div style={{marginTop:12}}>
+              <button onClick={()=>bater(outroTipo)} disabled={ocupado}
+                      style={{background:"none",border:"none",color:"var(--muted)",fontSize:13,fontWeight:600,cursor:"pointer",textDecoration:"underline"}}>
+                Não, quero registrar {rotulo(outroTipo)}
+              </button>
+            </div>
+            <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:20}}>
+              <button onClick={()=>setOccModal({data:hojeISO(),descricao:""})} disabled={ocupado} style={{...btnGhost,color:"#B45309",borderColor:"#FDE68A",background:"#FFFBEB"}}>📝 Registrar ocorrência</button>
+              <button onClick={concluir} style={btnGhost}>← Sair</button>
+            </div>
+            <div style={{fontSize:11,color:"var(--muted)",marginTop:14,opacity:.75}}>Enter confirma a sugestão · Esc sai</div>
+          </div>
+        )}
+
+        {tela === "sucesso" && logado && ultima && (
+          <div style={{animation:"fadeUp .3s ease",textAlign:"center"}}>
+            <div style={{width:86,height:86,borderRadius:"50%",background:ultima.tipo==="entrada"?"rgba(22,163,74,.12)":"rgba(220,38,38,.10)",color:ultima.tipo==="entrada"?"var(--verde)":"var(--vermelho)",display:"flex",alignItems:"center",justifyContent:"center",margin:"0 auto 14px",fontSize:44,fontWeight:800,animation:"aparece .35s ease"}}>✓</div>
+            <div style={{fontSize:21,fontWeight:800}}>
+              {ultima.tipo==="entrada"?"Entrada":"Saída"} registrada às <span style={{fontFamily:"var(--mono)",color:"var(--marca)"}}>{ultima.hora}</span>
+            </div>
+            <div style={{fontSize:13,color:"var(--muted)",margin:"4px 0 16px"}}>{logado.colab.nome}</div>
+            {batidas.length > 0 && (
+              <div style={{marginBottom:6}}>
+                <div style={{fontSize:11,fontWeight:700,color:"var(--muted)",marginBottom:8,textTransform:"uppercase",letterSpacing:1}}>Suas batidas de hoje</div>
+                <div style={{display:"flex",gap:7,flexWrap:"wrap",justifyContent:"center"}}>{chipsDia}</div>
+                <div style={{marginTop:12,fontSize:14,fontWeight:800,color:"var(--marca)"}}>Hoje: {fmtMin(totalDoDia(batidas))}</div>
+              </div>
+            )}
+            <div style={{display:"flex",gap:8,justifyContent:"center",marginTop:16}}>
+              <button onClick={concluir} style={{...btnAzul,padding:"11px 26px"}}>Concluir</button>
+              <button onClick={()=>setOccModal({data:hojeISO(),descricao:""})} style={{...btnGhost,color:"#B45309",borderColor:"#FDE68A",background:"#FFFBEB"}}>📝 Ocorrência</button>
+            </div>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:12}}>Voltando ao início em {conta}s</div>
           </div>
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v29</div>
     </div>
   );
 }
