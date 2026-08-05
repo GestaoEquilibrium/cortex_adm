@@ -330,7 +330,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v17</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v18</div>
       </aside>
     </React.Fragment>
   );
@@ -1773,9 +1773,9 @@ function AbaOrganograma({ ctx }) {
 
   async function carregar() {
     const { data, error } = await sb.from("colaboradores")
-      .select("id, nome, cargo, setor, status, responde_para, foto_url, formacao, registro_profissional, unidade, telefone, email, nascimento, admissao, origem_ponto_id")
+      .select("id, nome, cargo, setor, status, responde_para, no_topo, foto_url, formacao, registro_profissional, unidade, telefone, email, nascimento, admissao, origem_ponto_id")
       .neq("status", "desligado").order("nome").limit(20000);
-    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("foto_url") !== -1 || error.message.indexOf("responde_para") !== -1 ? " — rode o 08 e o 10 no Supabase." : "")); return; }
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("no_topo") !== -1 ? " — rode o 11_organograma_topo.sql." : (error.message.indexOf("foto_url") !== -1 || error.message.indexOf("responde_para") !== -1 ? " — rode o 08 e o 10 no Supabase." : ""))); return; }
     setMsg(""); setColabs(data || []);
   }
   useEffect(() => { carregar(); }, []);
@@ -1791,8 +1791,8 @@ function AbaOrganograma({ ctx }) {
       }
     });
     const temChefe = (c) => c.responde_para && porId[c.responde_para];
-    const raizes = colabs.filter((c) => !temChefe(c) && (filhos[c.id] || []).length > 0);
-    let soltos = colabs.filter((c) => !temChefe(c) && !(filhos[c.id] || []).length);
+    const raizes = colabs.filter((c) => c.no_topo || (!temChefe(c) && (filhos[c.id] || []).length > 0));
+    let soltos = colabs.filter((c) => !c.no_topo && !temChefe(c) && !(filhos[c.id] || []).length);
     const alcancado = {};
     const visitar = (id) => { if (alcancado[id]) return; alcancado[id] = 1; (filhos[id] || []).forEach((f) => visitar(f.id)); };
     raizes.forEach((r) => visitar(r.id));
@@ -1835,7 +1835,7 @@ function AbaOrganograma({ ctx }) {
   // ---- acoes ----
   function abrirEdicao(c) {
     setPop(null); setNovo(null);
-    setEdit(edit && edit.id === c.id ? null : { id: c.id, responde_para: c.responde_para || "", cargo: c.cargo || "", setor: c.setor || "" });
+    setEdit(edit && edit.id === c.id ? null : { id: c.id, responde_para: c.responde_para || "", cargo: c.cargo || "", setor: c.setor || "", no_topo: !!c.no_topo });
   }
   function abrirNovo(chefeId) {
     setPop(null); setEdit(null);
@@ -1854,7 +1854,8 @@ function AbaOrganograma({ ctx }) {
   }
   async function salvarEdit() {
     const { error } = await sb.from("colaboradores").update({
-      responde_para: edit.responde_para || null,
+      no_topo: !!edit.no_topo,
+      responde_para: edit.no_topo ? null : (edit.responde_para || null),
       cargo: (edit.cargo || "").trim() || null,
       setor: (edit.setor || "").trim() || null,
     }).eq("id", edit.id);
@@ -1872,7 +1873,7 @@ function AbaOrganograma({ ctx }) {
     if (e1) { setMsg("Erro: " + e1.message); return; }
     const { error: e2 } = criadoAMao
       ? await sb.from("colaboradores").delete().eq("id", c.id)
-      : await sb.from("colaboradores").update({ responde_para: null }).eq("id", c.id);
+      : await sb.from("colaboradores").update({ responde_para: null, no_topo: false }).eq("id", c.id);
     if (e2) { setMsg("Erro: " + e2.message); return; }
     setMsg(""); carregar();
   }
@@ -1983,8 +1984,12 @@ function AbaOrganograma({ ctx }) {
       {editando && podeEditar && (
         <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
           <span style={{ fontSize: 12.5, fontWeight: 600, textTransform: "uppercase" }}>{arvore.porId[edit.id].nome}</span>
+          <label style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 12.5, color: "var(--sec)" }}>
+            <button type="button" className={"sw" + (edit.no_topo ? " on" : "")} onClick={() => setEdit({ ...edit, no_topo: !edit.no_topo, responde_para: edit.no_topo ? edit.responde_para : "" })} aria-label="Fixar no topo"></button>
+            topo (fundador/diretor)
+          </label>
           <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
-          <select className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
+          <select className="campo" disabled={edit.no_topo} style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5, opacity: edit.no_topo ? .55 : 1 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
             <option value="">ninguém (topo do organograma)</option>
             {colabs.filter((c) => c.id !== edit.id && !desc[c.id]).map((c) => (
               <option key={c.id} value={c.id}>{c.nome}</option>
@@ -3044,6 +3049,11 @@ function AbaLinks({ podeEditar }) {
   );
 }
 
+const ROT_FICHA = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .6, marginBottom: 4 };
+function CampoFicha({ r, filho, largo }) {
+  return <div style={{ gridColumn: largo ? "1 / -1" : "auto" }}><label style={ROT_FICHA}>{r}</label>{filho}</div>;
+}
+
 async function reduzirFoto(arq, max) {
   try {
     const img = await createImageBitmap(arq);
@@ -3114,11 +3124,7 @@ function AbaFichas({ ctx, podeEditar }) {
     setEnviandoFoto(false);
   }
 
-  const rot = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .6, marginBottom: 4 };
   const cx = { width: "100%", padding: "8px 10px", fontSize: 12.5 };
-  const Campo = ({ r, filho, largo }) => (
-    <div style={{ gridColumn: largo ? "1 / -1" : "auto" }}><label style={rot}>{r}</label>{filho}</div>
-  );
 
   return (
     <div style={{ display: "flex", gap: 12, alignItems: "flex-start", flexWrap: "wrap" }}>
@@ -3168,25 +3174,25 @@ function AbaFichas({ ctx, podeEditar }) {
             </div>
 
             <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(210px, 1fr))", gap: 11 }}>
-              <Campo r="Nome completo" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.nome || ""} onChange={(e) => setSel({ ...sel, nome: e.target.value })} />} />
-              <Campo r="Status" filho={
+              <CampoFicha r="Nome completo" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.nome || ""} onChange={(e) => setSel({ ...sel, nome: e.target.value })} />} />
+              <CampoFicha r="Status" filho={
                 <select className="campo" style={cx} disabled={ro} value={sel.status} onChange={(e) => setSel({ ...sel, status: e.target.value })}>
                   <option value="ativo">Ativo</option><option value="ferias">Férias</option>
                   <option value="afastado">Afastado</option><option value="desligado">Desligado</option>
                 </select>} />
-              <Campo r="Cargo" filho={<input className="campo" style={cx} disabled={ro} value={sel.cargo || ""} onChange={(e) => setSel({ ...sel, cargo: e.target.value })} />} />
-              <Campo r="Setor" filho={<input className="campo" style={cx} disabled={ro} value={sel.setor || ""} onChange={(e) => setSel({ ...sel, setor: e.target.value })} />} />
-              <Campo r="Unidade" filho={<input className="campo" style={cx} disabled={ro} placeholder="EQ1 / EQ2" value={sel.unidade || ""} onChange={(e) => setSel({ ...sel, unidade: e.target.value })} />} />
-              <Campo r="Regime" filho={<input className="campo" style={cx} disabled={ro} placeholder="CLT / PJ / Estágio" value={sel.regime || ""} onChange={(e) => setSel({ ...sel, regime: e.target.value })} />} />
-              <Campo r="Admissão" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.admissao || ""} onChange={(e) => setSel({ ...sel, admissao: e.target.value })} />} />
-              <Campo r="Nascimento" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.nascimento || ""} onChange={(e) => setSel({ ...sel, nascimento: e.target.value })} />} />
-              <Campo r="CPF" filho={<input className="campo" style={cx} disabled={ro} value={sel.cpf || ""} onChange={(e) => setSel({ ...sel, cpf: e.target.value })} />} />
-              <Campo r="Telefone" filho={<input className="campo" style={cx} disabled={ro} value={sel.telefone || ""} onChange={(e) => setSel({ ...sel, telefone: e.target.value })} />} />
-              <Campo r="E-mail" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.email || ""} onChange={(e) => setSel({ ...sel, email: e.target.value })} />} />
-              <Campo r="Formação" largo filho={<input className="campo" style={cx} disabled={ro} placeholder="ex.: Psicologia — UFU, especialização em neuropsicologia" value={sel.formacao || ""} onChange={(e) => setSel({ ...sel, formacao: e.target.value })} />} />
-              <Campo r="Registro profissional" filho={<input className="campo" style={cx} disabled={ro} placeholder="CRP / CRM / CREFITO…" value={sel.registro_profissional || ""} onChange={(e) => setSel({ ...sel, registro_profissional: e.target.value })} />} />
-              <Campo r="Salário (R$)" filho={<input className="campo" type="number" step="0.01" style={cx} disabled={ro} value={sel.salario === null || sel.salario === undefined ? "" : sel.salario} onChange={(e) => setSel({ ...sel, salario: e.target.value })} />} />
-              <Campo r="Observações" largo filho={<textarea className="campo" style={{ ...cx, minHeight: 70, resize: "vertical" }} disabled={ro} value={sel.observacoes || ""} onChange={(e) => setSel({ ...sel, observacoes: e.target.value })} />} />
+              <CampoFicha r="Cargo" filho={<input className="campo" style={cx} disabled={ro} value={sel.cargo || ""} onChange={(e) => setSel({ ...sel, cargo: e.target.value })} />} />
+              <CampoFicha r="Setor" filho={<input className="campo" style={cx} disabled={ro} value={sel.setor || ""} onChange={(e) => setSel({ ...sel, setor: e.target.value })} />} />
+              <CampoFicha r="Unidade" filho={<input className="campo" style={cx} disabled={ro} placeholder="EQ1 / EQ2" value={sel.unidade || ""} onChange={(e) => setSel({ ...sel, unidade: e.target.value })} />} />
+              <CampoFicha r="Regime" filho={<input className="campo" style={cx} disabled={ro} placeholder="CLT / PJ / Estágio" value={sel.regime || ""} onChange={(e) => setSel({ ...sel, regime: e.target.value })} />} />
+              <CampoFicha r="Admissão" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.admissao || ""} onChange={(e) => setSel({ ...sel, admissao: e.target.value })} />} />
+              <CampoFicha r="Nascimento" filho={<input className="campo" type="date" style={cx} disabled={ro} value={sel.nascimento || ""} onChange={(e) => setSel({ ...sel, nascimento: e.target.value })} />} />
+              <CampoFicha r="CPF" filho={<input className="campo" style={cx} disabled={ro} value={sel.cpf || ""} onChange={(e) => setSel({ ...sel, cpf: e.target.value })} />} />
+              <CampoFicha r="Telefone" filho={<input className="campo" style={cx} disabled={ro} value={sel.telefone || ""} onChange={(e) => setSel({ ...sel, telefone: e.target.value })} />} />
+              <CampoFicha r="E-mail" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.email || ""} onChange={(e) => setSel({ ...sel, email: e.target.value })} />} />
+              <CampoFicha r="Formação" largo filho={<input className="campo" style={cx} disabled={ro} placeholder="ex.: Psicologia — UFU, especialização em neuropsicologia" value={sel.formacao || ""} onChange={(e) => setSel({ ...sel, formacao: e.target.value })} />} />
+              <CampoFicha r="Registro profissional" filho={<input className="campo" style={cx} disabled={ro} placeholder="CRP / CRM / CREFITO…" value={sel.registro_profissional || ""} onChange={(e) => setSel({ ...sel, registro_profissional: e.target.value })} />} />
+              <CampoFicha r="Salário (R$)" filho={<input className="campo" type="number" step="0.01" style={cx} disabled={ro} value={sel.salario === null || sel.salario === undefined ? "" : sel.salario} onChange={(e) => setSel({ ...sel, salario: e.target.value })} />} />
+              <CampoFicha r="Observações" largo filho={<textarea className="campo" style={{ ...cx, minHeight: 70, resize: "vertical" }} disabled={ro} value={sel.observacoes || ""} onChange={(e) => setSel({ ...sel, observacoes: e.target.value })} />} />
             </div>
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>

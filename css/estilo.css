@@ -427,3 +427,15 @@ body {
 .org-pop-nome { text-transform: uppercase; font-weight: 800; font-size: 13px; letter-spacing: .3px; line-height: 1.25; }
 .org-pop-lin { display: flex; gap: 8px; font-size: 12px; padding: 3px 0; align-items: baseline; }
 .org-pop-lin b { color: var(--muted); font-weight: 600; min-width: 86px; text-align: right; font-size: 11px; flex: none; }
+
+
+/* ===== Sidebar fixa na altura da tela (rola por dentro se precisar) ===== */
+.sb {
+  position: sticky;
+  top: 14px;
+  align-self: flex-start;
+  height: calc(100vh - 28px);
+  max-height: calc(100vh - 28px);
+  overflow-y: auto;
+  overflow-x: hidden;
+}
