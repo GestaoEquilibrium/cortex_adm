@@ -340,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v29</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v30</div>
       </aside>
     </React.Fragment>
   );

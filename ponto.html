@@ -161,7 +161,7 @@ function TelaConfig(){
 
 // ─── aplicativo ───
 function App(){
-  const [tela, setTela] = useState("mural");         // mural | pin | registro | sucesso
+  const [tela, setTela] = useState("inicio");         // mural | pin | registro | sucesso
   const [colabs, setColabs] = useState([]);
   const [carregando, setCarregando] = useState(true);
   const [busca, setBusca] = useState("");
@@ -205,8 +205,13 @@ function App(){
   }, [carregar]);
 
   function concluir(){
-    setTela("mural"); setSel(null); setPin(""); setPinErro(""); setLogado(null);
+    setTela("inicio"); setSel(null); setPin(""); setPinErro(""); setLogado(null);
     setBatidas([]); setUltima(null); setBusca(""); setOccModal(null);
+  }
+
+  function abrirMural(seed){
+    setBusca(seed || "");
+    setTela("mural");
     setTimeout(()=>{ if (buscaRef.current) buscaRef.current.focus(); }, 60);
   }
 
@@ -290,13 +295,28 @@ function App(){
     return () => clearInterval(t);
   }, [tela, occModal]);
 
+  // Mural ocioso por 60s volta sozinho a tela inicial.
+  useEffect(() => {
+    if (tela !== "mural") return;
+    let t = setTimeout(concluir, 60000);
+    const acorda = () => { clearTimeout(t); t = setTimeout(concluir, 60000); };
+    window.addEventListener("keydown", acorda);
+    window.addEventListener("pointerdown", acorda);
+    return () => { clearTimeout(t); window.removeEventListener("keydown", acorda); window.removeEventListener("pointerdown", acorda); };
+  }, [tela]);
+
   // Teclado físico: letras buscam no mural; números digitam o PIN;
   // Backspace apaga; Enter confirma; Esc volta.
   useEffect(() => {
     function aoTeclar(e){
       if (occModal) return;
+      if (tela === "inicio") {
+        if (e.key === "Enter" || e.key === " ") { abrirMural(""); e.preventDefault(); return; }
+        if (e.key.length === 1 && /[\p{L}\p{N}]/u.test(e.key)) { abrirMural(e.key); e.preventDefault(); return; }
+        return;
+      }
       if (tela === "mural") {
-        if (e.key === "Escape") { setBusca(""); return; }
+        if (e.key === "Escape") { concluir(); return; }
         if (document.activeElement === buscaRef.current) return;
         if (e.key === "Backspace") { setBusca(b => b.slice(0,-1)); return; }
         if (e.key.length === 1 && /[\p{L}\p{N} ]/u.test(e.key)) {
@@ -364,7 +384,17 @@ function App(){
 
       <div style={{width:"100%",maxWidth:tela==="mural"?880:470,background:"#fff",borderRadius:22,padding:"32px 32px 26px",boxShadow:"0 2px 6px rgba(28,37,48,.05), 0 16px 44px rgba(28,37,48,.09)",border:"1.5px solid var(--linha)",transition:"max-width .25s ease"}}>
         <Marca/>
-        <Relogio compacto={tela!=="mural"}/>
+        <Relogio compacto={tela!=="inicio"}/>
+
+        {tela === "inicio" && (
+          <div style={{animation:"fadeUp .35s ease",textAlign:"center",padding:"6px 0 8px"}}>
+            <button onClick={()=>abrirMural("")}
+                    style={{width:"100%",maxWidth:340,padding:"24px 20px",border:"none",borderRadius:18,cursor:"pointer",fontSize:20,fontWeight:800,color:"#fff",background:"linear-gradient(135deg,var(--marca),var(--marca-claro))",animation:"pulsa 1.8s ease-in-out infinite"}}>
+              👆 Bater ponto
+            </button>
+            <div style={{fontSize:12,color:"var(--muted)",marginTop:14,opacity:.8}}>Toque no botão ou aperte Enter</div>
+          </div>
+        )}
 
         {tela === "mural" && (
           <div style={{animation:"fadeUp .35s ease"}}>
@@ -479,7 +509,7 @@ function App(){
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v29</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v30</div>
     </div>
   );
 }
