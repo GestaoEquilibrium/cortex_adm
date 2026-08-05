@@ -63,6 +63,7 @@ function iniciais(nome){
   if (!p.length) return "?";
   return (p[0][0] + (p.length > 1 ? p[p.length-1][0] : "")).toUpperCase();
 }
+function semAcento(t){ return String(t||"").normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLowerCase(); }
 function saudacao(){ const h = new Date().getHours(); return h < 12 ? "Bom dia" : h < 18 ? "Boa tarde" : "Boa noite"; }
 function primeiroNome(nome){ return String(nome||"").trim().split(/\s+/)[0] || ""; }
 
@@ -356,7 +357,7 @@ function App(){
     </div>
   );
 
-  const filtrados = colabs.filter(c => (c.nome || "").toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0);
+  const filtrados = colabs.filter(c => semAcento(c.nome).indexOf(semAcento(busca.trim())) >= 0);
   const chipsDia = batidas.map((b,i) => (
     <span key={i} style={{background:b.tipo==="entrada"?"rgba(22,163,74,.10)":"rgba(220,38,38,.08)",color:b.tipo==="entrada"?"var(--verde-esc)":"var(--vermelho-esc)",fontSize:13,fontWeight:700,padding:"6px 13px",borderRadius:999,fontFamily:"var(--mono)"}}>
       {b.tipo==="entrada"?"▶ ":"■ "}{b.hora}
@@ -509,7 +510,7 @@ function App(){
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v30</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v31</div>
     </div>
   );
 }

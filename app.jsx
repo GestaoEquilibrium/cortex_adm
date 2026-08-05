@@ -340,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v30</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v31</div>
       </aside>
     </React.Fragment>
   );
@@ -1028,8 +1028,8 @@ function AbaColaboradores({ ctx }) {
       nome: c.nome || "", cpf: c.cpf || "", cargo: c.cargo || "", setor: c.setor || "",
       regime: c.regime || "CLT", unidade: c.unidade || "", email: c.email || "", telefone: c.telefone || "",
       admissao: c.admissao || "", nascimento: c.nascimento || "", salario: c.salario != null ? String(c.salario).replace(".", ",") : "",
-      status: c.status || "ativo", observacoes: c.observacoes || "",
-    } : { nome: "", cpf: "", cargo: "", setor: "", regime: "CLT", unidade: "", email: "", telefone: "", admissao: "", nascimento: "", salario: "", status: "ativo", observacoes: "" });
+      status: c.status || "ativo", observacoes: c.observacoes || "", pin: c.pin || "",
+    } : { nome: "", cpf: "", cargo: "", setor: "", regime: "CLT", unidade: "", email: "", telefone: "", admissao: "", nascimento: "", salario: "", status: "ativo", observacoes: "", pin: "" });
     setFormAberto(true);
     setMsg("");
   }
@@ -1038,12 +1038,14 @@ function AbaColaboradores({ ctx }) {
 
   async function salvar() {
     if (!f.nome.trim()) { setMsg("O nome é obrigatório."); return; }
+    if (f.pin.trim() && !/^[0-9]{4}$/.test(f.pin.trim())) { setMsg("O PIN do relógio precisa ter exatamente 4 números."); return; }
     setSalvando(true);
     const dados = {
       nome: f.nome.trim(), cpf: f.cpf.trim() || null, cargo: f.cargo.trim() || null, setor: f.setor.trim() || null,
       regime: f.regime || null, unidade: f.unidade.trim() || null, email: f.email.trim() || null, telefone: f.telefone.trim() || null,
       admissao: f.admissao || null, nascimento: f.nascimento || null,
       salario: numeroBr(f.salario), status: f.status, observacoes: f.observacoes.trim() || null,
+      pin: f.pin.trim() || null,
       atualizado_por: ctx.profile.id,
     };
     const r = editando
@@ -1163,6 +1165,7 @@ function AbaColaboradores({ ctx }) {
             <select className="campo" style={{ padding: "8px 10px", fontSize: 13 }} value={f.status} onChange={(e) => campo("status", e.target.value)}>
               <option value="ativo">Ativo</option><option value="ferias">Férias</option><option value="afastado">Afastado</option><option value="desligado">Desligado</option>
             </select>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 13 }} placeholder="PIN do relógio (4 números)" maxLength={4} value={f.pin} onChange={(e) => campo("pin", e.target.value.replace(/\D/g, ""))} />
           </div>
           <input className="campo" style={{ padding: "8px 10px", fontSize: 13, marginBottom: 8 }} placeholder="Observações" value={f.observacoes} onChange={(e) => campo("observacoes", e.target.value)} />
           <div style={{ display: "flex", gap: 8 }}>
