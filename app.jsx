@@ -332,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v20</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v21</div>
       </aside>
     </React.Fragment>
   );
@@ -1751,6 +1751,67 @@ function AbaPonto({ ctx }) {
   );
 }
 
+function SeletorPessoa({ pessoas, valor, aoEscolher, excluir, noMapa, rotuloVazio }) {
+  const [aberto, setAberto] = useState(false);
+  const [busca, setBusca] = useState("");
+  const caixaRef = useRef(null);
+  useEffect(() => {
+    function fora(e) { if (caixaRef.current && !caixaRef.current.contains(e.target)) setAberto(false); }
+    document.addEventListener("pointerdown", fora);
+    return () => document.removeEventListener("pointerdown", fora);
+  }, []);
+  const norm = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const lista = (pessoas || [])
+    .filter((c) => !excluir || !excluir[c.id])
+    .filter((c) => !busca || norm(c.nome).indexOf(norm(busca)) !== -1)
+    .slice()
+    .sort((a, b) => (((noMapa && noMapa[b.id]) ? 1 : 0) - ((noMapa && noMapa[a.id]) ? 1 : 0)) || a.nome.localeCompare(b.nome));
+  const atual = (pessoas || []).find((c) => c.id === valor);
+  const mini = { width: 20, height: 20, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 8, display: "flex", alignItems: "center", justifyContent: "center", flex: "none" };
+  return (
+    <div ref={caixaRef} style={{ position: "relative" }}>
+      <div className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5, display: "flex", alignItems: "center", gap: 7, cursor: "pointer", minHeight: 37 }}
+        onClick={() => { setAberto(!aberto); setBusca(""); }}>
+        {atual ? (
+          <span style={{ display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+            {atual.foto_url ? <img src={atual.foto_url} alt="" style={{ ...mini, objectFit: "cover" }} /> : <span style={mini}>{iniciais(atual.nome)}</span>}
+            <span style={{ fontWeight: 600, textTransform: "uppercase", fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{atual.nome}</span>
+          </span>
+        ) : (
+          <span style={{ color: "var(--muted)" }}>{rotuloVazio || "ninguém (topo)"}</span>
+        )}
+        <i className={"ti ti-chevron-" + (aberto ? "up" : "down")} style={{ marginLeft: "auto", color: "var(--muted)", fontSize: 14 }} aria-hidden="true"></i>
+      </div>
+      {aberto && (
+        <div className="sel-pessoa-caixa anim-pop">
+          <input autoFocus className="campo" style={{ width: "100%", padding: "7px 9px", fontSize: 12.5, marginBottom: 6 }} placeholder="digite para buscar…"
+            value={busca} onChange={(e) => setBusca(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" && lista.length) { aoEscolher(lista[0].id); setAberto(false); }
+              if (e.key === "Escape") setAberto(false);
+            }} />
+          <div className="sel-pessoa-op" style={{ color: "var(--muted)" }} onClick={() => { aoEscolher(""); setAberto(false); }}>
+            <i className="ti ti-crown" style={{ fontSize: 13 }} aria-hidden="true"></i>{rotuloVazio || "ninguém (topo)"}
+          </div>
+          <div style={{ maxHeight: 230, overflowY: "auto" }}>
+            {lista.length === 0 && <div style={{ padding: "10px 8px", fontSize: 12, color: "var(--muted)" }}>ninguém com esse nome</div>}
+            {lista.map((c) => (
+              <div key={c.id} className="sel-pessoa-op" onClick={() => { aoEscolher(c.id); setAberto(false); }}>
+                {c.foto_url ? <img src={c.foto_url} alt="" style={{ ...mini, objectFit: "cover" }} /> : <span style={mini}>{iniciais(c.nome)}</span>}
+                <span style={{ minWidth: 0, flex: 1 }}>
+                  <span style={{ display: "block", fontWeight: 600, textTransform: "uppercase", fontSize: 11.5, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.nome}</span>
+                  <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{c.cargo || "—"}</span>
+                </span>
+                {noMapa && noMapa[c.id] && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontSize: 9, padding: "2px 7px", flex: "none" }}>no mapa</span>}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const CORES_SETOR = {
   diretoria:   ["var(--tint)",     "var(--marca-texto)"],
   clinico:     ["var(--roxo-bg)",  "var(--roxo)"],
@@ -1771,6 +1832,7 @@ function AbaOrganograma({ ctx }) {
   const [edit, setEdit] = useState(null);
   const [novo, setNovo] = useState(null);
   const [pop, setPop] = useState(null);
+  const [verSoltos, setVerSoltos] = useState(false);
   const popTimer = useRef(null);
 
   async function carregar() {
@@ -1800,7 +1862,7 @@ function AbaOrganograma({ ctx }) {
     raizes.forEach((r) => visitar(r.id));
     const presos = colabs.filter((c) => !alcancado[c.id] && soltos.indexOf(c) === -1 && raizes.indexOf(c) === -1);
     soltos = soltos.concat(presos);
-    return { porId, filhos, raizes, soltos };
+    return { porId, filhos, raizes, soltos, noMapa: alcancado };
   }, [colabs]);
 
   const setores = useMemo(() => {
@@ -1988,10 +2050,9 @@ function AbaOrganograma({ ctx }) {
                 <div><label style={ROT_FICHA}>Setor</label>
                   <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.setor} onChange={(e) => setNovo({ ...novo, setor: e.target.value })} /></div>
                 <div><label style={ROT_FICHA}>Responde para</label>
-                  <select className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={novo.responde_para} onChange={(e) => setNovo({ ...novo, responde_para: e.target.value })}>
-                    <option value="">ninguém (topo)</option>
-                    {(colabs || []).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
-                  </select></div>
+                  <SeletorPessoa pessoas={colabs || []} valor={novo.responde_para} noMapa={arvore ? arvore.noMapa : null}
+                    rotuloVazio="ninguém (topo)"
+                    aoEscolher={(v) => setNovo({ ...novo, responde_para: v })} /></div>
               </div>
             ) : (
               <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -1999,13 +2060,13 @@ function AbaOrganograma({ ctx }) {
                   <button type="button" className={"sw" + (edit.no_topo ? " on" : "")} onClick={() => setEdit({ ...edit, no_topo: !edit.no_topo, responde_para: edit.no_topo ? edit.responde_para : "" })} aria-label="Fixar no topo"></button>
                   topo (fundador/diretor)
                 </label>
-                <div><label style={ROT_FICHA}>Responde para</label>
-                  <select className="campo" disabled={edit.no_topo} style={{ width: "100%", padding: "8px 10px", fontSize: 12.5, opacity: edit.no_topo ? .55 : 1 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
-                    <option value="">ninguém (topo do organograma)</option>
-                    {colabs.filter((c) => c.id !== edit.id && !desc[c.id]).map((c) => (
-                      <option key={c.id} value={c.id}>{c.nome}</option>
-                    ))}
-                  </select></div>
+                <div style={{ opacity: edit.no_topo ? .5 : 1, pointerEvents: edit.no_topo ? "none" : "auto" }}>
+                  <label style={ROT_FICHA}>Responde para</label>
+                  <SeletorPessoa pessoas={colabs} valor={edit.responde_para} noMapa={arvore.noMapa}
+                    excluir={Object.assign({ [edit.id]: 1 }, desc)}
+                    rotuloVazio="ninguém (topo do organograma)"
+                    aoEscolher={(v) => setEdit({ ...edit, responde_para: v })} />
+                </div>
                 <div><label style={ROT_FICHA}>Cargo</label>
                   <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={edit.cargo} onChange={(e) => setEdit({ ...edit, cargo: e.target.value })} /></div>
                 <div><label style={ROT_FICHA}>Setor</label>
@@ -2042,12 +2103,24 @@ function AbaOrganograma({ ctx }) {
 
           {arvore.soltos.length > 0 && (
             <div style={{ marginTop: 12 }}>
-              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sec)", textTransform: "uppercase", letterSpacing: .5, margin: "0 2px 8px" }}>
-                Sem vínculo no organograma
-              </div>
-              <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
-                {arvore.soltos.map((c) => <Cartao key={c.id} c={c} />)}
-              </div>
+              {!verSoltos ? (
+                <button className="btn-contorno" style={{ padding: "8px 14px", fontSize: 12.5 }} onClick={() => setVerSoltos(true)}>
+                  <i className="ti ti-users" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                  Mostrar todos os prestadores sem vínculo ({arvore.soltos.length})
+                </button>
+              ) : (
+                <div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 10, margin: "0 2px 8px" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sec)", textTransform: "uppercase", letterSpacing: .5 }}>
+                      Sem vínculo no organograma ({arvore.soltos.length})
+                    </span>
+                    <button className="btn-contorno" style={{ padding: "4px 10px", fontSize: 11 }} onClick={() => setVerSoltos(false)}>esconder</button>
+                  </div>
+                  <div style={{ display: "flex", flexWrap: "wrap", gap: 8 }}>
+                    {arvore.soltos.map((c) => <Cartao key={c.id} c={c} />)}
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
