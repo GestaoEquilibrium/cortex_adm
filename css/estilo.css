@@ -462,3 +462,11 @@ body {
 .gs-oc { font-weight: 700; text-transform: uppercase; line-height: 1.15; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .gs-oc .h { display: block; font-weight: 500; color: var(--muted); font-size: 8.5px; }
 .gs-badge { min-width: 34px; height: 30px; border-radius: 9px; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; padding: 0 9px; flex: none; }
+
+
+/* ===== Salas: celulas no padrao do croqui (iniciais + cores) ===== */
+.gs-cel { text-align: center; vertical-align: middle; padding: 2px; }
+.gs-pill { display: inline-flex; align-items: center; justify-content: center; min-width: 23px; height: 19px; padding: 0 4px; margin: 1px; border-radius: 6px; font-size: 9.5px; font-weight: 800; letter-spacing: .3px; color: #22384D; }
+.gs-x { background: #EDF0F4; color: #9AA6B4; }
+.gs-cel.livre { background: #E7F9EF; border-color: #C8EEDA; }
+.gs.pode .gs-cel.livre:hover::after { content: "+"; color: var(--verde); font-weight: 800; font-size: 13px; line-height: 1; }

@@ -332,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v22</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v23</div>
       </aside>
     </React.Fragment>
   );
@@ -2586,6 +2586,18 @@ function AbaAlertas({ ctx }) {
   );
 }
 
+const PALETA_PESSOAS = ["#BFD9F2", "#F9C6C6", "#C9EFD4", "#F6D9B0", "#E3CBF2", "#BFE9E4", "#F2C9DF", "#D6E3B8", "#F4CBB4", "#C5D2F4", "#EFE3A9", "#D9C8EE", "#B8E6F2", "#F2D3C2"];
+function corPessoa(chave) {
+  let h = 0;
+  const s = String(chave || "");
+  for (let i = 0; i < s.length; i++) h = (h * 31 + s.charCodeAt(i)) >>> 0;
+  return PALETA_PESSOAS[h % PALETA_PESSOAS.length];
+}
+function iniciaisCroqui(nome) {
+  const t = (nome || "").trim();
+  return t ? t.slice(0, 2).toUpperCase() : "?";
+}
+
 const DIAS_SALAS = [[1, "Seg"], [2, "Ter"], [3, "Qua"], [4, "Qui"], [5, "Sex"], [6, "Sáb"]];
 const PERIODOS_SALAS = [[1, "P1"], [2, "P2"], [3, "P3"]];
 const HORA_PERIODO = { 1: "7h", 2: "12h", 3: "16h" };
@@ -2661,6 +2673,20 @@ function PaginaSalas({ ctx }) {
   }, [salasVista, mapa]);
 
   const primeiroNome = (n) => (n || "").trim().split(/\s+/)[0];
+
+  const legenda = useMemo(() => {
+    const m = {};
+    salasVista.forEach((s) => {
+      const porCel = mapa[s.id] || {};
+      Object.keys(porCel).forEach((k) => porCel[k].forEach((o) => {
+        const pes = o.colaborador_id ? pessoaPorId[o.colaborador_id] : null;
+        const nome = pes ? pes.nome : (o.rotulo || "");
+        if (!nome || (!pes && o.rotulo === "Indisponível")) return;
+        m[o.colaborador_id || nome] = nome;
+      }));
+    });
+    return Object.keys(m).map((c) => ({ chave: c, nome: m[c] })).sort((a, b) => a.nome.localeCompare(b.nome));
+  }, [salasVista, mapa, pessoaPorId]);
 
   function abrirCelula(s, d, p) {
     const ocs = ((mapa[s.id] || {})[d + "-" + p] || []);
@@ -2858,6 +2884,20 @@ function PaginaSalas({ ctx }) {
             Nenhuma sala ativa em {unidade}{andar ? " · " + andar : ""}. {podeCad ? "Cadastre na visão Salas." : ""}
           </div>
         ) : (
+          <div>
+            {legenda.length > 0 && (
+              <div className="card-fl" style={{ padding: "8px 12px", marginBottom: 10, display: "flex", flexWrap: "wrap", gap: 9, alignItems: "center" }}>
+                {legenda.map((l) => (
+                  <span key={l.chave} style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--sec)", fontWeight: 600 }}>
+                    <span className="gs-pill" style={{ background: corPessoa(l.chave) }}>{iniciaisCroqui(l.nome)}</span>
+                    {primeiroNome(l.nome)}
+                  </span>
+                ))}
+                <span style={{ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11, color: "var(--muted)" }}>
+                  <span className="gs-pill gs-x">✕</span>indisponível
+                </span>
+              </div>
+            )}
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(300px, 1fr))", gap: 12 }}>
             {salasVista.map((s) => (
               <div key={s.id} className="card-fl" style={{ padding: "11px 12px" }}>
@@ -2868,7 +2908,7 @@ function PaginaSalas({ ctx }) {
                     <div style={{ fontSize: 10.5, color: "var(--muted)" }}>{s.unidade}{s.andar ? " · " + s.andar : ""}</div>
                   </div>
                 </div>
-                <table className="gs">
+                <table className={"gs" + (podeGrade ? " pode" : "")}>
                   <thead><tr><th></th>{DIAS_SALAS.map(([d, r]) => <th key={d}>{r}</th>)}</tr></thead>
                   <tbody>
                     {PERIODOS_SALAS.map(([p, rp]) => (
@@ -2879,12 +2919,14 @@ function PaginaSalas({ ctx }) {
                           return (
                             <td key={d} className={"gs-cel" + (ocs.length ? "" : " livre")} onClick={() => abrirCelula(s, d, p)}
                               title={ocs.map((o) => (o.colaborador_id ? (pessoaPorId[o.colaborador_id] || {}).nome : o.rotulo) + (o.horario ? " (" + o.horario + ")" : "")).join(", ") || "Livre"}>
-                              {ocs.map((o) => (
-                                <div key={o.id} className="gs-oc">
-                                  {o.colaborador_id ? primeiroNome((pessoaPorId[o.colaborador_id] || {}).nome) : (o.rotulo || "?")}
-                                  {o.horario && <span className="h">{o.horario}</span>}
-                                </div>
-                              ))}
+                              {ocs.map((o) => {
+                                const pes = o.colaborador_id ? pessoaPorId[o.colaborador_id] : null;
+                                const nome = pes ? pes.nome : (o.rotulo || "?");
+                                const indisp = !pes && o.rotulo === "Indisponível";
+                                return indisp
+                                  ? <span key={o.id} className="gs-pill gs-x">✕</span>
+                                  : <span key={o.id} className="gs-pill" style={{ background: corPessoa(o.colaborador_id || nome) }}>{iniciaisCroqui(nome)}</span>;
+                              })}
                             </td>
                           );
                         })}
@@ -2894,6 +2936,7 @@ function PaginaSalas({ ctx }) {
                 </table>
               </div>
             ))}
+          </div>
           </div>
         )
       )}
