@@ -348,7 +348,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v40</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v41</div>
       </aside>
     </React.Fragment>
   );
@@ -1846,6 +1846,39 @@ function corSetor(s) {
 
 function AbaOrganograma({ ctx }) {
   const podeEditar = nivelAba(ctx, "rh", "organograma") === "editar";
+
+  // ---- mapa navegavel (sprint 41): zoom + arrastar + setas ----
+  const [zoom, setZoom] = useState(1);
+  const [pan, setPan] = useState({ x: 0, y: 0 });
+
+  function mudarZoom(d) {
+    setZoom((z) => Math.min(1.6, Math.max(0.4, Math.round((z + d) * 100) / 100)));
+  }
+  function moverMapa(dx, dy) {
+    setPan((p) => ({ x: p.x + dx, y: p.y + dy }));
+  }
+  function centralizarMapa() { setZoom(1); setPan({ x: 0, y: 0 }); }
+
+  function iniciarArrasto(e) {
+    if (e.target.closest && e.target.closest("button, i, input, select, .sw, .org-controles")) return;
+    const start = { x: e.clientX, y: e.clientY, px: pan.x, py: pan.y, ativo: false };
+    function mv(ev) {
+      const dx = ev.clientX - start.x, dy = ev.clientY - start.y;
+      if (!start.ativo && Math.abs(dx) + Math.abs(dy) > 6) start.ativo = true;
+      if (start.ativo) { setPan({ x: start.px + dx, y: start.py + dy }); ev.preventDefault(); }
+    }
+    function up() {
+      window.removeEventListener("pointermove", mv);
+      window.removeEventListener("pointerup", up);
+      if (start.ativo) {
+        const mata = (ce) => { ce.stopPropagation(); ce.preventDefault(); };
+        window.addEventListener("click", mata, true);
+        setTimeout(() => window.removeEventListener("click", mata, true), 0);
+      }
+    }
+    window.addEventListener("pointermove", mv);
+    window.addEventListener("pointerup", up);
+  }
   const [colabs, setColabs] = useState(null);
   const [visao, setVisao] = useState("arvore");
   const [msg, setMsg] = useState("");
@@ -2113,10 +2146,26 @@ function AbaOrganograma({ ctx }) {
                 Quem não responde a ninguém e tem gente respondendo a ele aparece aqui no topo.
               </div>
             ) : (
-              <div className="org-rolagem">
-                <ul className="org-arvore">
-                  {arvore.raizes.map((r) => <No key={r.id} c={r} />)}
-                </ul>
+              <div className="org-mapa" onPointerDown={iniciarArrasto} style={{ touchAction: "none" }}>
+                <div className="org-mapa-conteudo" style={{ transform: "translate(" + pan.x + "px," + pan.y + "px) scale(" + zoom + ")" }}>
+                  <ul className="org-arvore">
+                    {arvore.raizes.map((r) => <No key={r.id} c={r} />)}
+                  </ul>
+                </div>
+                <div className="org-controles">
+                  <button className="org-btn" onClick={() => mudarZoom(0.15)} aria-label="Aproximar" title="Aproximar"><i className="ti ti-plus" aria-hidden="true"></i></button>
+                  <div className="org-zoom-rotulo">{Math.round(zoom * 100)}%</div>
+                  <button className="org-btn" onClick={() => mudarZoom(-0.15)} aria-label="Afastar" title="Afastar"><i className="ti ti-minus" aria-hidden="true"></i></button>
+                  <div className="org-setas">
+                    <button className="org-btn" onClick={() => moverMapa(0, 140)} aria-label="Ver o que está acima" title="Ver o que está acima"><i className="ti ti-arrow-up" aria-hidden="true"></i></button>
+                    <div style={{ display: "flex", gap: 4 }}>
+                      <button className="org-btn" onClick={() => moverMapa(140, 0)} aria-label="Ver o que está à esquerda" title="Ver o que está à esquerda"><i className="ti ti-arrow-left" aria-hidden="true"></i></button>
+                      <button className="org-btn" onClick={() => moverMapa(-140, 0)} aria-label="Ver o que está à direita" title="Ver o que está à direita"><i className="ti ti-arrow-right" aria-hidden="true"></i></button>
+                    </div>
+                    <button className="org-btn" onClick={() => moverMapa(0, -140)} aria-label="Ver o que está abaixo" title="Ver o que está abaixo"><i className="ti ti-arrow-down" aria-hidden="true"></i></button>
+                  </div>
+                  <button className="org-btn" onClick={centralizarMapa} aria-label="Centralizar" title="Centralizar (100%)"><i className="ti ti-focus-2" aria-hidden="true"></i></button>
+                </div>
               </div>
             )}
           </div>
