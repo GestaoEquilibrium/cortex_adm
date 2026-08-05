@@ -347,7 +347,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v34</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v35</div>
       </aside>
     </React.Fragment>
   );
@@ -4398,6 +4398,14 @@ function AbaFichas({ ctx, podeEditar }) {
     setMsg("✓ Ficha salva."); carregar();
   }
 
+  async function excluirFicha() {
+    if (!sel) return;
+    if (!window.confirm('Excluir a ficha de "' + sel.nome + '"? Isso apaga o colaborador e tudo ligado a ele (batidas de ponto, faltas, atestados). Para manter o histórico, prefira o status Desligado. A exclusão fica na auditoria.')) return;
+    const { error } = await sb.from("colaboradores").delete().eq("id", sel.id);
+    if (error) { setMsg("Erro ao excluir: " + error.message); return; }
+    setSel(null); setMsg("✓ Ficha excluída."); carregar();
+  }
+
   const [fotoBruta, setFotoBruta] = useState(null);
 
   function trocarFoto(e) {
@@ -4499,6 +4507,7 @@ function AbaFichas({ ctx, podeEditar }) {
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
               {podeEditar && <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar ficha"}</button>}
+              {podeEditar && <button className="btn-fantasma" style={{ width: "auto", padding: "9px 14px", fontSize: 12.5, color: "var(--vermelho)", borderColor: "rgba(220,38,38,.45)" }} onClick={excluirFicha}><i className="ti ti-trash" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Excluir ficha</button>}
               {msg && <span className="anim-pop" style={{ fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</span>}
             </div>
           </div>
