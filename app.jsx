@@ -330,7 +330,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v15</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v16</div>
       </aside>
     </React.Fragment>
   );
@@ -1749,6 +1749,185 @@ function AbaPonto({ ctx }) {
   );
 }
 
+function AbaOrganograma({ ctx }) {
+  const podeEditar = nivelAba(ctx, "rh", "organograma") === "editar";
+  const [colabs, setColabs] = useState(null);
+  const [visao, setVisao] = useState("arvore");
+  const [msg, setMsg] = useState("");
+  const [edit, setEdit] = useState(null);
+
+  async function carregar() {
+    const { data, error } = await sb.from("colaboradores")
+      .select("id, nome, cargo, setor, status, responde_para")
+      .neq("status", "desligado").order("nome").limit(20000);
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("responde_para") !== -1 ? " — rode o 08_organograma.sql no Supabase." : "")); return; }
+    setMsg(""); setColabs(data || []);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const arvore = useMemo(() => {
+    if (!colabs) return null;
+    const porId = {};
+    colabs.forEach((c) => { porId[c.id] = c; });
+    const filhos = {};
+    colabs.forEach((c) => {
+      if (c.responde_para && porId[c.responde_para]) {
+        (filhos[c.responde_para] = filhos[c.responde_para] || []).push(c);
+      }
+    });
+    const temChefe = (c) => c.responde_para && porId[c.responde_para];
+    const raizes = colabs.filter((c) => !temChefe(c) && (filhos[c.id] || []).length > 0);
+    let soltos = colabs.filter((c) => !temChefe(c) && !(filhos[c.id] || []).length);
+    const alcancado = {};
+    const visitar = (id) => { if (alcancado[id]) return; alcancado[id] = 1; (filhos[id] || []).forEach((f) => visitar(f.id)); };
+    raizes.forEach((r) => visitar(r.id));
+    const presos = colabs.filter((c) => !alcancado[c.id] && soltos.indexOf(c) === -1 && raizes.indexOf(c) === -1);
+    soltos = soltos.concat(presos);
+    return { porId, filhos, raizes, soltos };
+  }, [colabs]);
+
+  const setores = useMemo(() => {
+    if (!colabs) return null;
+    const g = {};
+    colabs.forEach((c) => { const s = (c.setor || "").trim() || "Sem setor"; (g[s] = g[s] || []).push(c); });
+    return Object.keys(g)
+      .sort((a, b) => ((a === "Sem setor") - (b === "Sem setor")) || a.localeCompare(b))
+      .map((s) => ({ setor: s, pessoas: g[s] }));
+  }, [colabs]);
+
+  function descendentesDe(id) {
+    const s = {};
+    const anda = (x) => (arvore.filhos[x] || []).forEach((f) => { if (!s[f.id]) { s[f.id] = 1; anda(f.id); } });
+    anda(id);
+    return s;
+  }
+
+  function abrirEdicao(c) {
+    setEdit(edit && edit.id === c.id ? null : { id: c.id, responde_para: c.responde_para || "", cargo: c.cargo || "", setor: c.setor || "" });
+  }
+
+  async function salvarEdit() {
+    const { error } = await sb.from("colaboradores").update({
+      responde_para: edit.responde_para || null,
+      cargo: (edit.cargo || "").trim() || null,
+      setor: (edit.setor || "").trim() || null,
+    }).eq("id", edit.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setEdit(null); carregar();
+  }
+
+  const Lapis = ({ c }) => (podeEditar
+    ? <i className="ti ti-pencil org-lapis" title="Editar vínculo" aria-label="Editar vínculo" onClick={(e) => { e.stopPropagation(); abrirEdicao(c); }}></i>
+    : null);
+
+  const Cartao = ({ c }) => (
+    <div className="org-no">
+      <div className="org-avatar">{iniciais(c.nome)}</div>
+      <div style={{ minWidth: 0 }}>
+        <div className="org-nome">{c.nome}{c.status !== "ativo" ? " · " + c.status : ""}</div>
+        <div className="org-cargo">{c.cargo || "—"}{c.setor ? " · " + c.setor : ""}</div>
+      </div>
+      <Lapis c={c} />
+    </div>
+  );
+
+  const No = ({ c }) => (
+    <li>
+      <Cartao c={c} />
+      {(arvore.filhos[c.id] || []).length > 0 && (
+        <ul>{arvore.filhos[c.id].map((f) => <No key={f.id} c={f} />)}</ul>
+      )}
+    </li>
+  );
+
+  const editando = edit && arvore && arvore.porId[edit.id];
+  const desc = editando ? descendentesDe(edit.id) : {};
+
+  return (
+    <div>
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["arvore", "Hierarquia"], ["setores", "Por setor"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setVisao(v)}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        {colabs && arvore && (
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>
+            {colabs.length} pessoa(s) · {colabs.length - arvore.soltos.length} no organograma · {arvore.soltos.length} sem vínculo
+          </span>
+        )}
+      </div>
+
+      {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {editando && podeEditar && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          <span style={{ fontSize: 12.5, fontWeight: 600 }}>{arvore.porId[edit.id].nome}</span>
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>responde para</span>
+          <select className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} value={edit.responde_para} onChange={(e) => setEdit({ ...edit, responde_para: e.target.value })}>
+            <option value="">ninguém (topo do organograma)</option>
+            {colabs.filter((c) => c.id !== edit.id && !desc[c.id]).map((c) => (
+              <option key={c.id} value={c.id}>{c.nome}</option>
+            ))}
+          </select>
+          <input className="campo" style={{ width: 170, padding: "7px 9px", fontSize: 12.5 }} placeholder="cargo" value={edit.cargo} onChange={(e) => setEdit({ ...edit, cargo: e.target.value })} />
+          <input className="campo" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} placeholder="setor" value={edit.setor} onChange={(e) => setEdit({ ...edit, setor: e.target.value })} />
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {!colabs && <div className="card-fl" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+
+      {colabs && visao === "arvore" && (
+        <div>
+          <div className="card-fl" style={{ padding: "6px 10px" }}>
+            {arvore.raizes.length === 0 ? (
+              <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)", lineHeight: 1.6 }}>
+                O organograma nasce dos vínculos: use o lápis nas pessoas abaixo e defina para quem cada uma responde.<br />
+                Quem não responde a ninguém e tem gente respondendo a ele aparece aqui no topo.
+              </div>
+            ) : (
+              <div className="org-rolagem">
+                <ul className="org-arvore">
+                  {arvore.raizes.map((r) => <No key={r.id} c={r} />)}
+                </ul>
+              </div>
+            )}
+          </div>
+
+          {arvore.soltos.length > 0 && (
+            <div style={{ marginTop: 12 }}>
+              <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sec)", textTransform: "uppercase", letterSpacing: .5, margin: "0 2px 8px" }}>
+                Sem vínculo no organograma
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8 }}>
+                {arvore.soltos.map((c) => <Cartao key={c.id} c={c} />)}
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {colabs && visao === "setores" && setores && (
+        <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          {setores.map((g) => (
+            <div key={g.setor} className="card-fl" style={{ padding: "12px 13px" }}>
+              <div style={{ fontSize: 12.5, fontWeight: 700, marginBottom: 9, display: "flex", alignItems: "center", gap: 7 }}>
+                {g.setor}
+                <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{g.pessoas.length}</span>
+              </div>
+              <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(210px, 1fr))", gap: 8 }}>
+                {g.pessoas.map((c) => <Cartao key={c.id} c={c} />)}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
 function AbaFaltas({ ctx }) {
   const podeEditar = nivelAba(ctx, "rh", "faltas") === "editar";
   const [visao, setVisao] = useState("faltas");
@@ -2194,6 +2373,7 @@ function PaginaRH({ ctx }) {
   const abas = [
     { id: "colaboradores", r: "Colaboradores" },
     { id: "ponto", r: "Ponto" },
+    { id: "organograma", r: "Organograma" },
     { id: "faltas", r: "Faltas e atestados" },
     { id: "alertas", r: "Alertas e pendências" },
   ].filter((a) => nivelAba(ctx, "rh", a.id) !== "oculto");
@@ -2218,9 +2398,10 @@ function PaginaRH({ ctx }) {
       </div>
       {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
       {aba === "ponto" && <AbaPonto ctx={ctx} />}
+      {aba === "organograma" && <AbaOrganograma ctx={ctx} />}
       {aba === "faltas" && <AbaFaltas ctx={ctx} />}
       {aba === "alertas" && <AbaAlertas ctx={ctx} />}
-      {["colaboradores", "ponto", "faltas", "alertas"].indexOf(aba) === -1 && (
+      {["colaboradores", "ponto", "organograma", "faltas", "alertas"].indexOf(aba) === -1 && (
         <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
           Esta aba chega no próximo sprint — o banco já está pronto para ela.
         </div>
