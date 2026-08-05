@@ -27,6 +27,7 @@ const MODULOS = [
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
+  { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
@@ -347,7 +348,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v38</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v39</div>
       </aside>
     </React.Fragment>
   );
@@ -4934,6 +4935,135 @@ function PaginaRelatorios({ ctx }) {
   );
 }
 
+function PaginaInfinity({ ctx }) {
+  const [teste, setTeste] = useState(null);
+  const [ocupado, setOcupado] = useState(false);
+
+  async function testar() {
+    setOcupado(true); setTeste(null);
+    try {
+      const { data, error } = await sb.rpc("infinity_testar");
+      if (error) throw error;
+      setTeste(data);
+    } catch (e) { setTeste({ ok: false, erro: e.message + " — o 24_integracao_infinity.sql já rodou?" }); }
+    setOcupado(false);
+  }
+
+  return (
+    <div style={{ display: "grid", gap: 12, maxWidth: 640 }}>
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Ponte com o Infinity</div>
+        <div style={{ fontSize: 12.5, color: "var(--muted)", marginBottom: 12 }}>
+          A leitura do financeiro passa pelo banco do CORTEX — a chave da ponte nunca chega ao navegador.
+          Endereço e chaves ficam em Configurações → Integrações.
+        </div>
+        <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={ocupado} onClick={testar}>
+          <i className="ti ti-plug-connected" style={{ fontSize: 14, marginRight: 6 }} aria-hidden="true"></i>
+          {ocupado ? "Testando…" : "Testar ponte"}
+        </button>
+        {teste && (
+          <div className="anim-pop" style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: teste.ok ? "var(--verde)" : "var(--vermelho)" }}>
+            {teste.ok
+              ? "✓ Conectado ao " + ((teste.resposta && teste.resposta.sistema) || "Infinity") + " em " + teste.latencia_ms + " ms"
+              : "✗ " + (teste.erro || "Falha na ponte.")}
+          </div>
+        )}
+      </div>
+
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Painel financeiro</div>
+        <div style={{ fontSize: 12.5, color: "var(--sec)", lineHeight: 1.6 }}>
+          Próxima etapa: com o mapa do banco do Infinity (script P0), a ponte ganha o
+          <b> ponte_resumo</b> — receitas, despesas e resultado do mês, contas a pagar e a receber —
+          e este painel passa a mostrar tudo aqui, somente leitura, respeitando as permissões do módulo.
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AbaIntegracoes({ ctx }) {
+  const [f, setF] = useState(null);
+  const [msg, setMsg] = useState("");
+  const [ocupado, setOcupado] = useState(false);
+  const [teste, setTeste] = useState(null);
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await sb.from("integracoes").select("*").eq("id", "infinity").maybeSingle();
+      if (error) { setMsg("Erro: " + error.message + " — o 24_integracao_infinity.sql já rodou?"); setF({ url: "", anon_key: "", chave_ponte: "" }); return; }
+      setF({ url: (data && data.url) || "", anon_key: (data && data.anon_key) || "", chave_ponte: (data && data.chave_ponte) || "" });
+    })();
+  }, []);
+
+  async function salvar() {
+    setOcupado(true); setMsg(""); setTeste(null);
+    const { error } = await sb.from("integracoes").update({
+      url: f.url.trim() || null,
+      anon_key: f.anon_key.trim() || null,
+      chave_ponte: f.chave_ponte.trim() || null,
+      atualizado_por: ctx.profile.id,
+      atualizado_em: new Date().toISOString(),
+    }).eq("id", "infinity");
+    setOcupado(false);
+    if (error) { setMsg("Erro ao salvar: " + error.message); return; }
+    setMsg("✓ Integração salva.");
+  }
+
+  async function testar() {
+    setOcupado(true); setMsg(""); setTeste(null);
+    try {
+      const { data, error } = await sb.rpc("infinity_testar");
+      if (error) throw error;
+      setTeste(data);
+    } catch (e) { setTeste({ ok: false, erro: e.message }); }
+    setOcupado(false);
+  }
+
+  if (!f) return <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Carregando…</div>;
+
+  const rot = { display: "block", fontSize: 11, fontWeight: 700, color: "var(--muted)", marginBottom: 4, textTransform: "uppercase", letterSpacing: .5 };
+
+  return (
+    <div style={{ display: "grid", gap: 12, maxWidth: 640 }}>
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
+          <div style={{ width: 30, height: 30, borderRadius: 9, background: "#FFF7E6", color: "var(--ambar)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+            <i className="ti ti-coin" style={{ fontSize: 16 }} aria-hidden="true"></i>
+          </div>
+          <div style={{ fontWeight: 700, fontSize: 13.5 }}>Infinity (financeiro)</div>
+        </div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          URL e anon key ficam em Settings → API do projeto do Infinity no Supabase. A chave da ponte é a mesma
+          embutida na P1 que roda lá. Só a direção enxerga e edita esta tela.
+        </div>
+        <div style={{ display: "grid", gap: 10 }}>
+          <div><label style={rot}>URL do Supabase do Infinity</label>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} placeholder="https://xxxxxxxx.supabase.co" value={f.url} onChange={(e) => setF({ ...f, url: e.target.value })} /></div>
+          <div><label style={rot}>Anon key do Infinity</label>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5, fontFamily: "var(--mono, monospace)" }} placeholder="eyJ..." value={f.anon_key} onChange={(e) => setF({ ...f, anon_key: e.target.value })} /></div>
+          <div><label style={rot}>Chave da ponte</label>
+            <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5, fontFamily: "var(--mono, monospace)" }} placeholder="cole a chave do arquivo de segredos" value={f.chave_ponte} onChange={(e) => setF({ ...f, chave_ponte: e.target.value })} /></div>
+        </div>
+        <div style={{ display: "flex", gap: 8, marginTop: 14, flexWrap: "wrap" }}>
+          <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={ocupado} onClick={salvar}>{ocupado ? "Salvando…" : "Salvar"}</button>
+          <button className="btn-contorno" style={{ padding: "9px 14px", fontSize: 12.5 }} disabled={ocupado} onClick={testar}>
+            <i className="ti ti-plug-connected" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Testar conexão
+          </button>
+        </div>
+        {msg && <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</div>}
+        {teste && (
+          <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: teste.ok ? "var(--verde)" : "var(--vermelho)" }}>
+            {teste.ok
+              ? "✓ Conectado ao " + ((teste.resposta && teste.resposta.sistema) || "Infinity") + " em " + teste.latencia_ms + " ms"
+              : "✗ " + (teste.erro || "Falha na ponte.")}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -4944,12 +5074,14 @@ function PaginaConfiguracoes({ ctx }) {
         <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
         <div className={"aba" + (aba === "fichas" ? " on" : "")} onClick={() => setAba("fichas")}>Fichas da equipe</div>
         <div className={"aba" + (aba === "notificacoes" ? " on" : "")} onClick={() => setAba("notificacoes")}>Notificações</div>
+        <div className={"aba" + (aba === "integracoes" ? " on" : "")} onClick={() => setAba("integracoes")}>Integrações</div>
         <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
       </div>
       {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
       {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
       {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={podeEditar} />}
       {aba === "notificacoes" && <AbaNotificacoes ctx={ctx} />}
+      {aba === "integracoes" && <AbaIntegracoes ctx={ctx} />}
       {aba === "links" && <AbaLinks podeEditar={podeEditar} />}
     </div>
   );
@@ -5025,6 +5157,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
+  } else if (pagina === "infinity") {
+    conteudo = <PaginaInfinity ctx={ctx} />;
   } else if (pagina === "relatorios") {
     conteudo = <PaginaRelatorios ctx={ctx} />;
   } else if (pagina === "salas") {
