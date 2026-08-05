@@ -26,7 +26,7 @@ const MODULOS = [
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
-  { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)",    status: "fase3" },
+  { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
@@ -347,7 +347,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v37</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v38</div>
       </aside>
     </React.Fragment>
   );
@@ -4681,6 +4681,259 @@ function AbaNotificacoes({ ctx }) {
   );
 }
 
+function PaginaRelatorios({ ctx }) {
+  const RELS = [
+    { id: "ponto", ico: "ti-clock", tit: "Ponto do mês", desc: "Dias e horas por pessoa", vivo: true },
+    { id: "faltas", ico: "ti-calendar-off", tit: "Faltas e atestados", desc: "Período, por pessoa e tipo", vivo: true },
+    { id: "quadro", ico: "ti-users", tit: "Quadro de pessoal", desc: "Ativos por setor, regime e unidade", vivo: true },
+    { id: "ocorrencias", ico: "ti-message-report", tit: "Ocorrências do ponto", desc: "Tudo que foi registrado no período", vivo: true },
+    { id: "salas", ico: "ti-door", tit: "Salas", desc: "Ocupação por unidade", vivo: false },
+    { id: "pee", ico: "ti-book", tit: "PEE — vencimentos", desc: "Documentos a vencer", vivo: false },
+  ];
+  const [rel, setRel] = useState(null);
+  const [colabs, setColabs] = useState([]);
+  const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
+  const [setor, setSetor] = useState("");
+  const [colabId, setColabId] = useState("");
+  const [statusQ, setStatusQ] = useState("ativo");
+  const [dados, setDados] = useState(null);
+  const [carregando, setCarregando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  useEffect(() => {
+    (async () => {
+      const { data, error } = await sb.from("colaboradores")
+        .select("id, nome, cargo, setor, regime, unidade, status, admissao, desligamento")
+        .order("nome").limit(20000);
+      if (error) { setMsg("Sem acesso aos dados de RH (" + error.message + "). Fale com a direção sobre o seu perfil."); return; }
+      setColabs(data || []);
+    })();
+  }, []);
+
+  const setores = useMemo(() => {
+    const s = {}; colabs.forEach((c) => { if (c.setor) s[c.setor] = 1; });
+    return Object.keys(s).sort();
+  }, [colabs]);
+  const porId = useMemo(() => { const m = {}; colabs.forEach((c) => { m[c.id] = c; }); return m; }, [colabs]);
+
+  function ultimoDiaMes(m) { return String(new Date(Number(m.slice(0, 4)), Number(m.slice(5, 7)), 0).getDate()).padStart(2, "0"); }
+  function fmtH(min) { const h = Math.floor(min / 60), mi = Math.round(min % 60); return h + "h" + String(mi).padStart(2, "0"); }
+  function dentroSetor(c) { return !setor || (c && c.setor === setor); }
+  const TIPO_FALTA = { falta: "Falta", atraso: "Atraso", saida_antecipada: "Saída antecipada" };
+
+  useEffect(() => {
+    if (!rel || !colabs.length) return;
+    let vivo = true;
+    (async () => {
+      setCarregando(true); setMsg(""); setDados(null);
+      try {
+        const ini = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)) - 1, 1);
+        const fim = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1);
+        const d1 = mes + "-01", d2 = mes + "-" + ultimoDiaMes(mes);
+
+        if (rel === "ponto") {
+          let q1 = sb.from("ponto_registros").select("colaborador_id, tipo, batida")
+            .gte("batida", ini.toISOString()).lt("batida", fim.toISOString()).order("batida").limit(20000);
+          let q2 = sb.from("ponto_ocorrencias").select("colaborador_id").gte("data", d1).lte("data", d2).limit(20000);
+          if (colabId) { q1 = q1.eq("colaborador_id", colabId); q2 = q2.eq("colaborador_id", colabId); }
+          const [r1, r2] = await Promise.all([q1, q2]);
+          if (r1.error || r2.error) throw (r1.error || r2.error);
+          const alvo = colabs.filter((c) => c.status === "ativo" && dentroSetor(c) && (!colabId || c.id === colabId));
+          let totalMin = 0;
+          const linhas = alvo.map((c) => {
+            const regs = (r1.data || []).filter((r) => r.colaborador_id === c.id);
+            const dias = {}; let min = 0, ent = null;
+            regs.forEach((r) => {
+              const d = new Date(r.batida);
+              dias[d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate()] = 1;
+              if (r.tipo === "entrada") { ent = new Date(r.batida); }
+              else if (ent) { min += (new Date(r.batida) - ent) / 60000; ent = null; }
+            });
+            totalMin += min;
+            const oc = (r2.data || []).filter((o) => o.colaborador_id === c.id).length;
+            return [c.nome, String(Object.keys(dias).length), fmtH(min), String(oc), c.cargo || "", c.setor || ""];
+          });
+          if (vivo) setDados({ cab: ["Colaborador", "Dias", "Horas", "Ocorrências"], linhas, extra: 2,
+            rodape: linhas.length + " pessoa(s) · total " + fmtH(totalMin) + " no período" });
+        }
+
+        if (rel === "faltas") {
+          let q1 = sb.from("faltas").select("colaborador_id, data, tipo, justificada, motivo").gte("data", d1).lte("data", d2).limit(20000);
+          let q2 = sb.from("atestados").select("colaborador_id, inicio, fim, dias, cid, observacao").lte("inicio", d2).gte("fim", d1).limit(20000);
+          if (colabId) { q1 = q1.eq("colaborador_id", colabId); q2 = q2.eq("colaborador_id", colabId); }
+          const [r1, r2] = await Promise.all([q1, q2]);
+          if (r1.error || r2.error) throw (r1.error || r2.error);
+          const itens = [];
+          (r1.data || []).forEach((f) => {
+            const c = porId[f.colaborador_id];
+            if (!dentroSetor(c)) return;
+            itens.push({ ord: f.data, linha: [dataBr(f.data), c ? c.nome : "?", TIPO_FALTA[f.tipo] || f.tipo,
+              (f.justificada ? "Justificada" : "Não justificada") + (f.motivo ? " — " + f.motivo : "")] });
+          });
+          let nAt = 0;
+          (r2.data || []).forEach((a) => {
+            const c = porId[a.colaborador_id];
+            if (!dentroSetor(c)) return;
+            nAt++;
+            itens.push({ ord: a.inicio, linha: [dataBr(a.inicio), c ? c.nome : "?", "Atestado",
+              dataBr(a.inicio) + " a " + dataBr(a.fim) + (a.dias ? " (" + a.dias + " dia(s))" : "") + (a.cid ? " · CID " + a.cid : "") + (a.observacao ? " — " + a.observacao : "")] });
+          });
+          itens.sort((x, y) => (x.ord < y.ord ? -1 : 1));
+          if (vivo) setDados({ cab: ["Data", "Colaborador", "Tipo", "Detalhe"], linhas: itens.map((i) => i.linha),
+            rodape: (itens.length - nAt) + " falta(s)/atraso(s) · " + nAt + " atestado(s)" });
+        }
+
+        if (rel === "quadro") {
+          const lista = colabs.filter((c) => dentroSetor(c) && (statusQ === "todos" || c.status === statusQ));
+          const regimes = {}; lista.forEach((c) => { const r = c.regime || "—"; regimes[r] = (regimes[r] || 0) + 1; });
+          const adm = colabs.filter((c) => c.admissao && c.admissao >= d1 && c.admissao <= d2).length;
+          const desl = colabs.filter((c) => c.desligamento && c.desligamento >= d1 && c.desligamento <= d2).length;
+          const linhas = lista.map((c) => [c.nome, c.cargo || "", c.setor || "", c.regime || "", c.unidade || "", c.status, c.admissao ? dataBr(c.admissao) : ""]);
+          if (vivo) setDados({ cab: ["Nome", "Cargo", "Setor", "Regime", "Unidade", "Status", "Admissão"], linhas,
+            rodape: lista.length + " pessoa(s) · " + Object.keys(regimes).map((r) => regimes[r] + " " + r).join(" · ") +
+              " · No mês: " + adm + " admissão(ões), " + desl + " desligamento(s)" });
+        }
+
+        if (rel === "ocorrencias") {
+          let q = sb.from("ponto_ocorrencias").select("colaborador_id, data, tipo, descricao, observacao")
+            .gte("data", d1).lte("data", d2).order("data").limit(20000);
+          if (colabId) q = q.eq("colaborador_id", colabId);
+          const r1 = await q;
+          if (r1.error) throw r1.error;
+          const linhas = (r1.data || []).filter((o) => dentroSetor(porId[o.colaborador_id])).map((o) => {
+            const c = porId[o.colaborador_id];
+            return [o.data ? dataBr(o.data) : "", c ? c.nome : "(sem vínculo)", o.tipo || "",
+              (o.descricao || "") + (o.observacao ? " — Obs. adm.: " + o.observacao : "")];
+          });
+          if (vivo) setDados({ cab: ["Data", "Colaborador", "Tipo", "Descrição"], linhas,
+            rodape: linhas.length + " ocorrência(s) no período" });
+        }
+      } catch (e) { if (vivo) setMsg("Erro: " + e.message); }
+      if (vivo) setCarregando(false);
+    })();
+    return () => { vivo = false; };
+  }, [rel, mes, setor, colabId, statusQ, colabs]);
+
+  function nomeRel() { const r = RELS.filter((x) => x.id === rel)[0]; return r ? r.tit : ""; }
+  function subtitulo() {
+    const p = mes.split("-");
+    return "Competência " + p[1] + "/" + p[0] + (setor ? " · setor " + setor : "") +
+      (colabId && porId[colabId] ? " · " + porId[colabId].nome : "") +
+      (rel === "quadro" ? " · " + (statusQ === "todos" ? "todos" : statusQ + "s") : "");
+  }
+
+  function baixarCsv() {
+    if (!dados) return;
+    const esc = (v) => '"' + String(v == null ? "" : v).replace(/"/g, '""') + '"';
+    const cab = rel === "ponto" ? dados.cab.concat(["Cargo", "Setor"]) : dados.cab;
+    const linhas = [cab.map(esc).join(";")];
+    dados.linhas.forEach((l) => linhas.push(l.map(esc).join(";")));
+    const blob = new Blob(["\uFEFF" + linhas.join("\r\n")], { type: "text/csv;charset=utf-8" });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = "relatorio-" + rel + "-" + mes + ".csv";
+    a.click();
+    URL.revokeObjectURL(a.href);
+  }
+
+  function baixarPdf() {
+    if (!dados) return;
+    if (!window.jspdf || !window.jspdf.jsPDF) { setMsg("O gerador de PDF não carregou. Atualize com Ctrl+F5."); return; }
+    const doc = new window.jspdf.jsPDF(rel === "quadro" ? "l" : "p");
+    doc.setFontSize(15); doc.setTextColor(16, 104, 176);
+    doc.text("CORTEX Gestão · " + nomeRel(), 14, 16);
+    doc.setFontSize(10); doc.setTextColor(110);
+    doc.text(subtitulo(), 14, 22);
+    doc.autoTable({
+      startY: 27, head: [dados.cab], body: dados.linhas.map((l) => l.slice(0, dados.cab.length)),
+      styles: { fontSize: 8.5, cellPadding: 2.2 },
+      headStyles: { fillColor: [16, 104, 176], textColor: 255, fontStyle: "bold" },
+      alternateRowStyles: { fillColor: [246, 248, 251] },
+    });
+    const y = (doc.lastAutoTable ? doc.lastAutoTable.finalY : 30) + 7;
+    doc.setFontSize(9); doc.setTextColor(70);
+    doc.text(dados.rodape || "", 14, y);
+    doc.save("relatorio-" + rel + "-" + mes + ".pdf");
+  }
+
+  if (!rel) return (
+    <div>
+      <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 10 }}>
+        {RELS.map((r) => (
+          <div key={r.id} className={"card-fl" + (r.vivo ? " clicavel" : "")}
+            onClick={() => { if (r.vivo) { setRel(r.id); setDados(null); } }}
+            style={{ padding: "14px 15px", opacity: r.vivo ? 1 : .55 }}>
+            <div style={{ width: 32, height: 32, borderRadius: 9, background: "var(--tint)", color: "var(--marca-texto)", display: "flex", alignItems: "center", justifyContent: "center", marginBottom: 9 }}>
+              <i className={"ti " + r.ico} style={{ fontSize: 17 }} aria-hidden="true"></i>
+            </div>
+            <div style={{ fontWeight: 700, fontSize: 13.5 }}>{r.tit}</div>
+            <div style={{ fontSize: 12, color: "var(--muted)", margin: "3px 0 8px" }}>{r.desc}</div>
+            <span className="chip" style={{ fontSize: 10.5, background: r.vivo ? "var(--tint)" : "var(--campo)", color: r.vivo ? "var(--marca-texto)" : "var(--muted)" }}>{r.vivo ? "PDF · CSV" : "em breve"}</span>
+          </div>
+        ))}
+      </div>
+      {msg && <div className="anim-pop" style={{ marginTop: 12, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+    </div>
+  );
+
+  return (
+    <div>
+      <button className="btn-fantasma" style={{ width: "auto", padding: "6px 12px", marginBottom: 12 }} onClick={() => { setRel(null); setMsg(""); }}>
+        <i className="ti ti-arrow-left" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Relatórios
+      </button>
+      <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 10 }}>{nomeRel()}</div>
+
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <input className="campo" type="month" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} value={mes} onChange={(e) => setMes(e.target.value)} />
+        <select className="campo" style={{ width: 170, padding: "7px 9px", fontSize: 12.5 }} value={setor} onChange={(e) => setSetor(e.target.value)}>
+          <option value="">Todos os setores</option>
+          {setores.map((s) => <option key={s} value={s}>{s}</option>)}
+        </select>
+        {rel !== "quadro" && (
+          <select className="campo" style={{ width: 200, padding: "7px 9px", fontSize: 12.5 }} value={colabId} onChange={(e) => setColabId(e.target.value)}>
+            <option value="">Todos os colaboradores</option>
+            {colabs.filter((c) => dentroSetor(c)).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+          </select>
+        )}
+        {rel === "quadro" && (
+          <select className="campo" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={statusQ} onChange={(e) => setStatusQ(e.target.value)}>
+            <option value="ativo">Ativos</option><option value="todos">Todos</option>
+            <option value="ferias">Férias</option><option value="afastado">Afastados</option><option value="desligado">Desligados</option>
+          </select>
+        )}
+        <span style={{ flex: 1 }}></span>
+        <button className="btn-primaria" style={{ padding: "8px 14px", fontSize: 12.5 }} disabled={!dados || carregando} onClick={baixarPdf}>
+          <i className="ti ti-file-type-pdf" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Exportar PDF
+        </button>
+        <button className="btn-contorno" style={{ padding: "8px 14px", fontSize: 12.5 }} disabled={!dados || carregando} onClick={baixarCsv}>
+          <i className="ti ti-table-export" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Exportar CSV
+        </button>
+      </div>
+
+      <div className="card-fl" style={{ padding: 0, overflow: "hidden" }}>
+        <div style={{ overflowX: "auto" }}>
+          <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, minWidth: 560 }}>
+            <thead><tr>
+              {dados && dados.cab.map((h) => <th key={h} style={{ textAlign: "left", padding: "9px 12px", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .5, borderBottom: "1px solid var(--linha)" }}>{h}</th>)}
+            </tr></thead>
+            <tbody>
+              {carregando && <tr><td colSpan={9} style={{ padding: 16, color: "var(--muted)" }}>Gerando…</td></tr>}
+              {!carregando && dados && dados.linhas.length === 0 && <tr><td colSpan={9} style={{ padding: 16, color: "var(--muted)" }}>Nada no período com esses filtros.</td></tr>}
+              {!carregando && dados && dados.linhas.map((l, i) => (
+                <tr key={i} style={{ background: i % 2 ? "var(--campo)" : "transparent" }}>
+                  {l.slice(0, dados.cab.length).map((c, j) => <td key={j} style={{ padding: "8px 12px", borderBottom: "1px solid var(--linha-suave)", verticalAlign: "top" }}>{c}</td>)}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        {dados && <div style={{ padding: "9px 12px", fontSize: 12, color: "var(--sec)", borderTop: "1px solid var(--linha)", fontWeight: 600 }}>{dados.rodape}</div>}
+      </div>
+      {msg && <div className="anim-pop" style={{ marginTop: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -4772,6 +5025,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
+  } else if (pagina === "relatorios") {
+    conteudo = <PaginaRelatorios ctx={ctx} />;
   } else if (pagina === "salas") {
     conteudo = <PaginaSalas ctx={ctx} />;
   } else if (pagina === "auditoria") {
