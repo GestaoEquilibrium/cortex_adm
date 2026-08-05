@@ -340,7 +340,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v32</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v33</div>
       </aside>
     </React.Fragment>
   );
@@ -1332,7 +1332,7 @@ function AbaPonto({ ctx }) {
   async function carregarHoje() {
     const ini = new Date(); ini.setHours(0, 0, 0, 0);
     const { data } = await sb.from("ponto_registros")
-      .select("id, tipo, batida, origem, colaboradores(nome)")
+      .select("id, tipo, batida, origem, obs, colaboradores(nome)")
       .gte("batida", ini.toISOString())
       .order("batida");
     setHoje(data || []);
@@ -1348,7 +1348,7 @@ function AbaPonto({ ctx }) {
     const ini = mes + "-01T00:00:00";
     const fimD = new Date(Number(mes.slice(0, 4)), Number(mes.slice(5, 7)), 1);
     const { data } = await sb.from("ponto_registros")
-      .select("id, tipo, batida, origem")
+      .select("id, tipo, batida, origem, obs")
       .eq("colaborador_id", colabSel)
       .gte("batida", new Date(ini).toISOString())
       .lt("batida", fimD.toISOString())
@@ -1410,6 +1410,7 @@ function AbaPonto({ ctx }) {
     const { error } = await sb.from("ponto_registros").insert({
       colaborador_id: colabSel, tipo: addTipo, batida: quando.toISOString(),
       origem: "manual", editado_por: ctx.profile.id,
+      obs: "Adicionado por " + ((ctx.profile && ctx.profile.nome) || "gestão"),
     });
     if (error) { setMsg("Erro: " + error.message); return; }
     setMsg(""); setAddDia(""); setAddHora("");
@@ -1454,7 +1455,7 @@ function AbaPonto({ ctx }) {
     if (!novaOco || !novaOco.colaborador_id || !novaOco.data || !novaOco.descricao.trim()) { setMsg("Preencha colaborador, data e descrição."); return; }
     const { error } = await sb.from("ponto_ocorrencias").insert({
       colaborador_id: novaOco.colaborador_id, data: novaOco.data, tipo: "admin",
-      descricao: novaOco.descricao.trim(), criado_por: ctx.profile.id,
+      descricao: novaOco.descricao.trim() + " (adicionado por " + ((ctx.profile && ctx.profile.nome) || "gestão") + ")", criado_por: ctx.profile.id,
     });
     if (error) { setMsg("Erro: " + error.message); return; }
     setMsg(""); setNovaOco(null); carregarOcorrencias();
@@ -1569,7 +1570,7 @@ function AbaPonto({ ctx }) {
               <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{g.nome}</span>
               <span style={{ display: "flex", gap: 5, flexWrap: "wrap" }}>
                 {g.regs.map((r) => (
-                  <span key={r.id} className="chip" title={r.origem}
+                  <span key={r.id} className="chip" title={r.origem + (r.obs ? " · " + r.obs : "")}
                     style={{ background: r.tipo === "entrada" ? "var(--verde-bg)" : "var(--azul-bg)", color: r.tipo === "entrada" ? "var(--verde)" : "var(--azul)" }}>
                     {r.tipo === "entrada" ? "E" : "S"} {horaLocal(r.batida)}
                   </span>
@@ -1614,7 +1615,7 @@ function AbaPonto({ ctx }) {
                   <span style={{ fontSize: 12.5, fontWeight: 600, width: 84, flex: "none" }}>{dataBr(d.dia)}</span>
                   <span style={{ display: "flex", gap: 5, flexWrap: "wrap", flex: 1 }}>
                     {d.regs.map((r) => (
-                      <span key={r.id} className="chip" title={r.origem + (r.origem !== "relogio" ? " · corrigível" : "")}
+                      <span key={r.id} className="chip" title={r.origem + (r.obs ? " · " + r.obs : "") + (r.origem !== "relogio" ? " · corrigível" : "")}
                         style={{ background: r.tipo === "entrada" ? "var(--verde-bg)" : "var(--azul-bg)", color: r.tipo === "entrada" ? "var(--verde)" : "var(--azul)" }}>
                         {r.tipo === "entrada" ? "E" : "S"} {horaLocal(r.batida)}
                         {podeEditar && (
