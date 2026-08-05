@@ -25,7 +25,7 @@ const MODULOS = [
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
-  { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "fase2" },
+  { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)",    status: "fase3" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
@@ -332,7 +332,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair }) {
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v23</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v24</div>
       </aside>
     </React.Fragment>
   );
@@ -2586,6 +2586,448 @@ function AbaAlertas({ ctx }) {
   );
 }
 
+const PEE_CADERNOS = [
+  { n: 0, nome: "Marca e Promessa" },
+  { n: 1, nome: "Implantação" },
+  { n: 2, nome: "Operação" },
+  { n: 3, nome: "Gestão" },
+  { n: 4, nome: "Controle" },
+  { n: 5, nome: "Formação" },
+];
+const PEE_CORES = ["#0B2F4E", "#1068B2", "#1E86C0", "#2AA0C0", "#56C4CF", "#82D2D9"];
+const PEE_SITUACOES = {
+  publicado: ["var(--verde-bg)", "var(--verde)", "Publicado"],
+  elaboracao: ["var(--ambar-bg, #FFF7E6)", "var(--ambar)", "Em elaboração"],
+  revisao: ["var(--azul-bg)", "var(--azul)", "Em revisão"],
+};
+
+function PaginaPee({ ctx }) {
+  const podeCad = nivelAba(ctx, "pee", "cadernos") === "editar";
+  const podeVenc = nivelAba(ctx, "pee", "vencimentos") === "editar";
+  const [visao, setVisao] = useState("cadernos");
+  const [pastas, setPastas] = useState(null);
+  const [docs, setDocs] = useState([]);
+  const [vencs, setVencs] = useState([]);
+  const [cadAberto, setCadAberto] = useState(null);
+  const [docAberto, setDocAberto] = useState(null);
+  const [editDoc, setEditDoc] = useState(null);
+  const [novaPasta, setNovaPasta] = useState(null);
+  const [renPasta, setRenPasta] = useState(null);
+  const [formVenc, setFormVenc] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    const [rp, rd, rv] = await Promise.all([
+      sb.from("pee_pastas").select("*").order("caderno").order("ordem").order("nome").limit(2000),
+      sb.from("pee_docs").select("*").order("codigo", { nullsFirst: false }).order("titulo").limit(20000),
+      sb.from("pee_vencimentos").select("*").order("vencimento", { nullsFirst: false }).limit(2000),
+    ]);
+    if (rp.error) { setMsg("Erro: " + rp.error.message + (rp.error.message.indexOf("pee_") !== -1 ? " — rode o 14_pee.sql no Supabase." : "")); return; }
+    if (rd.error || rv.error) { setMsg("Erro: " + (rd.error || rv.error).message); return; }
+    setMsg(""); setPastas(rp.data || []); setDocs(rd.data || []); setVencs(rv.data || []);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const pastasPorCad = useMemo(() => {
+    const m = {}; (pastas || []).forEach((p) => { (m[p.caderno] = m[p.caderno] || []).push(p); }); return m;
+  }, [pastas]);
+  const pastaPorId = useMemo(() => {
+    const m = {}; (pastas || []).forEach((p) => { m[p.id] = p; }); return m;
+  }, [pastas]);
+  const docsPorPasta = useMemo(() => {
+    const m = {}; docs.forEach((d) => { (m[d.pasta_id] = m[d.pasta_id] || []).push(d); }); return m;
+  }, [docs]);
+
+  function contagemCaderno(n) {
+    const ps = pastasPorCad[n] || [];
+    const nd = ps.reduce((t, p) => t + (docsPorPasta[p.id] || []).length, 0);
+    return ps.length + " pasta(s) · " + nd + " documento(s)";
+  }
+
+  function sugestaoCodigo(cad) {
+    let maior = 0;
+    docs.forEach((d) => {
+      const p = pastaPorId[d.pasta_id];
+      if (!p || p.caderno !== cad) return;
+      const m = /PEE-(\d)-(\d+)/.exec(d.codigo || "");
+      if (m && Number(m[1]) === cad) maior = Math.max(maior, Number(m[2]));
+    });
+    return "PEE-" + cad + "-" + String(maior + 1).padStart(3, "0");
+  }
+
+  // ---------- pastas ----------
+  async function salvarNovaPasta() {
+    if (!novaPasta.nome.trim()) { setMsg("Dê o nome da pasta."); return; }
+    const { error } = await sb.from("pee_pastas").insert({ caderno: novaPasta.caderno, nome: novaPasta.nome.trim() });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setNovaPasta(null); carregar();
+  }
+  async function salvarRenPasta() {
+    if (!renPasta.nome.trim()) { setMsg("O nome não pode ficar vazio."); return; }
+    const { error } = await sb.from("pee_pastas").update({ nome: renPasta.nome.trim() }).eq("id", renPasta.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setRenPasta(null); carregar();
+  }
+  async function excluirPasta(p) {
+    const n = (docsPorPasta[p.id] || []).length;
+    if (!window.confirm('Excluir a pasta "' + p.nome + '"' + (n ? " e os " + n + " documento(s) dela" : "") + "? A exclusão fica na auditoria.")) return;
+    const { error } = await sb.from("pee_pastas").delete().eq("id", p.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); carregar();
+  }
+
+  // ---------- documentos ----------
+  function novoDoc(p) {
+    setMsg("");
+    setEditDoc({ pasta_id: p.id, codigo: sugestaoCodigo(p.caderno), titulo: "", versao: "1.0", situacao: "elaboracao", texto: "" });
+  }
+  function editarDoc(d) {
+    setMsg("");
+    setEditDoc({ id: d.id, pasta_id: d.pasta_id, codigo: d.codigo || "", titulo: d.titulo, versao: d.versao || "1.0", situacao: d.situacao, texto: d.texto || "" });
+  }
+  async function salvarDoc() {
+    if (!editDoc.titulo.trim()) { setMsg("Dê o título do documento."); return; }
+    const campos = {
+      pasta_id: editDoc.pasta_id,
+      codigo: (editDoc.codigo || "").trim() || null,
+      titulo: editDoc.titulo.trim(),
+      versao: (editDoc.versao || "").trim() || "1.0",
+      situacao: editDoc.situacao,
+      texto: (editDoc.texto || "").trim() || null,
+      atualizado_por: ctx.profile.id,
+      atualizado_em: new Date().toISOString(),
+    };
+    let r;
+    if (editDoc.id) r = await sb.from("pee_docs").update(campos).eq("id", editDoc.id).select().single();
+    else r = await sb.from("pee_docs").insert(campos).select().single();
+    if (r.error) { setMsg("Erro: " + r.error.message); return; }
+    setMsg(""); setEditDoc(null); setDocAberto(r.data); carregar();
+  }
+  async function excluirDoc(d) {
+    if (!window.confirm('Excluir o documento "' + d.titulo + '"? A exclusão fica na auditoria.')) return;
+    const { error } = await sb.from("pee_docs").delete().eq("id", d.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    setMsg(""); setDocAberto(null); carregar();
+  }
+
+  // ---------- vencimentos ----------
+  function statusVenc(v) {
+    if (!v.vencimento) return ["var(--branco, #fff)", "var(--muted)", "sem data"];
+    const hoje = hojeLocalISO();
+    if (v.vencimento < hoje) return ["var(--vermelho-bg, #FDEBEB)", "var(--vermelho)", "venceu " + dataBr(v.vencimento)];
+    const dias = Math.round((new Date(v.vencimento + "T12:00:00") - new Date(hoje + "T12:00:00")) / 86400000);
+    if (dias <= 30) return ["var(--ambar-bg, #FFF7E6)", "var(--ambar)", "vence " + dataBr(v.vencimento)];
+    return ["var(--verde-bg)", "var(--verde)", "até " + dataBr(v.vencimento)];
+  }
+  async function salvarVenc() {
+    if (!formVenc.item.trim()) { setMsg("Dê o nome do item."); return; }
+    const campos = {
+      item: formVenc.item.trim(), orgao: (formVenc.orgao || "").trim() || null,
+      vencimento: formVenc.vencimento || null, observacao: (formVenc.observacao || "").trim() || null,
+    };
+    const r = formVenc.id
+      ? await sb.from("pee_vencimentos").update(campos).eq("id", formVenc.id)
+      : await sb.from("pee_vencimentos").insert({ ...campos, criado_por: ctx.profile.id });
+    if (r.error) { setMsg("Erro: " + r.error.message); return; }
+    setMsg(""); setFormVenc(null); carregar();
+  }
+  async function excluirVenc(v) {
+    if (!window.confirm('Excluir "' + v.item + '" dos vencimentos?')) return;
+    const { error } = await sb.from("pee_vencimentos").delete().eq("id", v.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+  }
+
+  const normBusca = (t) => (t || "").toLowerCase().normalize("NFD").replace(/[\u0300-\u036f]/g, "");
+  const docsFiltrados = useMemo(() => {
+    const b = normBusca(busca);
+    return docs.filter((d) => !b || normBusca(d.titulo).indexOf(b) !== -1 || normBusca(d.codigo).indexOf(b) !== -1)
+      .slice()
+      .sort((a, b2) => {
+        const ca = (pastaPorId[a.pasta_id] || {}).caderno || 0;
+        const cb = (pastaPorId[b2.pasta_id] || {}).caderno || 0;
+        return ca - cb || (a.codigo || "zzz").localeCompare(b2.codigo || "zzz");
+      });
+  }, [docs, busca, pastaPorId]);
+
+  const ChipSit = ({ s }) => {
+    const c = PEE_SITUACOES[s] || PEE_SITUACOES.elaboracao;
+    return <span className="chip" style={{ background: c[0], color: c[1] }}>{c[2]}</span>;
+  };
+  const BadgeCad = ({ n, tam }) => (
+    <span style={{ width: tam || 30, height: tam || 30, borderRadius: 9, background: PEE_CORES[n], color: "#fff", fontWeight: 800, fontSize: (tam || 30) * .45, display: "inline-flex", alignItems: "center", justifyContent: "center", flex: "none" }}>{n}</span>
+  );
+
+  function abrirDaLista(d) {
+    const p = pastaPorId[d.pasta_id];
+    setVisao("cadernos"); setCadAberto(p ? p.caderno : 0); setDocAberto(d);
+  }
+
+  return (
+    <div>
+      {/* ---------- editor de documento ---------- */}
+      {editDoc && podeCad && (
+        <div className="org-modal-fundo" onClick={(e) => { if (e.target === e.currentTarget) setEditDoc(null); }}>
+          <div className="org-modal anim-pop" style={{ maxWidth: 660 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12 }}>
+              <div style={{ fontSize: 14, fontWeight: 800 }}>{editDoc.id ? "Editar documento" : "Novo documento"}</div>
+              <i className="ti ti-x" style={{ marginLeft: "auto", cursor: "pointer", color: "var(--muted)", fontSize: 17 }} onClick={() => setEditDoc(null)} aria-label="Fechar"></i>
+            </div>
+            {msg && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+              <div style={{ display: "flex", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ width: 130 }}><label style={ROT_FICHA}>Código</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5, fontFamily: "var(--mono, monospace)" }} value={editDoc.codigo} onChange={(e) => setEditDoc({ ...editDoc, codigo: e.target.value })} /></div>
+                <div style={{ flex: 1, minWidth: 200 }}><label style={ROT_FICHA}>Título</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editDoc.titulo} onChange={(e) => setEditDoc({ ...editDoc, titulo: e.target.value })} /></div>
+                <div style={{ width: 80 }}><label style={ROT_FICHA}>Versão</label>
+                  <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editDoc.versao} onChange={(e) => setEditDoc({ ...editDoc, versao: e.target.value })} /></div>
+                <div style={{ width: 150 }}><label style={ROT_FICHA}>Situação</label>
+                  <select className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editDoc.situacao} onChange={(e) => setEditDoc({ ...editDoc, situacao: e.target.value })}>
+                    <option value="elaboracao">Em elaboração</option>
+                    <option value="revisao">Em revisão</option>
+                    <option value="publicado">Publicado</option>
+                  </select></div>
+              </div>
+              <div><label style={ROT_FICHA}>Pasta</label>
+                <select className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 12.5 }} value={editDoc.pasta_id} onChange={(e) => setEditDoc({ ...editDoc, pasta_id: e.target.value })}>
+                  {(pastas || []).map((p) => <option key={p.id} value={p.id}>Caderno {p.caderno} · {p.nome}</option>)}
+                </select></div>
+              <div><label style={ROT_FICHA}>Texto (parágrafos separados por linha em branco)</label>
+                <textarea className="campo" style={{ width: "100%", padding: "10px 12px", fontSize: 13, minHeight: 260, resize: "vertical", lineHeight: 1.6 }} value={editDoc.texto} onChange={(e) => setEditDoc({ ...editDoc, texto: e.target.value })} /></div>
+            </div>
+            <div style={{ display: "flex", gap: 8, marginTop: 14 }}>
+              <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={salvarDoc}>Salvar</button>
+              <button className="btn-contorno" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={() => setEditDoc(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* ---------- filtros ---------- */}
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+        {[["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]].map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => { setVisao(v); setDocAberto(null); }}
+            style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        {visao === "lista" && (
+          <input className="campo" style={{ width: 240, padding: "8px 10px", fontSize: 12.5 }} placeholder="buscar por título ou código…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        )}
+        {visao === "vencimentos" && podeVenc && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+            onClick={() => { setMsg(""); setFormVenc(formVenc ? null : { item: "", orgao: "", vencimento: "", observacao: "" }); }}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Novo item
+          </button>
+        )}
+      </div>
+
+      {msg && !editDoc && <div className="anim-pop" style={{ marginBottom: 10, fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>{msg}</div>}
+
+      {!pastas && <div className="card-fl" style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+
+      {/* ---------- CADERNOS ---------- */}
+      {pastas && visao === "cadernos" && cadAberto === null && (
+        <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(250px, 1fr))", gap: 12 }}>
+          {PEE_CADERNOS.map((c) => (
+            <div key={c.n} className="card-fl clicavel" onClick={() => setCadAberto(c.n)} style={{ padding: "16px 15px", display: "flex", alignItems: "center", gap: 12, cursor: "pointer" }}>
+              <BadgeCad n={c.n} tam={42} />
+              <div style={{ minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 800 }}>{c.nome}</div>
+                <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{contagemCaderno(c.n)}</div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {pastas && visao === "cadernos" && cadAberto !== null && !docAberto && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <button className="btn-contorno" style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => setCadAberto(null)}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 13 }} aria-hidden="true"></i>Cadernos
+            </button>
+            <BadgeCad n={cadAberto} />
+            <span style={{ fontSize: 14.5, fontWeight: 800 }}>Caderno {cadAberto} · {PEE_CADERNOS[cadAberto].nome}</span>
+            <span style={{ flex: 1 }}></span>
+            {podeCad && (
+              <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
+                onClick={() => { setMsg(""); setNovaPasta(novaPasta ? null : { caderno: cadAberto, nome: "" }); }}>
+                <i className="ti ti-folder-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova pasta
+              </button>
+            )}
+          </div>
+
+          {novaPasta && podeCad && (
+            <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, alignItems: "center", flexWrap: "wrap" }}>
+              <input className="campo" style={{ flex: 1, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="nome da pasta" value={novaPasta.nome} onChange={(e) => setNovaPasta({ ...novaPasta, nome: e.target.value })} />
+              <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovaPasta}>Criar</button>
+              <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovaPasta(null)}>Cancelar</button>
+            </div>
+          )}
+
+          {(pastasPorCad[cadAberto] || []).length === 0 && (
+            <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+              Este caderno ainda não tem pastas.{podeCad ? " Crie a primeira acima." : ""}
+            </div>
+          )}
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            {(pastasPorCad[cadAberto] || []).map((p) => (
+              <div key={p.id} className="card-fl" style={{ overflow: "hidden" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: 9, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", background: "var(--campo, #FBFCFE)" }}>
+                  <i className="ti ti-folder" style={{ fontSize: 15, color: PEE_CORES[cadAberto] }} aria-hidden="true"></i>
+                  {renPasta && renPasta.id === p.id ? (
+                    <span style={{ display: "flex", gap: 6, flex: 1, alignItems: "center" }}>
+                      <input className="campo" autoFocus style={{ flex: 1, padding: "6px 9px", fontSize: 12.5 }} value={renPasta.nome} onChange={(e) => setRenPasta({ ...renPasta, nome: e.target.value })} onKeyDown={(e) => { if (e.key === "Enter") salvarRenPasta(); if (e.key === "Escape") setRenPasta(null); }} />
+                      <button className="btn-primaria" style={{ padding: "6px 11px", fontSize: 11.5 }} onClick={salvarRenPasta}>Salvar</button>
+                    </span>
+                  ) : (
+                    <span style={{ fontSize: 13, fontWeight: 700, flex: 1 }}>{p.nome}</span>
+                  )}
+                  <span style={{ fontSize: 11, color: "var(--muted)" }}>{(docsPorPasta[p.id] || []).length} doc(s)</span>
+                  {podeCad && (!renPasta || renPasta.id !== p.id) && (
+                    <span style={{ display: "flex", gap: 10 }}>
+                      <i className="ti ti-file-plus" title="Novo documento" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => novoDoc(p)}></i>
+                      <i className="ti ti-pencil" title="Renomear pasta" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => { setMsg(""); setRenPasta({ id: p.id, nome: p.nome }); }}></i>
+                      <i className="ti ti-trash" title="Excluir pasta" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluirPasta(p)}></i>
+                    </span>
+                  )}
+                </div>
+                {(docsPorPasta[p.id] || []).map((d) => (
+                  <div key={d.id} className="linha-hover" onClick={() => setDocAberto(d)}
+                    style={{ display: "flex", alignItems: "center", gap: 11, padding: "9px 14px", borderBottom: "1px solid var(--linha-suave)", cursor: "pointer", flexWrap: "wrap" }}>
+                    <span style={{ fontFamily: "var(--mono, monospace)", fontSize: 11.5, fontWeight: 700, color: "var(--marca-texto)", minWidth: 84 }}>{d.codigo || "—"}</span>
+                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, minWidth: 160 }}>{d.titulo}</span>
+                    <span style={{ fontSize: 11, color: "var(--muted)" }}>v{d.versao}</span>
+                    <ChipSit s={d.situacao} />
+                  </div>
+                ))}
+                {(docsPorPasta[p.id] || []).length === 0 && (
+                  <div style={{ padding: "12px 14px", fontSize: 12, color: "var(--muted)" }}>Pasta vazia.</div>
+                )}
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- LEITOR ---------- */}
+      {pastas && visao === "cadernos" && cadAberto !== null && docAberto && (
+        <div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
+            <button className="btn-contorno" style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => setDocAberto(null)}>
+              <i className="ti ti-arrow-left" style={{ fontSize: 13 }} aria-hidden="true"></i>{(pastaPorId[docAberto.pasta_id] || {}).nome || "Pasta"}
+            </button>
+            <span style={{ flex: 1 }}></span>
+            {podeCad && (
+              <span style={{ display: "flex", gap: 8 }}>
+                <button className="btn-contorno" style={{ padding: "7px 12px", fontSize: 12 }} onClick={() => editarDoc(docAberto)}>
+                  <i className="ti ti-pencil" style={{ fontSize: 13 }} aria-hidden="true"></i>Editar
+                </button>
+                <button className="btn-contorno" style={{ padding: "7px 12px", fontSize: 12, color: "var(--vermelho)" }} onClick={() => excluirDoc(docAberto)}>
+                  <i className="ti ti-trash" style={{ fontSize: 13 }} aria-hidden="true"></i>Excluir
+                </button>
+              </span>
+            )}
+          </div>
+          <div className="card-fl" style={{ padding: "22px 26px", maxWidth: 860 }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap", marginBottom: 8 }}>
+              <BadgeCad n={cadAberto} tam={26} />
+              <span style={{ fontFamily: "var(--mono, monospace)", fontSize: 12, fontWeight: 700, color: "var(--marca-texto)" }}>{docAberto.codigo || "sem código"}</span>
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>v{docAberto.versao}</span>
+              <ChipSit s={docAberto.situacao} />
+              <span style={{ flex: 1 }}></span>
+              <span style={{ fontSize: 11, color: "var(--muted)" }}>atualizado em {dataBr((docAberto.atualizado_em || docAberto.created_at || "").slice(0, 10))}</span>
+            </div>
+            <h2 style={{ margin: "0 0 14px", fontSize: 20, fontWeight: 800, letterSpacing: -.2 }}>{docAberto.titulo}</h2>
+            {(docAberto.texto || "").trim() ? (
+              (docAberto.texto || "").split(/\n\s*\n/).map((par, i) => (
+                <p key={i} style={{ fontSize: 14, lineHeight: 1.75, color: "var(--ink)", margin: "0 0 12px", whiteSpace: "pre-wrap" }}>{par}</p>
+              ))
+            ) : (
+              <div style={{ padding: "18px 0", fontSize: 13, color: "var(--muted)" }}>
+                Conteúdo em elaboração — a estrutura já existe; o texto será redigido a partir do processo real do setor.
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ---------- LISTA MESTRA ---------- */}
+      {pastas && visao === "lista" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {docsFiltrados.length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
+              {docs.length === 0 ? "Nenhum documento ainda." : "Nada com essa busca."}
+            </div>
+          )}
+          {docsFiltrados.map((d) => {
+            const cad = (pastaPorId[d.pasta_id] || {}).caderno || 0;
+            return (
+              <div key={d.id} className="linha-hover" onClick={() => abrirDaLista(d)}
+                style={{ display: "flex", alignItems: "center", gap: 11, padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)", cursor: "pointer", flexWrap: "wrap" }}>
+                <BadgeCad n={cad} tam={24} />
+                <span style={{ fontFamily: "var(--mono, monospace)", fontSize: 11.5, fontWeight: 700, color: "var(--marca-texto)", minWidth: 84 }}>{d.codigo || "—"}</span>
+                <span style={{ flex: 1, fontSize: 13, fontWeight: 600, minWidth: 160 }}>
+                  {d.titulo}
+                  <span style={{ display: "block", fontSize: 10.5, color: "var(--muted)", fontWeight: 500 }}>{(pastaPorId[d.pasta_id] || {}).nome}</span>
+                </span>
+                <span style={{ fontSize: 11, color: "var(--muted)" }}>v{d.versao}</span>
+                <ChipSit s={d.situacao} />
+              </div>
+            );
+          })}
+        </div>
+      )}
+
+      {/* ---------- VENCIMENTOS ---------- */}
+      {pastas && visao === "vencimentos" && (
+        <div>
+          {formVenc && podeVenc && (
+            <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+              <input className="campo" style={{ flex: 2, minWidth: 190, padding: "7px 9px", fontSize: 12.5 }} placeholder="item (ex.: Alvará sanitário)" value={formVenc.item} onChange={(e) => setFormVenc({ ...formVenc, item: e.target.value })} />
+              <input className="campo" style={{ flex: 1, minWidth: 150, padding: "7px 9px", fontSize: 12.5 }} placeholder="órgão (opcional)" value={formVenc.orgao} onChange={(e) => setFormVenc({ ...formVenc, orgao: e.target.value })} />
+              <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={formVenc.vencimento} onChange={(e) => setFormVenc({ ...formVenc, vencimento: e.target.value })} />
+              <input className="campo" style={{ flex: 2, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação (opcional)" value={formVenc.observacao} onChange={(e) => setFormVenc({ ...formVenc, observacao: e.target.value })} />
+              <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarVenc}>{formVenc.id ? "Salvar" : "Registrar"}</button>
+              <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setFormVenc(null)}>Cancelar</button>
+            </div>
+          )}
+          <div className="card-fl" style={{ overflow: "hidden" }}>
+            {vencs.length === 0 && (
+              <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhum item acompanhado ainda.</div>
+            )}
+            {vencs.map((v) => {
+              const st = statusVenc(v);
+              return (
+                <div key={v.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                    <i className="ti ti-calendar-due" style={{ fontSize: 15, color: st[1] }} aria-hidden="true"></i>
+                    <span style={{ fontSize: 13, fontWeight: 700 }}>{v.item}</span>
+                    {v.orgao && <span style={{ fontSize: 11.5, color: "var(--muted)" }}>{v.orgao}</span>}
+                    <span className="chip" style={{ background: st[0], color: st[1] }}>{st[2]}</span>
+                    <span style={{ flex: 1 }}></span>
+                    {podeVenc && (
+                      <span style={{ display: "flex", gap: 10 }}>
+                        <i className="ti ti-pencil" title="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                          onClick={() => { setMsg(""); setFormVenc({ id: v.id, item: v.item, orgao: v.orgao || "", vencimento: v.vencimento || "", observacao: v.observacao || "" }); }}></i>
+                        <i className="ti ti-trash" title="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluirVenc(v)}></i>
+                      </span>
+                    )}
+                  </div>
+                  {v.observacao && <div style={{ fontSize: 12, color: "var(--sec)", marginTop: 4, marginLeft: 24 }}>{v.observacao}</div>}
+                </div>
+              );
+            })}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 const PALETA_PESSOAS = ["#BFD9F2", "#F9C6C6", "#C9EFD4", "#F6D9B0", "#E3CBF2", "#BFE9E4", "#F2C9DF", "#D6E3B8", "#F4CBB4", "#C5D2F4", "#EFE3A9", "#D9C8EE", "#B8E6F2", "#F2D3C2"];
 function corPessoa(chave) {
   let h = 0;
@@ -3846,6 +4288,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaModelos ctx={ctx} />;
   } else if (pagina === "rh") {
     conteudo = <PaginaRH ctx={ctx} />;
+  } else if (pagina === "pee") {
+    conteudo = <PaginaPee ctx={ctx} />;
   } else if (pagina === "salas") {
     conteudo = <PaginaSalas ctx={ctx} />;
   } else if (pagina === "auditoria") {
