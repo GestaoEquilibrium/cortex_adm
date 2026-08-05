@@ -348,7 +348,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v39</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v40</div>
       </aside>
     </React.Fragment>
   );
@@ -4938,6 +4938,39 @@ function PaginaRelatorios({ ctx }) {
 function PaginaInfinity({ ctx }) {
   const [teste, setTeste] = useState(null);
   const [ocupado, setOcupado] = useState(false);
+  const [mesFin, setMesFin] = useState(() => new Date().toISOString().slice(0, 7));
+  const [tick, setTick] = useState(0);
+  const [resumo, setResumo] = useState(null);
+  const [carregandoFin, setCarregandoFin] = useState(false);
+
+  useEffect(() => {
+    let vivo = true;
+    (async () => {
+      setCarregandoFin(true);
+      try {
+        const { data, error } = await sb.rpc("infinity_resumo", { p_mes: mesFin });
+        if (error) throw error;
+        if (vivo) setResumo(data);
+      } catch (e) { if (vivo) setResumo({ ok: false, erro: e.message + " — o 25_infinity_resumo.sql já rodou?" }); }
+      if (vivo) setCarregandoFin(false);
+    })();
+    return () => { vivo = false; };
+  }, [mesFin, tick]);
+
+  const brl = (v) => Number(v || 0).toLocaleString("pt-BR", { style: "currency", currency: "BRL" });
+  const cap = (t) => { const s = String(t == null || t === "" ? "—" : t); return s.charAt(0).toUpperCase() + s.slice(1); };
+  const rotSec = { fontSize: 11, fontWeight: 700, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .5, marginBottom: 6 };
+  const thSt = { textAlign: "left", padding: "7px 10px", fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: .5, borderBottom: "1px solid var(--linha)" };
+  const tdSt = { padding: "7px 10px", borderBottom: "1px solid var(--linha-suave)" };
+  function CartaoFin({ titulo, valor, sub }) {
+    return (
+      <div style={{ background: "var(--campo)", border: "1px solid var(--linha)", borderRadius: 12, padding: "11px 13px" }}>
+        <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 700, textTransform: "uppercase", letterSpacing: .5 }}>{titulo}</div>
+        <div style={{ fontSize: 18, fontWeight: 800, color: "var(--marca-texto)", margin: "3px 0 2px" }}>{valor}</div>
+        {sub && <div style={{ fontSize: 11, color: "var(--muted)" }}>{sub}</div>}
+      </div>
+    );
+  }
 
   async function testar() {
     setOcupado(true); setTeste(null);
@@ -4971,12 +5004,70 @@ function PaginaInfinity({ ctx }) {
       </div>
 
       <div className="card-fl" style={{ padding: 16 }}>
-        <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 4 }}>Painel financeiro</div>
-        <div style={{ fontSize: 12.5, color: "var(--sec)", lineHeight: 1.6 }}>
-          Próxima etapa: com o mapa do banco do Infinity (script P0), a ponte ganha o
-          <b> ponte_resumo</b> — receitas, despesas e resultado do mês, contas a pagar e a receber —
-          e este painel passa a mostrar tudo aqui, somente leitura, respeitando as permissões do módulo.
+        <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 12 }}>
+          <div style={{ fontWeight: 700, fontSize: 13.5, flex: 1 }}>Painel financeiro</div>
+          <input className="campo" type="month" style={{ width: 150, padding: "7px 9px", fontSize: 12.5 }} value={mesFin} onChange={(e) => setMesFin(e.target.value)} />
+          <button className="btn-fantasma" style={{ width: "auto", padding: "7px 12px" }} disabled={carregandoFin} onClick={() => setTick((t) => t + 1)} aria-label="Atualizar" title="Atualizar">
+            <i className="ti ti-refresh" style={{ fontSize: 14 }} aria-hidden="true"></i>
+          </button>
         </div>
+        {carregandoFin && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Buscando no Infinity…</div>}
+        {!carregandoFin && resumo && !resumo.ok && (
+          <div style={{ fontSize: 12.5, fontWeight: 600, color: "var(--vermelho)" }}>✗ {resumo.erro}</div>
+        )}
+        {!carregandoFin && resumo && resumo.ok && (
+          <div style={{ display: "grid", gap: 14 }}>
+            <div>
+              <div style={rotSec}>Movimento do mês (transactions)</div>
+              {(resumo.transacoes || []).length === 0
+                ? <div style={{ fontSize: 12, color: "var(--muted)" }}>Sem lançamentos no mês.</div>
+                : <div style={{ overflowX: "auto" }}>
+                    <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, minWidth: 380 }}>
+                      <thead><tr>{["Tipo", "Status", "Qtde", "Total"].map((h) => <th key={h} style={thSt}>{h}</th>)}</tr></thead>
+                      <tbody>
+                        {(resumo.transacoes || []).map((t, i) => (
+                          <tr key={i} style={{ background: i % 2 ? "var(--campo)" : "transparent" }}>
+                            <td style={tdSt}>{cap(t.type)}</td>
+                            <td style={tdSt}>{cap(t.status)}</td>
+                            <td style={tdSt}>{t.qtd}</td>
+                            <td style={{ ...tdSt, fontWeight: 700 }}>{brl(t.total)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>}
+            </div>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fit, minmax(170px, 1fr))", gap: 10 }}>
+              <CartaoFin titulo="Caixa do mês" valor={brl(resumo.caixa && resumo.caixa.total)} sub={(((resumo.caixa && resumo.caixa.qtd) || 0) + " lançamento(s)")} />
+              <CartaoFin titulo="Folha (competência)" valor={brl(resumo.pagamentos && resumo.pagamentos.total_liquido)} sub={"bruto " + brl(resumo.pagamentos && resumo.pagamentos.total_bruto)} />
+              <CartaoFin titulo="Repasses (líquido)" valor={brl(resumo.repasses && resumo.repasses.liquido)} sub={"receita " + brl(resumo.repasses && resumo.repasses.receita) + " · holding " + brl(resumo.repasses && resumo.repasses.holding)} />
+            </div>
+            {(resumo.caixa_formas || []).length > 0 && (
+              <div>
+                <div style={rotSec}>Caixa por forma de pagamento</div>
+                <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
+                  {(resumo.caixa_formas || []).map((f, i) => (
+                    <span key={i} className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700 }}>{cap(f.forma)} · {brl(f.total)}</span>
+                  ))}
+                </div>
+              </div>
+            )}
+            {(resumo.contas || []).length > 0 && (
+              <div>
+                <div style={rotSec}>Contas bancárias (saldo inicial cadastrado)</div>
+                {(resumo.contas || []).map((c, i) => (
+                  <div key={i} style={{ display: "flex", justifyContent: "space-between", gap: 10, fontSize: 12.5, padding: "6px 0", borderTop: "1px solid var(--linha-suave)" }}>
+                    <span>{c.nome}{c.banco ? " · " + c.banco : ""}</span>
+                    <span style={{ fontWeight: 700 }}>{brl(c.saldo_inicial)}</span>
+                  </div>
+                ))}
+              </div>
+            )}
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>
+              Somente leitura, direto do Infinity pela ponte. Os rótulos de tipo e status vêm do banco de lá — me mande um print do painel que eu deixo os nomes bonitos.
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );
