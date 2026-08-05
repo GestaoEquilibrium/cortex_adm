@@ -1,11 +1,12 @@
 // ============================================================
-// CORTEX GESTAO - Edge Function "notificar"
-// Criar no painel do Supabase: Edge Functions -> Deploy new
-// function -> nome: notificar -> colar este arquivo inteiro.
-// IMPORTANTE: desligue "Verify JWT with legacy secret" (a
-// funcao valida sozinha: segredo do banco OU login do usuario).
-// Secrets necessarios (aba Secrets): VAPID_PUBLIC_KEY,
-// VAPID_PRIVATE_KEY, VAPID_SUBJECT, NOTIFY_SECRET.
+// CORTEX GESTAO - Edge Function "notificar" (v2 - sprint 44)
+// Atualizar no painel: Edge Functions -> notificar -> Code ->
+// substituir TUDO por este arquivo -> Deploy updates.
+// Secrets continuam os mesmos (VAPID_* e NOTIFY_SECRET).
+//
+// Novidade: envio DIRECIONADO (para_profile) - usado pelo aviso
+// de demanda atribuida. Aviso pessoal vem LIGADO por padrao:
+// so nao entrega se a pessoa desligou o tipo nas preferencias.
 // ============================================================
 import { createClient } from "npm:@supabase/supabase-js@2";
 import webpush from "npm:web-push@3.6.7";
@@ -32,27 +33,39 @@ Deno.serve(async (req) => {
   const admin = createClient(SB_URL, SERVICE);
 
   // Quem pode mandar: o banco (com o segredo) ou um usuario logado (teste)
-  let apenasDe: string | null = null;
+  let apenasDe: string | null = null;      // teste: so quem pediu
+  let paraProfile: string | null = null;   // direcionado: so o designado
   const segredo = req.headers.get("x-notify-secret");
-  if (segredo !== Deno.env.get("NOTIFY_SECRET")) {
+  if (segredo === Deno.env.get("NOTIFY_SECRET")) {
+    paraProfile = body.para_profile ? String(body.para_profile) : null;
+  } else {
     const jwt = (req.headers.get("authorization") || "").replace("Bearer ", "");
     const { data } = await createClient(SB_URL, ANON).auth.getUser(jwt);
     if (!data || !data.user) return new Response("nao autorizado", { status: 401, headers: cors });
-    apenasDe = data.user.id; // teste: so os aparelhos de quem pediu
+    apenasDe = data.user.id;
   }
 
   let q = admin.from("push_inscricoes").select("id, endpoint, p256dh, auth, profile_id");
   if (apenasDe) q = q.eq("profile_id", apenasDe);
+  if (paraProfile) q = q.eq("profile_id", paraProfile);
   const { data: subs } = await q;
   let lista = subs || [];
 
-  // Fora do teste, respeita as preferencias de cada pessoa
   if (!apenasDe && tipo !== "teste") {
-    const { data: prefs } = await admin
-      .from("notificacao_preferencias").select("profile_id")
-      .eq("tipo", tipo).eq("ativo", true);
-    const ok = new Set((prefs || []).map((p: { profile_id: string }) => p.profile_id));
-    lista = lista.filter((s) => ok.has(s.profile_id));
+    if (paraProfile) {
+      // aviso pessoal: entrega por padrao; respeita apenas o "desligado" explicito
+      const { data: off } = await admin
+        .from("notificacao_preferencias").select("profile_id")
+        .eq("profile_id", paraProfile).eq("tipo", tipo).eq("ativo", false);
+      if ((off || []).length > 0) lista = [];
+    } else {
+      // aviso geral: so para quem ligou o tipo
+      const { data: prefs } = await admin
+        .from("notificacao_preferencias").select("profile_id")
+        .eq("tipo", tipo).eq("ativo", true);
+      const ok = new Set((prefs || []).map((p: { profile_id: string }) => p.profile_id));
+      lista = lista.filter((s) => ok.has(s.profile_id));
+    }
   }
 
   const payload = JSON.stringify({

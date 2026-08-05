@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v43</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v44</div>
       </aside>
     </React.Fragment>
   );
@@ -4589,6 +4589,7 @@ function nomeAparelho() {
 function AbaNotificacoes({ ctx }) {
   const TIPOS = [
     { id: "ponto_ocorrencia", rotulo: "Ocorrência registrada no relógio", desc: "Alguém registrou uma ocorrência no ponto.", vivo: true },
+    { id: "demanda_atribuida", rotulo: "Demanda atribuída a você", desc: "Quando alguém te designa uma tarefa. Vem ligado por padrão.", vivo: true, padraoOn: true },
     { id: "rh_alerta", rotulo: "Alertas e pendências do RH", desc: "Alertas legais e pendências da equipe.", vivo: false },
     { id: "pee_vencimento", rotulo: "Documento do PEE vencendo", desc: "Avisos de vencimento de documentos.", vivo: false },
   ];
@@ -4617,7 +4618,7 @@ function AbaNotificacoes({ ctx }) {
   useEffect(() => { carregar(); }, []);
 
   async function alternar(t) {
-    const novo = !(prefs && prefs[t.id]);
+    const novo = !((prefs && prefs[t.id] !== undefined) ? prefs[t.id] : !!t.padraoOn);
     setPrefs({ ...prefs, [t.id]: novo });
     const { error } = await sb.from("notificacao_preferencias")
       .upsert({ profile_id: ctx.profile.id, tipo: t.id, ativo: novo }, { onConflict: "profile_id,tipo" });
@@ -4699,18 +4700,18 @@ function AbaNotificacoes({ ctx }) {
 
       <div className="card-fl" style={{ padding: 16 }}>
         <div style={{ fontWeight: 700, fontSize: 13.5, marginBottom: 6 }}>O que você quer receber</div>
-        {TIPOS.map((t) => (
+        {TIPOS.map((t) => { const ligado = (prefs && prefs[t.id] !== undefined) ? prefs[t.id] : !!t.padraoOn; return (
           <div key={t.id} style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 0", borderTop: "1px solid var(--linha-suave)" }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 12.5, fontWeight: 600 }}>{t.rotulo}{!t.vivo && <span className="chip" style={{ marginLeft: 7, fontSize: 10, background: "var(--tint)", color: "var(--marca-texto)" }}>em breve</span>}</div>
               <div style={{ fontSize: 11.5, color: "var(--muted)" }}>{t.desc}</div>
             </div>
             <span className="chip" onClick={() => alternar(t)}
-              style={{ cursor: "pointer", fontWeight: 700, background: prefs && prefs[t.id] ? "rgba(22,163,74,.12)" : "var(--branco)", color: prefs && prefs[t.id] ? "var(--verde)" : "var(--muted)", border: "1px solid " + (prefs && prefs[t.id] ? "rgba(22,163,74,.35)" : "var(--linha)") }}>
-              {prefs && prefs[t.id] ? "Ativado" : "Desativado"}
+              style={{ cursor: "pointer", fontWeight: 700, background: ligado ? "rgba(22,163,74,.12)" : "var(--branco)", color: ligado ? "var(--verde)" : "var(--muted)", border: "1px solid " + (ligado ? "rgba(22,163,74,.35)" : "var(--linha)") }}>
+              {ligado ? "Ativado" : "Desativado"}
             </span>
           </div>
-        ))}
+        ); })}
       </div>
 
       <div className="card-fl" style={{ padding: 16 }}>
@@ -5212,6 +5213,7 @@ function PaginaDemandas({ ctx }) {
   const [busca, setBusca] = useState("");
   const [filtro, setFiltro] = useState("abertas");
   const [setorF, setSetorF] = useState("");
+  const [prioF, setPrioF] = useState("");
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState("");
   const [ocupado, setOcupado] = useState(false);
@@ -5230,6 +5232,12 @@ function PaginaDemandas({ ctx }) {
   }, []);
 
   const hojeStr = (() => { const n = new Date(); return n.getFullYear() + "-" + String(n.getMonth() + 1).padStart(2, "0") + "-" + String(n.getDate()).padStart(2, "0"); })();
+  const PRIO = {
+    urgente: { r: "Urgente", cor: "var(--vermelho)", fundo: "rgba(220,38,38,.12)" },
+    alta: { r: "Alta", cor: "#B45309", fundo: "#FFF7E6" },
+    baixa: { r: "Baixa", cor: "var(--muted)", fundo: "var(--campo)" },
+  };
+
   function farolPrazo(d) {
     if (!d.prazo || d.status === "concluida") return null;
     if (d.prazo < hojeStr) {
@@ -5248,13 +5256,15 @@ function PaginaDemandas({ ctx }) {
   const visiveis = (lista || []).filter((d) =>
     (filtro === "todas" || (filtro === "abertas" ? d.status === "aberta" : d.status === "concluida"))
     && (!setorF || d.setor === setorF)
+    && (!prioF || d.prioridade === prioF)
     && ((d.titulo + " " + (d.descricao || "") + " " + d.nome).toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0)
   );
   const nAbertas = (lista || []).filter((d) => d.status === "aberta").length;
   const nAtrasadas = (lista || []).filter((d) => d.status === "aberta" && d.prazo && d.prazo < hojeStr).length;
+  const nUrgentes = (lista || []).filter((d) => d.status === "aberta" && d.prioridade === "urgente").length;
 
-  function abrirNova() { setMsg(""); setForm({ id: null, titulo: "", colaborador_id: "", prazo: "", descricao: "" }); }
-  function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "" }); }
+  function abrirNova() { setMsg(""); setForm({ id: null, titulo: "", colaborador_id: "", prazo: "", descricao: "", prioridade: "normal" }); }
+  function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "", prioridade: d.prioridade || "normal" }); }
 
   async function salvar() {
     if (!form.titulo.trim()) { setMsg("Dê um título à demanda."); return; }
@@ -5265,6 +5275,7 @@ function PaginaDemandas({ ctx }) {
       descricao: form.descricao.trim() || null,
       colaborador_id: form.colaborador_id,
       prazo: form.prazo || null,
+      prioridade: form.prioridade || "normal",
       atualizado_em: new Date().toISOString(),
     };
     let r;
@@ -5304,7 +5315,12 @@ function PaginaDemandas({ ctx }) {
           <option value="">Todos os setores</option>
           {setores.map((s) => <option key={s} value={s}>{s}</option>)}
         </select>
+        <select className="campo" style={{ width: 140, padding: "8px 10px", fontSize: 12.5 }} value={prioF} onChange={(e) => setPrioF(e.target.value)}>
+          <option value="">Prioridade</option>
+          <option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normal">Normal</option><option value="baixa">Baixa</option>
+        </select>
         <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700 }}>{nAbertas} aberta(s)</span>
+        {nUrgentes > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.12)", color: "var(--vermelho)", fontWeight: 800 }}>⚡ {nUrgentes} urgente(s)</span>}
         {nAtrasadas > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.10)", color: "var(--vermelho)", fontWeight: 700 }}>{nAtrasadas} atrasada(s)</span>}
         <span style={{ flex: 1 }}></span>
         {podeEditar && (
@@ -5319,13 +5335,16 @@ function PaginaDemandas({ ctx }) {
       {form && podeEditar && (
         <div className="card-fl anim-pop" style={{ padding: 16, marginBottom: 12 }}>
           <div style={{ fontWeight: 800, fontSize: 13, marginBottom: 10 }}>{form.id ? "Editar demanda" : "Nova demanda"}</div>
-          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr", gap: 10 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10 }}>
             <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} placeholder="O que precisa ser feito?" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} />
             <select className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.colaborador_id} onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}>
               <option value="">Atribuir a...</option>
               {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.setor ? " · " + c.setor : ""}</option>)}
             </select>
             <input className="campo" type="date" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
+            <select className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.prioridade} onChange={(e) => setForm({ ...form, prioridade: e.target.value })}>
+              <option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option>
+            </select>
           </div>
           <textarea className="campo" style={{ width: "100%", marginTop: 10, padding: "8px 10px", fontSize: 12.5, minHeight: 64, resize: "vertical" }}
             placeholder="Detalhes (opcional)" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} />
@@ -5362,6 +5381,7 @@ function PaginaDemandas({ ctx }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
                 <span style={{ fontSize: 13.5, fontWeight: 700, textDecoration: feita ? "line-through" : "none" }}>{d.titulo}</span>
+                {d.prioridade !== "normal" && PRIO[d.prioridade] && <span className="chip" style={{ background: PRIO[d.prioridade].fundo, color: PRIO[d.prioridade].cor, fontWeight: 800, fontSize: 10.5 }}>{PRIO[d.prioridade].r}</span>}
                 {farol && <span className="chip" style={{ background: farol.fundo, color: farol.cor, fontWeight: 700, fontSize: 10.5 }}>{farol.rotulo}</span>}
                 {d.setor && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700, fontSize: 10.5 }}>{d.setor}</span>}
               </div>
