@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v44</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v45</div>
       </aside>
     </React.Fragment>
   );
@@ -632,6 +632,7 @@ function PaginaInstrucoes() {
 // Arquivos: o drive proprio
 // ------------------------------------------------------------
 function PaginaArquivos({ ctx }) {
+  const [previa, setPrevia] = useState(null);
   const [trilha, setTrilha] = useState([]); // [{id, nome}] - vazio = raiz
   const [pastas, setPastas] = useState(null);
   const [arquivos, setArquivos] = useState(null);
@@ -743,6 +744,11 @@ function PaginaArquivos({ ctx }) {
     carregar();
   }
 
+  function verArquivo(a) {
+    registrarEvento("visualizar", "arquivos", a.nome, a.id);
+    setPrevia(a);
+  }
+
   async function abrirArquivo(a, baixar) {
     const op = baixar ? { download: a.nome } : undefined;
     const { data, error } = await sb.storage.from("arquivos").createSignedUrl(a.storage_path, 120, op);
@@ -789,6 +795,7 @@ function PaginaArquivos({ ctx }) {
 
   return (
     <div>
+      {previa && <PreviaArquivo bucket="arquivos" alvo={previa} aoFechar={() => setPrevia(null)} aoBaixar={() => abrirArquivo(previa, true)} />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, flexWrap: "wrap" }}>
           <span onClick={() => irPara(-1)} style={{ color: trilha.length ? "var(--muted)" : "var(--ink)", fontWeight: trilha.length ? 400 : 600, cursor: "pointer" }}>Arquivos</span>
@@ -887,7 +894,7 @@ function PaginaArquivos({ ctx }) {
                       </div>
                     </div>
                     <span style={{ display: "flex", gap: 5, flex: "none" }}>
-                      <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => abrirArquivo(a, false)}>
+                      <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => verArquivo(a)}>
                         <i className="ti ti-eye" style={{ fontSize: 14 }} aria-hidden="true"></i>
                       </button>
                       <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Baixar" title="Baixar" onClick={() => abrirArquivo(a, true)}>
@@ -3538,6 +3545,7 @@ const CORES_CATEGORIA = [
 ];
 
 function PaginaModelos({ ctx }) {
+  const [previaM, setPreviaM] = useState(null);
   const [modelos, setModelos] = useState(null);
   const [filtro, setFiltro] = useState("");
   const [msg, setMsg] = useState("");
@@ -3626,6 +3634,12 @@ function PaginaModelos({ ctx }) {
     carregar();
   }
 
+  function verModelo(m) {
+    if (!m.storage_path) { setMsg("Este modelo está sem arquivo. Edite e envie um."); return; }
+    registrarEvento("visualizar", "modelos", m.nome, m.id);
+    setPreviaM(m);
+  }
+
   async function abrirModelo(m, baixar) {
     if (!m.storage_path) { setMsg("Este modelo está sem arquivo. Edite e envie um."); return; }
     const ext = "." + m.storage_path.split(".").pop();
@@ -3638,6 +3652,7 @@ function PaginaModelos({ ctx }) {
 
   return (
     <div>
+      {previaM && <PreviaArquivo bucket="modelos" alvo={previaM} aoFechar={() => setPreviaM(null)} aoBaixar={() => abrirModelo(previaM, true)} />}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", gap: 6, flexWrap: "wrap" }}>
           <span className="chip" onClick={() => setFiltro("")} style={{ cursor: "pointer", background: !filtro ? "var(--tint)" : "var(--branco)", color: !filtro ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (!filtro ? "var(--tint-borda)" : "var(--linha)") }}>Todos</span>
@@ -3704,7 +3719,7 @@ function PaginaModelos({ ctx }) {
                 atualizado {tempoRelativo(m.atualizado_em)}{m.profiles && m.profiles.nome ? " por " + primeiroNome(m.profiles.nome) : ""}
               </div>
               <div style={{ display: "flex", gap: 5 }}>
-                <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => abrirModelo(m, false)}>
+                <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Visualizar" title="Visualizar" onClick={() => verModelo(m)}>
                   <i className="ti ti-eye" style={{ fontSize: 14 }} aria-hidden="true"></i>
                 </button>
                 <button className="btn-primaria" style={{ padding: "6px 12px", fontSize: 12, flex: 1, justifyContent: "center" }} onClick={() => abrirModelo(m, true)}>
@@ -5401,6 +5416,78 @@ function PaginaDemandas({ ctx }) {
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function PreviaArquivo({ bucket, alvo, aoFechar, aoBaixar }) {
+  const [estado, setEstado] = useState({ carregando: true });
+
+  useEffect(() => {
+    function tecla(e) { if (e.key === "Escape") aoFechar(); }
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, [aoFechar]);
+
+  useEffect(() => {
+    let vivo = true;
+    let urlObj = null;
+    (async () => {
+      try {
+        const ext = (String(alvo.storage_path || alvo.nome).split(".").pop() || "").toLowerCase();
+        const MIME = { png: "image/png", jpg: "image/jpeg", jpeg: "image/jpeg", gif: "image/gif", webp: "image/webp", bmp: "image/bmp", svg: "image/svg+xml", pdf: "application/pdf", mp4: "video/mp4", webm: "video/webm", mov: "video/quicktime", mp3: "audio/mpeg", wav: "audio/wav", ogg: "audio/ogg", m4a: "audio/mp4", txt: "text/plain", csv: "text/csv", md: "text/plain", json: "application/json", log: "text/plain" };
+        const tipo = ["png", "jpg", "jpeg", "gif", "webp", "bmp", "svg"].indexOf(ext) >= 0 ? "imagem"
+          : ext === "pdf" ? "pdf"
+          : ["mp4", "webm", "mov"].indexOf(ext) >= 0 ? "video"
+          : ["mp3", "wav", "ogg", "m4a"].indexOf(ext) >= 0 ? "audio"
+          : ["txt", "csv", "md", "json", "log"].indexOf(ext) >= 0 ? "texto" : "outro";
+        if (tipo === "outro") { if (vivo) setEstado({ tipo, ext }); return; }
+        const { data, error } = await sb.storage.from(bucket).download(alvo.storage_path);
+        if (error) throw error;
+        if (!vivo) return;
+        if (tipo === "texto") {
+          const txt = await data.slice(0, 300000).text();
+          if (vivo) setEstado({ tipo, texto: txt, cortado: data.size > 300000 });
+        } else {
+          urlObj = URL.createObjectURL(new Blob([data], { type: MIME[ext] || "application/octet-stream" }));
+          if (vivo) setEstado({ tipo, url: urlObj });
+        }
+      } catch (e) { if (vivo) setEstado({ erro: e.message || String(e) }); }
+    })();
+    return () => { vivo = false; if (urlObj) URL.revokeObjectURL(urlObj); };
+  }, [alvo, bucket]);
+
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.55)", zIndex: 9000, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
+         onClick={(e) => { if (e.target === e.currentTarget) aoFechar(); }}>
+      <div className="card-fl anim-pop" style={{ width: "min(940px, 96vw)", maxHeight: "92vh", display: "flex", flexDirection: "column", padding: 0, overflow: "hidden" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--linha)" }}>
+          <i className="ti ti-file" style={{ fontSize: 16, color: "var(--marca-texto)", flex: "none" }} aria-hidden="true"></i>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 13, fontWeight: 700, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{alvo.nome}</div>
+          <button className="btn-contorno" style={{ padding: "6px 12px", fontSize: 12, flex: "none" }} onClick={aoBaixar}>
+            <i className="ti ti-download" style={{ fontSize: 13, marginRight: 5 }} aria-hidden="true"></i>Baixar
+          </button>
+          <button className="btn-fantasma" style={{ width: 30, height: 30, flex: "none" }} aria-label="Fechar" title="Fechar (Esc)" onClick={aoFechar}>
+            <i className="ti ti-x" style={{ fontSize: 15 }} aria-hidden="true"></i>
+          </button>
+        </div>
+        <div style={{ flex: 1, minHeight: 300, background: "var(--campo)", display: "flex", alignItems: "center", justifyContent: "center", overflow: "auto" }}>
+          {estado.carregando && <div style={{ fontSize: 13, color: "var(--muted)", padding: 30 }}>Preparando a prévia…</div>}
+          {estado.erro && <div style={{ fontSize: 13, color: "var(--vermelho)", padding: 24, textAlign: "center" }}>Não deu pra abrir a prévia: {estado.erro}</div>}
+          {estado.tipo === "outro" && (
+            <div style={{ fontSize: 13, color: "var(--muted)", padding: 26, textAlign: "center", lineHeight: 1.7 }}>
+              Sem prévia para arquivos <b>.{estado.ext}</b> (o navegador não exibe esse tipo).<br />Use o botão <b>Baixar</b> aí em cima.
+            </div>
+          )}
+          {estado.tipo === "imagem" && <img src={estado.url} alt={alvo.nome} style={{ maxWidth: "100%", maxHeight: "80vh", objectFit: "contain" }} />}
+          {estado.tipo === "pdf" && <iframe title={alvo.nome} src={estado.url} style={{ width: "100%", height: "80vh", border: "none", background: "#fff" }} />}
+          {estado.tipo === "video" && <video src={estado.url} controls style={{ maxWidth: "100%", maxHeight: "80vh" }} />}
+          {estado.tipo === "audio" && <audio src={estado.url} controls style={{ width: "min(480px, 90%)", margin: "40px 0" }} />}
+          {estado.tipo === "texto" && (
+            <pre style={{ margin: 0, padding: 16, fontSize: 12, width: "100%", maxHeight: "80vh", overflow: "auto", whiteSpace: "pre-wrap", fontFamily: "var(--mono, monospace)" }}>{estado.texto}{estado.cortado ? "\n\n… (arquivo grande — prévia parcial; baixe para ver tudo)" : ""}</pre>
+          )}
+        </div>
+      </div>
     </div>
   );
 }
