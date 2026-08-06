@@ -25,3 +25,4 @@ Cada entrega chega como `sprint_NN.zip` na pasta `PATCHES` e é aplicada com o
    arquivos com acesso por pasta, modelos, links dos outros CORTEX, instruções.
 2. RH e equipe (SHIREQ + ponto + organograma), salas e PEE, com migração dos dados.
 3. Relatórios e ponte de leitura com o Infinity.
+
