@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v45</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v46</div>
       </aside>
     </React.Fragment>
   );
@@ -754,7 +754,13 @@ function PaginaArquivos({ ctx }) {
     const { data, error } = await sb.storage.from("arquivos").createSignedUrl(a.storage_path, 120, op);
     if (error || !data) { setMsg("Não foi possível abrir: " + (error ? error.message : "sem acesso")); return; }
     registrarEvento(baixar ? "baixar" : "visualizar", "arquivos", a.nome, a.id);
-    window.open(data.signedUrl, "_blank", "noopener");
+    if (baixar) {
+      const el = document.createElement("a");
+      el.href = data.signedUrl; el.download = a.nome; el.rel = "noopener";
+      document.body.appendChild(el); el.click(); el.remove();
+    } else {
+      window.open(data.signedUrl, "_blank", "noopener");
+    }
   }
 
   async function excluirArquivo(a) {
@@ -3647,7 +3653,13 @@ function PaginaModelos({ ctx }) {
     const { data, error } = await sb.storage.from("modelos").createSignedUrl(m.storage_path, 120, op);
     if (error || !data) { setMsg("Não foi possível abrir: " + (error ? error.message : "sem acesso")); return; }
     registrarEvento(baixar ? "baixar" : "visualizar", "modelos", m.nome, m.id);
-    window.open(data.signedUrl, "_blank", "noopener");
+    if (baixar) {
+      const el = document.createElement("a");
+      el.href = data.signedUrl; el.download = m.nome; el.rel = "noopener";
+      document.body.appendChild(el); el.click(); el.remove();
+    } else {
+      window.open(data.signedUrl, "_blank", "noopener");
+    }
   }
 
   return (
