@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v46</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v47</div>
       </aside>
     </React.Fragment>
   );
@@ -633,6 +633,8 @@ function PaginaInstrucoes() {
 // ------------------------------------------------------------
 function PaginaArquivos({ ctx }) {
   const [previa, setPrevia] = useState(null);
+  const [renomear, setRenomear] = useState(null);
+  const [mover, setMover] = useState(null);
   const [trilha, setTrilha] = useState([]); // [{id, nome}] - vazio = raiz
   const [pastas, setPastas] = useState(null);
   const [arquivos, setArquivos] = useState(null);
@@ -749,6 +751,48 @@ function PaginaArquivos({ ctx }) {
     setPrevia(a);
   }
 
+  function abrirRenomear(a) { setMsg(""); setRenomear({ a, nome: a.nome }); }
+
+  async function salvarRenomear() {
+    const alvo = renomear;
+    if (!alvo) return;
+    let nome = alvo.nome.trim();
+    if (!nome) { setMsg("O nome não pode ficar vazio."); return; }
+    const extOrig = (alvo.a.nome.match(/\.[A-Za-z0-9]{1,8}$/) || [""])[0];
+    if (extOrig && nome.toLowerCase().slice(-extOrig.length) !== extOrig.toLowerCase()) nome += extOrig;
+    const { error } = await sb.from("arquivos").update({ nome }).eq("id", alvo.a.id);
+    if (error) { setMsg("Erro ao renomear: " + error.message); return; }
+    registrarEvento("renomear", "arquivos", alvo.a.nome + " → " + nome, alvo.a.id);
+    setRenomear(null); carregar();
+  }
+
+  async function abrirMover(a) {
+    setMsg("");
+    setMover({ a, pastas: null });
+    const { data, error } = await sb.from("pastas").select("id, nome, pasta_pai_id").order("nome").limit(2000);
+    if (error) { setMsg("Erro ao listar pastas: " + error.message); setMover(null); return; }
+    const porId = {};
+    (data || []).forEach((pp) => { porId[pp.id] = pp; });
+    function caminho(pp) {
+      const partes = [pp.nome];
+      let pai = pp.pasta_pai_id, guarda = 0;
+      while (pai && porId[pai] && guarda < 8) { partes.unshift(porId[pai].nome); pai = porId[pai].pasta_pai_id; guarda++; }
+      return partes.join(" / ");
+    }
+    const lista = (data || []).map((pp) => ({ id: pp.id, rotulo: caminho(pp) }))
+      .sort((x, y) => x.rotulo.localeCompare(y.rotulo));
+    setMover({ a, pastas: lista });
+  }
+
+  async function moverPara(pastaId) {
+    const alvo = mover;
+    if (!alvo || !pastaId) return;
+    const { error } = await sb.from("arquivos").update({ pasta_id: pastaId }).eq("id", alvo.a.id);
+    if (error) { setMsg("Não deu para mover: " + error.message); return; }
+    registrarEvento("mover", "arquivos", alvo.a.nome, alvo.a.id);
+    setMover(null); carregar();
+  }
+
   async function abrirArquivo(a, baixar) {
     const op = baixar ? { download: a.nome } : undefined;
     const { data, error } = await sb.storage.from("arquivos").createSignedUrl(a.storage_path, 120, op);
@@ -802,6 +846,51 @@ function PaginaArquivos({ ctx }) {
   return (
     <div>
       {previa && <PreviaArquivo bucket="arquivos" alvo={previa} aoFechar={() => setPrevia(null)} aoBaixar={() => abrirArquivo(previa, true)} />}
+      {renomear && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.45)", zIndex: 8900, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
+             onClick={(e) => { if (e.target === e.currentTarget) setRenomear(null); }}>
+          <div className="card-fl anim-pop" style={{ width: "min(440px, 94vw)", padding: 18 }}>
+            <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 10 }}>Renomear arquivo</div>
+            <input className="campo" autoFocus style={{ width: "100%", padding: "9px 11px", fontSize: 13 }} value={renomear.nome}
+                   onChange={(e) => setRenomear({ ...renomear, nome: e.target.value })}
+                   onKeyDown={(e) => { if (e.key === "Enter") salvarRenomear(); if (e.key === "Escape") setRenomear(null); }} />
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>A extensão original é mantida sozinha se você não digitar outra.</div>
+            <div style={{ display: "flex", gap: 8, marginTop: 12 }}>
+              <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={salvarRenomear}>Salvar</button>
+              <button className="btn-contorno" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={() => setRenomear(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
+      {mover && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.45)", zIndex: 8900, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}
+             onClick={(e) => { if (e.target === e.currentTarget) setMover(null); }}>
+          <div className="card-fl anim-pop" style={{ width: "min(480px, 94vw)", maxHeight: "80vh", padding: 0, display: "flex", flexDirection: "column", overflow: "hidden" }}>
+            <div style={{ padding: "12px 16px", borderBottom: "1px solid var(--linha)", fontWeight: 800, fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
+              Mover "{mover.a.nome}" para…
+            </div>
+            <div style={{ flex: 1, overflowY: "auto", padding: "6px 8px" }}>
+              {!mover.pastas && <div style={{ padding: 14, fontSize: 12.5, color: "var(--muted)" }}>Carregando pastas…</div>}
+              {mover.pastas && mover.pastas.length === 0 && <div style={{ padding: 14, fontSize: 12.5, color: "var(--muted)" }}>Nenhuma pasta disponível para você.</div>}
+              {(mover.pastas || []).map((pp) => {
+                const aqui = atual && pp.id === atual.id;
+                return (
+                  <div key={pp.id} onClick={() => { if (!aqui) moverPara(pp.id); }}
+                       style={{ display: "flex", alignItems: "center", gap: 9, padding: "9px 10px", borderRadius: 9, cursor: aqui ? "default" : "pointer", opacity: aqui ? .5 : 1, fontSize: 12.5 }}
+                       className={aqui ? "" : "linha-hover"}>
+                    <i className="ti ti-folder" style={{ fontSize: 15, color: "var(--marca-texto)", flex: "none" }} aria-hidden="true"></i>
+                    <span style={{ flex: 1, minWidth: 0, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{pp.rotulo}</span>
+                    {aqui && <span className="chip" style={{ fontSize: 10, background: "var(--campo)", color: "var(--muted)" }}>pasta atual</span>}
+                  </div>
+                );
+              })}
+            </div>
+            <div style={{ padding: "10px 14px", borderTop: "1px solid var(--linha)", textAlign: "right" }}>
+              <button className="btn-contorno" style={{ padding: "7px 14px", fontSize: 12.5 }} onClick={() => setMover(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      )}
       <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, marginBottom: 12, flexWrap: "wrap" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 6, fontSize: 13, flexWrap: "wrap" }}>
           <span onClick={() => irPara(-1)} style={{ color: trilha.length ? "var(--muted)" : "var(--ink)", fontWeight: trilha.length ? 400 : 600, cursor: "pointer" }}>Arquivos</span>
@@ -906,6 +995,16 @@ function PaginaArquivos({ ctx }) {
                       <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Baixar" title="Baixar" onClick={() => abrirArquivo(a, true)}>
                         <i className="ti ti-download" style={{ fontSize: 14 }} aria-hidden="true"></i>
                       </button>
+                      {podeEditar && (
+                        <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Renomear" title="Renomear" onClick={() => abrirRenomear(a)}>
+                          <i className="ti ti-pencil" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                        </button>
+                      )}
+                      {podeEditar && (
+                        <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Mover para outra pasta" title="Mover para outra pasta" onClick={() => abrirMover(a)}>
+                          <i className="ti ti-folder-symlink" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                        </button>
+                      )}
                       {podeEditar && (
                         <button className="btn-fantasma" style={{ width: 28, height: 28 }} aria-label="Excluir" title="Excluir" onClick={() => excluirArquivo(a)}>
                           <i className="ti ti-trash" style={{ fontSize: 14 }} aria-hidden="true"></i>
