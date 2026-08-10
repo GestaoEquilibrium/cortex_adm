@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v47</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v48</div>
       </aside>
     </React.Fragment>
   );
@@ -3603,6 +3603,8 @@ function PaginaRH({ ctx }) {
     { id: "organograma", r: "Organograma" },
     { id: "faltas", r: "Faltas e atestados" },
     { id: "alertas", r: "Alertas e pendências" },
+    { id: "fichas", r: "Fichas" },
+    { id: "documentos", r: "Documentos" },
   ].filter((a) => nivelAba(ctx, "rh", a.id) !== "oculto");
   const [aba, setAbaRaw] = useState(() => {
     try {
@@ -3626,9 +3628,11 @@ function PaginaRH({ ctx }) {
       {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
       {aba === "ponto" && <AbaPonto ctx={ctx} />}
       {aba === "organograma" && <AbaOrganograma ctx={ctx} />}
+      {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={nivelAba(ctx, "rh", "fichas") === "editar"} />}
+      {aba === "documentos" && <AbaDocsEstagio ctx={ctx} />}
       {aba === "faltas" && <AbaFaltas ctx={ctx} />}
       {aba === "alertas" && <AbaAlertas ctx={ctx} />}
-      {["colaboradores", "ponto", "organograma", "faltas", "alertas"].indexOf(aba) === -1 && (
+      {["colaboradores", "ponto", "organograma", "faltas", "alertas", "fichas", "documentos"].indexOf(aba) === -1 && (
         <div className="card-fl" style={{ padding: "30px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>
           Esta aba chega no próximo sprint — o banco já está pronto para ela.
         </div>
@@ -4544,12 +4548,15 @@ function AbaFichas({ ctx, podeEditar }) {
   const [msg, setMsg] = useState("");
   const [salvando, setSalvando] = useState(false);
   const [enviandoFoto, setEnviandoFoto] = useState(false);
+  const [instituicoesFicha, setInstituicoesFicha] = useState([]);
   const ro = !podeEditar;
 
   async function carregar() {
     const { data, error } = await sb.from("colaboradores").select("*").order("nome").limit(20000);
     if (error) { setMsg("Erro: " + error.message); return; }
     setLista(data || []);
+    const inst = await sb.from("instituicoes").select("id, sigla, nome").order("sigla");
+    if (!inst.error) setInstituicoesFicha(inst.data || []);
   }
   useEffect(() => { carregar(); }, []);
 
@@ -4568,10 +4575,13 @@ function AbaFichas({ ctx, podeEditar }) {
       admissao: sel.admissao || null, nascimento: sel.nascimento || null,
       formacao: vz(sel.formacao), registro_profissional: vz(sel.registro_profissional),
       salario: sel.salario === "" || sel.salario === null || sel.salario === undefined ? null : sel.salario,
+      rg: vz(sel.rg), endereco: vz(sel.endereco), cidade: vz(sel.cidade), cep: vz(sel.cep),
+      estado_civil: vz(sel.estado_civil), periodo_curso: vz(sel.periodo_curso),
+      instituicao_id: sel.instituicao_id || null, dados_bancarios: vz(sel.dados_bancarios),
       observacoes: vz(sel.observacoes),
     }).eq("id", sel.id);
     setSalvando(false);
-    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("formacao") !== -1 ? " — rode o 10_ficha_profissional.sql." : "")); return; }
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("formacao") !== -1 ? " — rode o 10_ficha_profissional.sql." : (error.message.indexOf("instituicao_id") !== -1 || error.message.indexOf("dados_bancarios") !== -1 ? " — rode o 28_documentos_estagio.sql." : ""))); return; }
     setMsg("✓ Ficha salva."); carregar();
   }
 
@@ -4680,6 +4690,19 @@ function AbaFichas({ ctx, podeEditar }) {
               <CampoFicha r="Registro profissional" filho={<input className="campo" style={cx} disabled={ro} placeholder="CRP / CRM / CREFITO…" value={sel.registro_profissional || ""} onChange={(e) => setSel({ ...sel, registro_profissional: e.target.value })} />} />
               <CampoFicha r="Salário (R$)" filho={<input className="campo" type="number" step="0.01" style={cx} disabled={ro} value={sel.salario === null || sel.salario === undefined ? "" : sel.salario} onChange={(e) => setSel({ ...sel, salario: e.target.value })} />} />
               <CampoFicha r="Observações" largo filho={<textarea className="campo" style={{ ...cx, minHeight: 70, resize: "vertical" }} disabled={ro} value={sel.observacoes || ""} onChange={(e) => setSel({ ...sel, observacoes: e.target.value })} />} />
+              <CampoFicha r="RG" filho={<input className="campo" style={cx} disabled={ro} value={sel.rg || ""} onChange={(e) => setSel({ ...sel, rg: e.target.value })} />} />
+              <CampoFicha r="Estado civil" filho={<input className="campo" style={cx} disabled={ro} value={sel.estado_civil || ""} onChange={(e) => setSel({ ...sel, estado_civil: e.target.value })} />} />
+              <CampoFicha r="Endereço (rua e número)" largo filho={<input className="campo" style={cx} disabled={ro} value={sel.endereco || ""} onChange={(e) => setSel({ ...sel, endereco: e.target.value })} />} />
+              <CampoFicha r="Cidade" filho={<input className="campo" style={cx} disabled={ro} placeholder="Uberlândia-MG" value={sel.cidade || ""} onChange={(e) => setSel({ ...sel, cidade: e.target.value })} />} />
+              <CampoFicha r="CEP" filho={<input className="campo" style={cx} disabled={ro} value={sel.cep || ""} onChange={(e) => setSel({ ...sel, cep: e.target.value })} />} />
+              <CampoFicha r="Período do curso" filho={<input className="campo" style={cx} disabled={ro} placeholder="7º período" value={sel.periodo_curso || ""} onChange={(e) => setSel({ ...sel, periodo_curso: e.target.value })} />} />
+              <CampoFicha r="Instituição de ensino" filho={
+                <select className="campo" style={cx} disabled={ro} value={sel.instituicao_id || ""} onChange={(e) => setSel({ ...sel, instituicao_id: e.target.value || null })}>
+                  <option value="">—</option>
+                  {instituicoesFicha.map((i) => <option key={i.id} value={i.id}>{i.sigla} — {i.nome}</option>)}
+                </select>} />
+              <CampoFicha r="Dados bancários / PIX" largo filho={<input className="campo" style={cx} disabled={ro} placeholder="Pix 000.000.000-00 · Banco X ag 0000 / cc 00000-0" value={sel.dados_bancarios || ""} onChange={(e) => setSel({ ...sel, dados_bancarios: e.target.value })} />} />
+
             </div>
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
@@ -5603,6 +5626,480 @@ function PreviaArquivo({ bucket, alvo, aoFechar, aoBaixar }) {
   );
 }
 
+const EQ_PDF = {
+  MARCA: [16, 104, 176], TINT: [231, 242, 251], INK: [28, 37, 48],
+  SEC: [91, 101, 114], MUTED: [140, 151, 164], LINHA: [217, 228, 238], CAMPO: [246, 249, 252],
+  ML: 20, MR: 20, W: 210, H: 297,
+};
+const EQ_MESES = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+
+function eqSlug(t) {
+  return String(t || "documento").normalize("NFD").replace(/[\u0300-\u036f]/g, "").replace(/[^A-Za-z0-9]+/g, "_").replace(/^_+|_+$/g, "").slice(0, 40);
+}
+
+function eqVal(t) { return (t && String(t).trim()) || "____________________"; }
+
+function pdfEqCabecalhos(doc, titulo, subtitulo) {
+  const E = EQ_PDF;
+  const n = doc.getNumberOfPages();
+  for (let i = 1; i <= n; i++) {
+    doc.setPage(i);
+    const cx = E.ML + 5, cy = 16, r = 4.2;
+    doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.66); doc.setLineCap("round");
+    [90, 0, 45, 135].forEach((ang) => {
+      const a = ang * Math.PI / 180, dx = r * Math.cos(a), dy = r * Math.sin(a);
+      doc.line(cx - dx, cy - dy, cx + dx, cy + dy);
+    });
+    doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(12.5);
+    doc.text("GRUPO EQUILIBRIUM", E.ML + 12, 15.2);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(7.5);
+    doc.text("CLÍNICA EQUILIBRIUM MED CENTER LTDA · CNPJ 34.032.586/0001-98", E.ML + 12, 18.9);
+    doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+    doc.text(titulo, E.W - E.MR, 15.2, { align: "right" });
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+    doc.text(subtitulo, E.W - E.MR, 18.9, { align: "right" });
+    doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.5);
+    doc.line(E.ML, 21, E.W - E.MR, 21);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.25);
+    doc.line(E.ML, E.H - 14, E.W - E.MR, E.H - 14);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFontSize(7); doc.setFont("helvetica", "normal");
+    doc.text("Av. Cesário Alvim, 2001 · salas 101 a 303 · Nossa Senhora Aparecida · Uberlândia/MG", E.ML, E.H - 10.2);
+    doc.text("Gerado pelo CORTEX Gestão · página " + i, E.W - E.MR, E.H - 10.2, { align: "right" });
+  }
+}
+
+function pdfEstagioTermo(d) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const E = EQ_PDF, LARG = E.W - E.ML - E.MR;
+  let y = 30;
+  const ensure = (h) => { if (y + h > E.H - 18) { doc.addPage(); y = 30; } };
+
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(14.5);
+  doc.text("TERMO DE COMPROMISSO DE ESTÁGIO", E.W / 2, y, { align: "center" }); y += 5;
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+  doc.text("Formalizado de acordo com a Lei nº 11.788/2008", E.W / 2, y, { align: "center" }); y += 6;
+
+  function caixaParte(rotulo, texto) {
+    doc.autoTable({
+      startY: y, margin: { left: E.ML, right: E.MR },
+      head: [[rotulo]], body: [[texto]], theme: "grid",
+      headStyles: { fillColor: E.MARCA, textColor: 255, fontSize: 7.2, fontStyle: "bold", cellPadding: { top: 1.4, bottom: 1.4, left: 3, right: 3 } },
+      bodyStyles: { fillColor: E.CAMPO, textColor: E.INK, fontSize: 8.8, cellPadding: { top: 2, bottom: 2.4, left: 3, right: 3 }, lineColor: E.LINHA, lineWidth: 0.2 },
+      styles: { font: "helvetica" },
+    });
+    y = doc.lastAutoTable.finalY + 2.5;
+  }
+  caixaParte("CONCEDENTE", "CLÍNICA EQUILIBRIUM MED CENTER LTDA, sociedade empresária inscrita no CNPJ 34.032.586/0001-98, estabelecida na Av. Cesário Alvim, 2001, salas 101 a 303, Bairro Nossa Senhora Aparecida, Uberlândia/MG.");
+  caixaParte("ESTAGIÁRIO(A)", eqVal(d.nome) + ", inscrito(a) no CPF " + eqVal(d.cpf) + " e RG " + eqVal(d.rg) + ", residente na " + eqVal(d.endereco) + ", " + eqVal(d.cidade) + ", CEP " + eqVal(d.cep) + ".");
+  caixaParte("INSTITUIÇÃO DE ENSINO INTERVENIENTE", eqVal(d.instNome) + ", inscrita no CNPJ " + eqVal(d.instCnpj) + ", estabelecida na " + eqVal(d.instEnd) + ".");
+
+  const paresQ = [
+    ["ÁREA DO ESTÁGIO", d.area, "DURAÇÃO", d.duracao],
+    ["INÍCIO", d.inicioBr, "JORNADA", d.jornadaQuadro],
+    ["BOLSA-AUXÍLIO", d.bolsaQuadro, "SUPERVISOR", d.supervisor],
+  ];
+  const corpoQ = [];
+  paresQ.forEach((pr) => { corpoQ.push([pr[0], pr[2]]); corpoQ.push([eqVal(pr[1]), eqVal(pr[3])]); });
+  doc.autoTable({
+    startY: y + 1, margin: { left: E.ML, right: E.MR },
+    body: corpoQ, theme: "grid",
+    styles: { font: "helvetica", fillColor: E.TINT, lineColor: E.LINHA, lineWidth: 0.2 },
+    didParseCell: (h) => {
+      if (h.row.index % 2 === 0) {
+        h.cell.styles.fontSize = 6.4; h.cell.styles.textColor = E.MUTED; h.cell.styles.fontStyle = "bold";
+        h.cell.styles.cellPadding = { top: 1.3, bottom: 0.2, left: 3, right: 3 };
+      } else {
+        h.cell.styles.fontSize = 9; h.cell.styles.fontStyle = "bold"; h.cell.styles.textColor = E.MARCA;
+        h.cell.styles.cellPadding = { top: 0.2, bottom: 1.6, left: 3, right: 3 };
+      }
+    },
+  });
+  y = doc.lastAutoTable.finalY + 5;
+
+  function clausula(titulo, itens) {
+    ensure(16);
+    doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text(titulo, E.ML, y); y += 4.6;
+    doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8);
+    itens.forEach((t) => {
+      const linhas = doc.splitTextToSize(t, LARG);
+      const h = linhas.length * 4.4 + 1.2;
+      ensure(h + 2);
+      doc.text(t, E.ML, y, { maxWidth: LARG, align: "justify", lineHeightFactor: 1.42 });
+      y += h;
+    });
+    y += 2;
+  }
+  clausula("CLÁUSULA PRIMEIRA — OBJETO DO ESTÁGIO", [
+    "1.1. O presente Termo estabelece as condições para a realização do estágio na área de " + eqVal(d.area) + ", nas dependências da CONCEDENTE.",
+    "1.2. O estágio visa o exercício prático de competências próprias da atividade profissional e a contextualização curricular, objetivando o desenvolvimento do(a) educando(a) para a vida cidadã e para o trabalho.",
+    "1.3. O(A) ESTAGIÁRIO(A) declara estar regularmente matriculado(a) na INSTITUIÇÃO DE ENSINO INTERVENIENTE, condição indispensável para a realização do estágio.",
+    "1.4. As atividades a serem desenvolvidas constam do Plano de Atividades anexo, parte integrante deste Termo.",
+  ]);
+  clausula("CLÁUSULA SEGUNDA — DO PERÍODO E DA JORNADA", [
+    "2.1. O estágio terá duração inicial de " + eqVal(d.duracao) + ", com início em " + eqVal(d.inicioBr) + ".",
+    "2.1.1. Rescisão: este Termo poderá ser rescindido unilateralmente por qualquer das partes, a qualquer tempo, mediante comunicação escrita, sem multa ou indenização, observada a comunicação à Instituição de Ensino.",
+    "2.1.2. Prorrogação: o estágio poderá ser prorrogado uma vez, por igual período, mediante Termo Aditivo, respeitado o limite legal de 2 (dois) anos.",
+    "2.2. A jornada será cumprida de segunda a sexta-feira, em " + eqVal(d.jornadaClausula) + " diários, com distribuição definida conforme as necessidades da CONCEDENTE.",
+    "2.3. O horário do estágio é compatível com o horário escolar, sendo concedidos períodos especiais quando conflitante com atividades obrigatórias do curso.",
+    "2.4. Serão elaborados relatórios de acompanhamento do estágio em conformidade com as exigências da INSTITUIÇÃO DE ENSINO INTERVENIENTE.",
+  ]);
+  clausula("CLÁUSULA TERCEIRA — DA BOLSA-AUXÍLIO E DO SEGURO", [
+    "3.1. Será concedida bolsa-auxílio no valor de " + eqVal(d.bolsaClausula) + " mensais, paga mediante depósito em conta bancária até o 5º dia útil do mês subsequente, já incluído o auxílio-transporte.",
+    "3.2. A CONCEDENTE manterá seguro contra acidentes pessoais em favor do(a) ESTAGIÁRIO(A), mediante inclusão na Apólice Coletiva de Acidentes Pessoais da CONCEDENTE.",
+    "3.3. A bolsa-auxílio possui natureza contraprestativa, sendo devida exclusivamente nos períodos de efetiva realização das atividades de estágio, nos termos deste instrumento e da legislação aplicável.",
+  ]);
+  clausula("CLÁUSULA QUARTA — CONDIÇÕES GERAIS", [
+    "4.1. Aplicam-se a este Termo as disposições da Lei nº 11.788/2008. O estágio não cria vínculo empregatício de qualquer natureza, observados os requisitos legais.",
+    "4.2. O(A) ESTAGIÁRIO(A) compromete-se a observar as normas internas da CONCEDENTE, em especial o sigilo sobre informações clínicas e administrativas a que tiver acesso.",
+    "4.3. Fica eleito o foro da comarca de Uberlândia/MG para dirimir quaisquer questões oriundas deste Termo.",
+  ]);
+
+  ensure(52);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8);
+  doc.text("E por estarem justas e acordadas, as partes assinam o presente em 3 (três) vias de igual teor.", E.ML, y, { maxWidth: LARG }); y += 5;
+  doc.text("Uberlândia/MG, " + d.dataExtenso + ".", E.ML, y); y += 24;
+
+  function linhasAssinatura(itens) {
+    const col = LARG / itens.length;
+    let alturaMax = 0;
+    itens.forEach((a, i) => {
+      const x0 = E.ML + i * col + 4, x1 = E.ML + (i + 1) * col - 4, xm = (x0 + x1) / 2;
+      doc.setDrawColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setLineWidth(0.2); doc.line(x0, y, x1, y);
+      doc.setFont("helvetica", "bold"); doc.setFontSize(7.4); doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]);
+      const nomeLinhas = doc.splitTextToSize(a[0], col - 10);
+      doc.text(nomeLinhas, xm, y + 3.6, { align: "center" });
+      doc.setFont("helvetica", "normal"); doc.setFontSize(7);
+      const yy = y + 3.6 + nomeLinhas.length * 3.2 + 1.1;
+      doc.text(a[1], xm, yy, { align: "center" });
+      alturaMax = Math.max(alturaMax, yy - y + 4);
+    });
+    y += alturaMax + 6;
+  }
+  linhasAssinatura([["CLÍNICA EQUILIBRIUM MED CENTER LTDA", "Concedente"],
+                    [eqVal(d.nome), "Estagiário(a)"],
+                    [d.instSigla || "INSTITUIÇÃO DE ENSINO", "Interveniente"]]);
+
+  ensure(70);
+  doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+  doc.text("PLANO DE ATIVIDADES DE ESTÁGIO", E.ML, y); y += 4.8;
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.6);
+  doc.text("Estagiário(a): " + eqVal(d.nome) + "   ·   Supervisor responsável: " + eqVal(d.supervisor), E.ML, y, { maxWidth: LARG }); y += 7;
+
+  const atvBase = (d.atribuicoes && d.atribuicoes.trim())
+    ? d.atribuicoes.trim().split(/\n+/).map((l) => "• " + l.replace(/^[-•*]\s*/, ""))
+    : ["• _________________________________________________________", "• _________________________________________________________", "• _________________________________________________________"];
+  const atvLinhas = [];
+  atvBase.forEach((l) => { doc.splitTextToSize(l, LARG - 10).forEach((x) => atvLinhas.push(x)); });
+  const hBox = 9 + atvLinhas.length * 4.5 + 5;
+  ensure(hBox + 30);
+  doc.setFillColor(E.TINT[0], E.TINT[1], E.TINT[2]); doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.3);
+  doc.rect(E.ML, y, LARG, 7, "FD");
+  doc.rect(E.ML, y, LARG, hBox, "S");
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.6);
+  doc.text("DESCRIÇÃO DAS ATIVIDADES", E.ML + 3, y + 4.5);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8);
+  doc.text(atvLinhas, E.ML + 4, y + 12, { lineHeightFactor: 1.45 });
+  y += hBox + 22;
+  linhasAssinatura([[eqVal(d.nome), "Estagiário(a)"], [eqVal(d.supervisor), "Supervisor(a) responsável"]]);
+
+  pdfEqCabecalhos(doc, "TERMO DE COMPROMISSO DE ESTÁGIO", "Lei nº 11.788/2008");
+  doc.save("Termo_Estagio_" + eqSlug(d.nome) + ".pdf");
+}
+
+function pdfEstagioFolha(d) {
+  const { jsPDF } = window.jspdf;
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const E = EQ_PDF, LARG = E.W - E.ML - E.MR;
+  let y = 30;
+
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(14.5);
+  doc.text("FOLHA DE ROSTO — PASTA DO COLABORADOR", E.W / 2, y, { align: "center" }); y += 5;
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.5);
+  doc.text("Identificação, vínculo e conferência de documentos", E.W / 2, y, { align: "center" }); y += 4;
+
+  function secao(titulo) {
+    doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+    doc.text(titulo, E.ML, y + 5); y += 7;
+  }
+  function grade(pares) {
+    const corpo = [];
+    for (let i = 0; i < pares.length; i += 2) {
+      const a = pares[i], b = pares[i + 1] || ["", ""];
+      corpo.push([a[0], b[0]]);
+      corpo.push([eqVal(a[1]), b[0] ? eqVal(b[1]) : ""]);
+    }
+    doc.autoTable({
+      startY: y, margin: { left: E.ML, right: E.MR }, body: corpo, theme: "grid",
+      styles: { font: "helvetica", fillColor: E.CAMPO, lineColor: E.LINHA, lineWidth: 0.2 },
+      didParseCell: (h) => {
+        if (h.row.index % 2 === 0) {
+          h.cell.styles.fontSize = 6.4; h.cell.styles.textColor = E.MUTED; h.cell.styles.fontStyle = "bold";
+          h.cell.styles.cellPadding = { top: 1.2, bottom: 0.2, left: 3, right: 3 };
+        } else {
+          h.cell.styles.fontSize = 8.8; h.cell.styles.fontStyle = "bold"; h.cell.styles.textColor = E.MARCA;
+          h.cell.styles.cellPadding = { top: 0.2, bottom: 1.5, left: 3, right: 3 };
+        }
+      },
+    });
+    y = doc.lastAutoTable.finalY + 2;
+  }
+
+  secao("IDENTIFICAÇÃO");
+  grade([["NOME COMPLETO", d.nome], ["DATA DE NASCIMENTO", d.nascimentoBr],
+         ["ENDEREÇO", d.endereco], ["CIDADE / CEP", (d.cidade || "") + (d.cep ? " · " + d.cep : "")],
+         ["TELEFONE", d.telefone], ["E-MAIL", d.email],
+         ["ESTADO CIVIL", d.estadoCivil], ["ESCOLARIDADE", d.escolaridade],
+         ["INSTITUIÇÃO", d.instSigla]]);
+
+  secao("VÍNCULO E ESTÁGIO");
+  const VINC = ["Funcionário CLT", "Estagiário", "Prestador PJ", "Prestador PF", "Outros"];
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.6);
+  doc.text(VINC.map((v) => "( " + (v === d.vinculo ? "X" : "  ") + " ) " + v).join("    "), E.ML, y + 3); y += 5.5;
+  grade([["FUNÇÃO", d.funcao], ["SUPERVISOR", d.supervisor],
+         ["ADMISSÃO", d.admissaoBr], ["PERÍODO DO ESTÁGIO", d.periodoBr],
+         ["HORÁRIO", d.horario], ["BOLSA-AUXÍLIO / PAGAMENTO", d.bolsaPix]]);
+
+  secao("DOCUMENTOS NA PASTA");
+  const DOCS = ["Contrato / Termo de Estágio", "CTPS", "Número do PIS", "CPF", "RG", "Título de eleitor", "CNH",
+    "Comprovante de residência", "Certificado de reservista", "Certidão de nascimento ou casamento",
+    "Certidão de nascimento de filhos (0 a 14 anos)", "Cartão de vacina", "Atestado de escolaridade"];
+  const OBS = { "CPF": d.cpf || "", "RG": d.rg || "" };
+  doc.autoTable({
+    startY: y, margin: { left: E.ML, right: E.MR },
+    head: [["DOCUMENTO", "NA PASTA", "OBSERVAÇÃO"]],
+    body: DOCS.map((nm) => [nm, "(   ) Sim    (   ) Não", OBS[nm] || ""]),
+    theme: "grid",
+    headStyles: { fillColor: E.TINT, textColor: E.MUTED, fontSize: 6.6, fontStyle: "bold", cellPadding: { top: 1.6, bottom: 1.6, left: 3, right: 3 }, lineColor: E.MARCA, lineWidth: 0.25 },
+    bodyStyles: { fontSize: 8, textColor: E.INK, cellPadding: { top: 1.7, bottom: 1.7, left: 3, right: 3 }, lineColor: E.LINHA, lineWidth: 0.2 },
+    alternateRowStyles: { fillColor: E.CAMPO },
+    columnStyles: { 0: { cellWidth: LARG * 0.46 }, 1: { cellWidth: LARG * 0.24 }, 2: { cellWidth: LARG * 0.30 } },
+    styles: { font: "helvetica" },
+  });
+
+  pdfEqCabecalhos(doc, "FOLHA DE ROSTO — PASTA DO COLABORADOR", "Documento interno");
+  doc.save("Folha_Rosto_" + eqSlug(d.nome) + ".pdf");
+}
+
+function AbaDocsEstagio({ ctx }) {
+  const AREAS = ["Psicologia — Análise do Comportamento Aplicada (ABA)", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Administrativo", "Estágio de Observação"];
+  const DURACOES = [{ v: 3, r: "3 (três) meses" }, { v: 6, r: "6 (seis) meses" }, { v: 12, r: "12 (doze) meses" }];
+  const JORNADAS = [
+    { id: "430", clausula: "4 (quatro) horas e 30 (trinta) minutos", quadro: "Seg. a sex., 4h30 diárias (22h30 semanais)" },
+    { id: "400", clausula: "4 (quatro) horas", quadro: "Seg. a sex., 4h diárias (20h semanais)" },
+    { id: "600", clausula: "6 (seis) horas", quadro: "Seg. a sex., 6h diárias (30h semanais)" },
+    { id: "outra", clausula: "", quadro: "" },
+  ];
+  const VINCULOS = ["Funcionário CLT", "Estagiário", "Prestador PJ", "Prestador PF", "Outros"];
+
+  const [colabs, setColabs] = useState(null);
+  const [insts, setInsts] = useState([]);
+  const [msg, setMsg] = useState("");
+  const [f, setF] = useState({
+    colaboradorId: "", tipo: "pacote", instituicaoId: "", area: AREAS[0], duracao: 6,
+    inicio: "", jornada: "430", jornadaCustom: "", bolsa: "1.200,00", bolsaExtenso: "mil e duzentos reais",
+    supervisorId: "", horario: "07:00 às 11:30", vinculo: "Estagiário", atribuicoes: "",
+  });
+
+  useEffect(() => {
+    (async () => {
+      const r = await sb.from("colaboradores")
+        .select("id, nome, cpf, rg, endereco, cidade, cep, estado_civil, telefone, email, nascimento, cargo, admissao, formacao, periodo_curso, instituicao_id, dados_bancarios, registro_profissional, status")
+        .order("nome").limit(20000);
+      if (r.error) { setMsg("Erro: " + r.error.message + (r.error.message.indexOf("instituicao_id") !== -1 || r.error.message.indexOf("periodo_curso") !== -1 ? " — rode o 28_documentos_estagio.sql." : "")); setColabs([]); return; }
+      setColabs(r.data || []);
+      const i = await sb.from("instituicoes").select("id, sigla, nome, cnpj, endereco").eq("ativo", true).order("sigla");
+      if (!i.error) setInsts(i.data || []);
+    })();
+  }, []);
+
+  const porId = useMemo(() => { const m = {}; (colabs || []).forEach((c) => { m[c.id] = c; }); return m; }, [colabs]);
+  const colab = porId[f.colaboradorId] || null;
+  const inst = insts.filter((i) => i.id === (f.instituicaoId || (colab && colab.instituicao_id)))[0] || null;
+  const sup = porId[f.supervisorId] || null;
+  const jor = JORNADAS.filter((j) => j.id === f.jornada)[0] || JORNADAS[0];
+
+  function escolherColab(id) {
+    const c = porId[id];
+    setF({ ...f, colaboradorId: id, instituicaoId: (c && c.instituicao_id) || "" });
+    setMsg("");
+  }
+
+  const precisaTermo = [["CPF", "cpf"], ["RG", "rg"], ["Endereço", "endereco"], ["Cidade", "cidade"], ["CEP", "cep"]];
+  const precisaFolha = [["Nascimento", "nascimento"], ["Telefone", "telefone"], ["E-mail", "email"], ["Estado civil", "estado_civil"], ["Formação (curso)", "formacao"], ["Período do curso", "periodo_curso"], ["Dados bancários / PIX", "dados_bancarios"]];
+  const faltantes = !colab ? [] : (f.tipo === "folha" ? precisaFolha : f.tipo === "termo" ? precisaTermo : precisaTermo.concat(precisaFolha))
+    .filter(([r, k]) => !colab[k] || !String(colab[k]).trim()).map(([r]) => r);
+
+  function dataBrOu(v) { return v ? dataBr(v) : ""; }
+  function somaMeses(iso, meses) {
+    const dt = new Date(iso + "T12:00:00");
+    dt.setMonth(dt.getMonth() + meses);
+    dt.setDate(dt.getDate() - 1);
+    return dt.toISOString().slice(0, 10);
+  }
+
+  function montar() {
+    const durTxt = (DURACOES.filter((x) => x.v === Number(f.duracao))[0] || DURACOES[1]).r;
+    const fim = f.inicio ? somaMeses(f.inicio, Number(f.duracao)) : "";
+    const hoje = new Date();
+    const jornadaClausula = f.jornada === "outra" ? f.jornadaCustom : jor.clausula;
+    const jornadaQuadro = f.jornada === "outra" ? f.jornadaCustom : jor.quadro;
+    return {
+      nome: colab.nome ? colab.nome.toUpperCase() : "",
+      cpf: colab.cpf, rg: colab.rg, endereco: colab.endereco, cidade: colab.cidade, cep: colab.cep,
+      estadoCivil: colab.estado_civil, telefone: colab.telefone, email: colab.email,
+      nascimentoBr: dataBrOu(colab.nascimento), admissaoBr: dataBrOu(colab.admissao),
+      escolaridade: colab.formacao ? ("Graduando(a) em " + colab.formacao + (colab.periodo_curso ? " — " + colab.periodo_curso : "")) : "",
+      funcao: colab.cargo,
+      instNome: inst ? (inst.sigla + " — " + inst.nome) : "", instSigla: inst ? inst.sigla : "",
+      instCnpj: inst ? inst.cnpj : "", instEnd: inst ? inst.endereco : "",
+      area: f.area, duracao: durTxt,
+      inicioBr: dataBrOu(f.inicio), periodoBr: f.inicio ? (dataBr(f.inicio) + " a " + dataBr(fim)) : "",
+      jornadaClausula, jornadaQuadro,
+      bolsaQuadro: "R$ " + f.bolsa + "/mês (auxílio-transporte incluso)",
+      bolsaClausula: "R$ " + f.bolsa + " (" + f.bolsaExtenso + ")",
+      bolsaPix: "R$ " + f.bolsa + (colab.dados_bancarios ? " · " + colab.dados_bancarios : ""),
+      supervisor: sup ? (sup.nome + (sup.registro_profissional ? " — " + sup.registro_profissional : "")) : "",
+      horario: f.horario, vinculo: f.vinculo,
+      dataExtenso: String(hoje.getDate()).padStart(2, "0") + " de " + EQ_MESES[hoje.getMonth()] + " de " + hoje.getFullYear(),
+      atribuicoes: f.atribuicoes,
+    };
+  }
+
+  function gerar() {
+    setMsg("");
+    if (!colab) { setMsg("Escolha o colaborador."); return; }
+    if (!window.jspdf || !window.jspdf.jsPDF) { setMsg("O gerador de PDF não carregou. Atualize com Ctrl+F5."); return; }
+    if (f.tipo !== "folha" && !f.inicio) { setMsg("Informe a data de início do estágio."); return; }
+    const d = montar();
+    registrarEvento("gerar", "rh", "documentos_estagio: " + f.tipo + " · " + colab.nome, colab.id);
+    if (f.tipo === "termo" || f.tipo === "pacote") pdfEstagioTermo(d);
+    if (f.tipo === "folha" || f.tipo === "pacote") pdfEstagioFolha(d);
+    setMsg("✓ Documento(s) gerado(s) — confira os downloads.");
+  }
+
+  const rot = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3, textTransform: "uppercase", letterSpacing: .4 };
+  const cxi = { width: "100%", padding: "8px 10px", fontSize: 12.5 };
+  const TIPOS = [{ id: "pacote", r: "Termo + Folha de Rosto" }, { id: "termo", r: "Só o Termo + Plano" }, { id: "folha", r: "Só a Folha de Rosto" }];
+
+  return (
+    <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
+      <div className="card-fl" style={{ padding: 16 }}>
+        <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 3 }}>Gerar documentos de estágio</div>
+        <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
+          Os dados azuis do modelo saem do cadastro (aba Fichas). Listas prontas conforme o Mapa de Campos; atribuições sempre manuais.
+        </div>
+
+        <div style={{ display: "grid", gridTemplateColumns: "2fr 1.4fr", gap: 10, marginBottom: 10 }}>
+          <div>
+            <label style={rot}>Colaborador</label>
+            <select className="campo" style={cxi} value={f.colaboradorId} onChange={(e) => escolherColab(e.target.value)}>
+              <option value="">Escolha…</option>
+              {(colabs || []).filter((c) => c.status !== "desligado").map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={rot}>O que gerar</label>
+            <select className="campo" style={cxi} value={f.tipo} onChange={(e) => setF({ ...f, tipo: e.target.value })}>
+              {TIPOS.map((t) => <option key={t.id} value={t.id}>{t.r}</option>)}
+            </select>
+          </div>
+        </div>
+
+        {colab && faltantes.length > 0 && (
+          <div className="anim-pop" style={{ fontSize: 11.5, fontWeight: 600, color: "#B45309", background: "#FFF7E6", border: "1px solid rgba(180,83,9,.3)", borderRadius: 9, padding: "8px 11px", marginBottom: 10 }}>
+            Faltam na ficha (saem como linha em branco no PDF): {faltantes.join(", ")}. Complete na aba <b>Fichas</b>.
+          </div>
+        )}
+
+        <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10 }}>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={rot}>Instituição de ensino</label>
+            <select className="campo" style={cxi} value={f.instituicaoId || (colab && colab.instituicao_id) || ""} onChange={(e) => setF({ ...f, instituicaoId: e.target.value })}>
+              <option value="">Escolha…</option>
+              {insts.map((i) => <option key={i.id} value={i.id}>{i.sigla} — {i.nome}</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={rot}>Área do estágio</label>
+            <select className="campo" style={cxi} value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
+              {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={rot}>Duração</label>
+            <select className="campo" style={cxi} value={f.duracao} onChange={(e) => setF({ ...f, duracao: e.target.value })}>
+              {DURACOES.map((d2) => <option key={d2.v} value={d2.v}>{d2.r}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={rot}>Início do estágio</label>
+            <input className="campo" type="date" style={cxi} value={f.inicio} onChange={(e) => setF({ ...f, inicio: e.target.value })} />
+          </div>
+          <div>
+            <label style={rot}>Jornada</label>
+            <select className="campo" style={cxi} value={f.jornada} onChange={(e) => setF({ ...f, jornada: e.target.value })}>
+              <option value="430">4h30 seg–sex (padrão)</option>
+              <option value="400">4h seg–sex</option>
+              <option value="600">6h seg–sex</option>
+              <option value="outra">Personalizada…</option>
+            </select>
+          </div>
+          {f.jornada === "outra" && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={rot}>Jornada personalizada (texto que entra no termo)</label>
+              <input className="campo" style={cxi} placeholder="ex.: 5 (cinco) horas" value={f.jornadaCustom} onChange={(e) => setF({ ...f, jornadaCustom: e.target.value })} />
+            </div>
+          )}
+          <div>
+            <label style={rot}>Bolsa-auxílio (R$)</label>
+            <input className="campo" style={cxi} value={f.bolsa} onChange={(e) => setF({ ...f, bolsa: e.target.value })} />
+          </div>
+          <div>
+            <label style={rot}>Valor por extenso</label>
+            <input className="campo" style={cxi} value={f.bolsaExtenso} onChange={(e) => setF({ ...f, bolsaExtenso: e.target.value })} />
+          </div>
+          <div>
+            <label style={rot}>Horário (folha de rosto)</label>
+            <input className="campo" style={cxi} value={f.horario} onChange={(e) => setF({ ...f, horario: e.target.value })} />
+          </div>
+          <div>
+            <label style={rot}>Supervisor responsável</label>
+            <select className="campo" style={cxi} value={f.supervisorId} onChange={(e) => setF({ ...f, supervisorId: e.target.value })}>
+              <option value="">Escolha…</option>
+              {(colabs || []).filter((c) => c.status === "ativo").map((c) => <option key={c.id} value={c.id}>{c.nome}{c.registro_profissional ? " · " + c.registro_profissional : ""}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={rot}>Vínculo (folha de rosto)</label>
+            <select className="campo" style={cxi} value={f.vinculo} onChange={(e) => setF({ ...f, vinculo: e.target.value })}>
+              {VINCULOS.map((v) => <option key={v} value={v}>{v}</option>)}
+            </select>
+          </div>
+          <div style={{ gridColumn: "1 / -1" }}>
+            <label style={rot}>Atribuições — Descrição das Atividades (uma por linha; sempre manual)</label>
+            <textarea className="campo" style={{ ...cxi, minHeight: 90, resize: "vertical" }}
+              placeholder={"Apoio ao acolhimento e triagem telefônica de pacientes\nOrganização de agendas e confirmações de atendimento"}
+              value={f.atribuicoes} onChange={(e) => setF({ ...f, atribuicoes: e.target.value })} />
+          </div>
+        </div>
+
+        <div style={{ display: "flex", gap: 8, marginTop: 14, alignItems: "center", flexWrap: "wrap" }}>
+          <button className="btn-primaria" style={{ padding: "10px 18px", fontSize: 13 }} onClick={gerar}>
+            <i className="ti ti-file-type-pdf" style={{ fontSize: 15, marginRight: 6 }} aria-hidden="true"></i>Gerar PDF
+          </button>
+          {msg && <span className="anim-pop" style={{ fontSize: 12.5, fontWeight: 700, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)" }}>{msg}</span>}
+        </div>
+      </div>
+
+      <div className="card-fl" style={{ padding: "12px 16px", fontSize: 12, color: "var(--sec)", lineHeight: 1.6 }}>
+        <b>Próximas peças da família</b> (mesmo layout, quando você pedir): Termo Aditivo · Renovação · Distratos com/sem recesso · Concessão de recesso · Protocolo de retirada · Termo de Responsabilidade · Recibo de documentação clínica.
+      </div>
+    </div>
+  );
+}
+
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
@@ -5611,14 +6108,14 @@ function PaginaConfiguracoes({ ctx }) {
       <div className="aba-linha">
         <div className={"aba" + (aba === "perfis" ? " on" : "")} onClick={() => setAba("perfis")}>Perfis e permissões</div>
         <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
-        <div className={"aba" + (aba === "fichas" ? " on" : "")} onClick={() => setAba("fichas")}>Fichas da equipe</div>
+        
         <div className={"aba" + (aba === "notificacoes" ? " on" : "")} onClick={() => setAba("notificacoes")}>Notificações</div>
         <div className={"aba" + (aba === "integracoes" ? " on" : "")} onClick={() => setAba("integracoes")}>Integrações</div>
         <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
       </div>
       {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
       {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
-      {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={podeEditar} />}
+      
       {aba === "notificacoes" && <AbaNotificacoes ctx={ctx} />}
       {aba === "integracoes" && <AbaIntegracoes ctx={ctx} />}
       {aba === "links" && <AbaLinks podeEditar={podeEditar} />}
