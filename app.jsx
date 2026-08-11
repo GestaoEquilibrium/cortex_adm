@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v48</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v49</div>
       </aside>
     </React.Fragment>
   );
@@ -1713,6 +1713,7 @@ function AbaPonto({ ctx }) {
               {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
             </select>
             <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={mes} onChange={(e) => setMes(e.target.value)} />
+            <button className="btn-fantasma" style={{ width: "auto", padding: "8px 13px", fontSize: 12.5 }} disabled={!colabSel || gerando} onClick={async () => { if (!colabSel) return; setGerando(true); try { await gerarEspelhoMensal(sb, colabSel, mes); } catch (e) { alert("Erro ao gerar espelho: " + e.message); } setGerando(false); }}><i className="ti ti-file-type-pdf" style={{ marginRight: 5 }} aria-hidden="true"></i>{gerando ? "Gerando…" : "Espelho paisagem (PDF)"}</button>
           </div>
 
           {podeEditar && colabSel && (
@@ -4550,6 +4551,10 @@ function AbaFichas({ ctx, podeEditar }) {
   const [enviandoFoto, setEnviandoFoto] = useState(false);
   const [instituicoesFicha, setInstituicoesFicha] = useState([]);
   const ro = !podeEditar;
+  const dBRf = (d) => (d || "").split("-").reverse().join("/");
+  const [autorizacoes, setAutorizacoes] = useState([]);
+  const [autModal, setAutModal] = useState(null);
+  const [autMsg, setAutMsg] = useState("");
 
   async function carregar() {
     const { data, error } = await sb.from("colaboradores").select("*").order("nome").limit(20000);
@@ -4565,6 +4570,16 @@ function AbaFichas({ ctx, podeEditar }) {
 
   function abrir(c) { setSel({ ...c }); setMsg(""); }
 
+  useEffect(() => {
+    if (!sel || !sel.id) { setAutorizacoes([]); return; }
+    let vivo = true;
+    (async () => {
+      const { data, error } = await sb.from("horas_extras_autorizacoes").select("id, data, minutos, autorizado_por, obs").eq("colaborador_id", sel.id).order("data", { ascending: false }).limit(40);
+      if (vivo) setAutorizacoes(error ? [] : (data || []));
+    })();
+    return () => { vivo = false; };
+  }, [sel && sel.id]);
+
   async function salvar() {
     if (!sel.nome || !sel.nome.trim()) { setMsg("O nome é obrigatório."); return; }
     setSalvando(true);
@@ -4578,10 +4593,12 @@ function AbaFichas({ ctx, podeEditar }) {
       rg: vz(sel.rg), endereco: vz(sel.endereco), cidade: vz(sel.cidade), cep: vz(sel.cep),
       estado_civil: vz(sel.estado_civil), periodo_curso: vz(sel.periodo_curso),
       instituicao_id: sel.instituicao_id || null, dados_bancarios: vz(sel.dados_bancarios),
+      carga_semanal_horas: sel.carga_semanal_horas === "" || sel.carga_semanal_horas == null ? null : parseFloat(sel.carga_semanal_horas),
+      trabalha_sabado: !!sel.trabalha_sabado,
       observacoes: vz(sel.observacoes),
     }).eq("id", sel.id);
     setSalvando(false);
-    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("formacao") !== -1 ? " — rode o 10_ficha_profissional.sql." : (error.message.indexOf("instituicao_id") !== -1 || error.message.indexOf("dados_bancarios") !== -1 ? " — rode o 28_documentos_estagio.sql." : ""))); return; }
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("formacao") !== -1 ? " — rode o 10_ficha_profissional.sql." : (error.message.indexOf("instituicao_id") !== -1 || error.message.indexOf("dados_bancarios") !== -1 ? " — rode o 28_documentos_estagio.sql." : (error.message.indexOf("carga_semanal") !== -1 || error.message.indexOf("trabalha_sabado") !== -1 ? " — rode o 29_carga_horaria.sql." : "")))); return; }
     setMsg("✓ Ficha salva."); carregar();
   }
 
@@ -4702,8 +4719,74 @@ function AbaFichas({ ctx, podeEditar }) {
                   {instituicoesFicha.map((i) => <option key={i.id} value={i.id}>{i.sigla} — {i.nome}</option>)}
                 </select>} />
               <CampoFicha r="Dados bancários / PIX" largo filho={<input className="campo" style={cx} disabled={ro} placeholder="Pix 000.000.000-00 · Banco X ag 0000 / cc 00000-0" value={sel.dados_bancarios || ""} onChange={(e) => setSel({ ...sel, dados_bancarios: e.target.value })} />} />
+              <CampoFicha r="Carga semanal (h)" filho={<input className="campo" type="number" min="0" max="60" step="0.5" style={cx} disabled={ro} placeholder="ex.: 30" value={sel.carga_semanal_horas == null ? "" : sel.carga_semanal_horas} onChange={(e) => setSel({ ...sel, carga_semanal_horas: e.target.value })} />} />
+              <CampoFicha r="Trabalha aos sábados" filho={<select className="campo" style={cx} disabled={ro} value={sel.trabalha_sabado ? "sim" : "nao"} onChange={(e) => setSel({ ...sel, trabalha_sabado: e.target.value === "sim" })}><option value="nao">Não</option><option value="sim">Sim — 4h no sábado</option></select>} />
+              {(() => { const c = parseFloat(sel.carga_semanal_horas); if (!c || c <= 0) return null; const fm = (u) => { const h = Math.floor(u), m = Math.round((u - h) * 60); return h + "h" + (m ? String(m).padStart(2, "0") : ""); }; return (
+                <div style={{ gridColumn: "1 / -1", fontSize: 11.5, color: "var(--marca-texto)", background: "var(--tint)", border: "1px solid var(--tint-borda)", borderRadius: 9, padding: "6px 10px", lineHeight: 1.55 }}>
+                  {sel.trabalha_sabado
+                    ? <span>Jornada prevista: <b>{fm(c / 5)}/dia útil</b> nas semanas sem sábado; com sábado trabalhado, <b>{fm((c - 4) / 5)}/dia útil</b> e <b>4h no sábado</b>.</span>
+                    : <span>Jornada prevista: <b>{fm(c / 5)} por dia útil</b> (segunda a sexta).</span>}
+                  {" "}Saída acima do previsto do dia + 10 min dispara o alerta, salvo hora extra autorizada.
+                </div>
+              ); })()}
 
             </div>
+
+            <div style={{ marginTop: 16, borderTop: "1px dashed var(--linha)", paddingTop: 12 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+                <div style={{ fontSize: 12.5, fontWeight: 700, color: "var(--sec)" }}><i className="ti ti-clock-plus" style={{ marginRight: 5 }} aria-hidden="true"></i>Horas extras autorizadas</div>
+                {podeEditar && <button className="btn-fantasma" style={{ width: "auto", padding: "6px 11px", fontSize: 11.5 }} onClick={() => { setAutMsg(""); setAutModal({ linhas: [{ data: "", horas: "1" }], obs: "" }); }}>+ Autorizar horas extras</button>}
+                {autMsg && <span className="anim-pop" style={{ fontSize: 12, fontWeight: 600, color: autMsg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{autMsg}</span>}
+              </div>
+              {autorizacoes.length === 0 ? (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 7 }}>Nenhuma autorização registrada. Sem autorização, sair acima do previsto do dia (+10 min de tolerância) dispara o alerta no relógio e para a direção.</div>
+              ) : (
+                <div style={{ marginTop: 8, display: "flex", flexDirection: "column", gap: 5 }}>
+                  {autorizacoes.map((a) => (
+                    <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 9, fontSize: 12.5, background: "var(--campo)", border: "1px solid var(--linha)", borderRadius: 9, padding: "6px 10px" }}>
+                      <b style={{ color: "var(--marca-texto)" }}>{dBRf(a.data)}</b>
+                      <span>+{Math.floor(a.minutos / 60)}h{a.minutos % 60 ? String(a.minutos % 60).padStart(2, "0") : ""}</span>
+                      <span style={{ color: "var(--muted)", flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.autorizado_por}{a.obs ? " — " + a.obs : ""}</span>
+                      {podeEditar && <i className="ti ti-trash" style={{ cursor: "pointer", color: "var(--vermelho)", fontSize: 14 }} title="Remover autorização" onClick={async () => { const { error } = await sb.from("horas_extras_autorizacoes").delete().eq("id", a.id); if (error) { setAutMsg("Erro: " + error.message); } else { setAutMsg("✓ Removida."); setAutorizacoes(autorizacoes.filter((x) => x.id !== a.id)); registrarEvento("editar", "rh", "Removeu autorização de horas extras de " + sel.nome + " em " + dBRf(a.data)); } }}></i>}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {autModal && (
+              <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,32,.55)", zIndex: 70, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }} onClick={(e) => { if (e.target === e.currentTarget) setAutModal(null); }}>
+                <div className="anim-pop" style={{ background: "var(--branco)", borderRadius: 16, padding: 18, maxWidth: 480, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,.3)", border: "1px solid var(--linha)" }}>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4 }}>Autorizar horas extras — {sel.nome}</div>
+                  <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 10 }}>Escolha os dias e quantas horas a mais valem em cada um. No dia autorizado, o alerta só dispara acima do previsto + extra.</div>
+                  {autModal.linhas.map((l, i) => (
+                    <div key={i} style={{ display: "flex", gap: 7, marginBottom: 7, alignItems: "center" }}>
+                      <input className="campo" type="date" style={{ flex: 1.2, padding: "7px 9px", fontSize: 12.5 }} value={l.data} onChange={(e) => { const ls = autModal.linhas.slice(); ls[i] = { ...l, data: e.target.value }; setAutModal({ ...autModal, linhas: ls }); }} />
+                      <input className="campo" type="number" min="0.5" max="12" step="0.5" style={{ width: 92, padding: "7px 9px", fontSize: 12.5 }} value={l.horas} onChange={(e) => { const ls = autModal.linhas.slice(); ls[i] = { ...l, horas: e.target.value }; setAutModal({ ...autModal, linhas: ls }); }} />
+                      <span style={{ fontSize: 12, color: "var(--muted)" }}>hora(s)</span>
+                      {autModal.linhas.length > 1 && <i className="ti ti-x" style={{ cursor: "pointer", color: "var(--muted)" }} onClick={() => setAutModal({ ...autModal, linhas: autModal.linhas.filter((_, j) => j !== i) })}></i>}
+                    </div>
+                  ))}
+                  <button className="btn-fantasma" style={{ width: "auto", padding: "5px 10px", fontSize: 11.5, marginBottom: 10 }} onClick={() => setAutModal({ ...autModal, linhas: [...autModal.linhas, { data: "", horas: "1" }] })}>+ mais um dia</button>
+                  <input className="campo" style={{ width: "100%", padding: "7px 9px", fontSize: 12.5, marginBottom: 12 }} placeholder="motivo / observação (opcional)" value={autModal.obs} onChange={(e) => setAutModal({ ...autModal, obs: e.target.value })} />
+                  <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+                    <button className="btn-fantasma" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} onClick={() => setAutModal(null)}>Cancelar</button>
+                    <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} onClick={async () => {
+                      const ls = autModal.linhas.filter((l) => l.data && parseFloat(l.horas) > 0);
+                      if (!ls.length) { setAutMsg("Erro: preencha ao menos um dia com horas."); return; }
+                      const quem = (ctx && ctx.profile && (ctx.profile.nome || ctx.profile.email)) || "direção";
+                      const regs = ls.map((l) => ({ colaborador_id: sel.id, data: l.data, minutos: Math.round(parseFloat(l.horas) * 60), autorizado_por: quem, obs: (autModal.obs || "").trim() || null }));
+                      const { error } = await sb.from("horas_extras_autorizacoes").upsert(regs, { onConflict: "colaborador_id,data" });
+                      if (error) { setAutMsg("Erro: " + error.message + (error.message.indexOf("horas_extras") !== -1 ? " — rode o 29_carga_horaria.sql." : "")); return; }
+                      registrarEvento("editar", "rh", "Autorizou horas extras de " + sel.nome + " (" + regs.map((r) => dBRf(r.data) + " +" + (r.minutos / 60) + "h").join(", ") + ")");
+                      setAutModal(null); setAutMsg("✓ Autorização registrada.");
+                      const rec = await sb.from("horas_extras_autorizacoes").select("id, data, minutos, autorizado_por, obs").eq("colaborador_id", sel.id).order("data", { ascending: false }).limit(40);
+                      if (!rec.error) setAutorizacoes(rec.data || []);
+                    }}>Salvar autorização</button>
+                  </div>
+                </div>
+              </div>
+            )}
 
             <div style={{ display: "flex", gap: 8, alignItems: "center", marginTop: 14 }}>
               {podeEditar && <button className="btn-primaria" style={{ padding: "9px 16px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando…" : "Salvar ficha"}</button>}
@@ -4885,6 +4968,7 @@ function AbaNotificacoes({ ctx }) {
 function PaginaRelatorios({ ctx }) {
   const RELS = [
     { id: "ponto", ico: "ti-clock", tit: "Ponto do mês", desc: "Dias e horas por pessoa", vivo: true },
+    { id: "espelho", ico: "ti-layout-rows", tit: "Espelho mensal (paisagem)", desc: "Semana a semana, previsto × realizado, no modelo oficial", vivo: true },
     { id: "faltas", ico: "ti-calendar-off", tit: "Faltas e atestados", desc: "Período, por pessoa e tipo", vivo: true },
     { id: "quadro", ico: "ti-users", tit: "Quadro de pessoal", desc: "Ativos por setor, regime e unidade", vivo: true },
     { id: "ocorrencias", ico: "ti-message-report", tit: "Ocorrências do ponto", desc: "Tudo que foi registrado no período", vivo: true },
@@ -4956,6 +5040,11 @@ function PaginaRelatorios({ ctx }) {
           });
           if (vivo) setDados({ cab: ["Colaborador", "Dias", "Horas", "Ocorrências"], linhas, extra: 2,
             rodape: linhas.length + " pessoa(s) · total " + fmtH(totalMin) + " no período" });
+        }
+
+        if (rel === "espelho") {
+          if (!colabId) { if (vivo) { setDados(null); setMsg("Escolha o colaborador para gerar o espelho em PDF."); } }
+          else { await gerarEspelhoMensal(sb, colabId, mes); if (vivo) { setDados(null); setMsg("✓ Espelho de " + ((porId[colabId] || {}).nome || "colaborador") + " gerado — confira o download."); } }
         }
 
         if (rel === "faltas") {
@@ -5668,6 +5757,251 @@ function pdfEqCabecalhos(doc, titulo, subtitulo) {
   }
 }
 
+function fmtHMc(min, comSinal) {
+  const neg = (min || 0) < 0; const n = Math.abs(Math.round(min || 0));
+  const t = Math.floor(n / 60) + "h" + String(n % 60).padStart(2, "0");
+  return (neg ? "−" : (comSinal ? "+" : "")) + t;
+}
+
+async function gerarEspelhoMensal(sb, colabId, mesRef) {
+  const ano = Number(mesRef.slice(0, 4)), mm = Number(mesRef.slice(5, 7));
+  const nDias = new Date(ano, mm, 0).getDate();
+  const d1 = mesRef + "-01", d2 = mesRef + "-" + String(nDias).padStart(2, "0");
+  const isoIni = d1 + "T00:00:00-03:00";
+  const isoFim = (mm === 12 ? (ano + 1) + "-01" : ano + "-" + String(mm + 1).padStart(2, "0")) + "-01T00:00:00-03:00";
+  const dBR = (d) => (d || "").split("-").reverse().join("/");
+
+  const rc = await sb.from("colaboradores").select("nome, cargo, unidade, regime, carga_semanal_horas, trabalha_sabado").eq("id", colabId).single();
+  if (rc.error) throw rc.error;
+  const col = rc.data;
+  const carga = parseFloat(col.carga_semanal_horas) || 0;
+  const flagSab = !!col.trabalha_sabado;
+
+  const [rr, rf, ra, rx, rfa, rat, roc] = await Promise.all([
+    sb.from("ponto_registros").select("tipo, batida").eq("colaborador_id", colabId).gte("batida", isoIni).lt("batida", isoFim).order("batida").limit(4000),
+    sb.from("feriados").select("data, nome").gte("data", d1).lte("data", d2),
+    sb.from("horas_extras_autorizacoes").select("data, minutos").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+    sb.from("ponto_alertas_excesso").select("data, minutos_excedidos").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+    sb.from("faltas").select("data, tipo, justificada").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+    sb.from("atestados").select("inicio, fim").eq("colaborador_id", colabId).lte("inicio", d2).gte("fim", d1),
+    sb.from("ponto_ocorrencias").select("data, descricao").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+  ]);
+  if (rr.error) throw rr.error;
+  const feri = {}; ((rf && rf.data) || []).forEach((f) => { feri[f.data] = f.nome; });
+  const aut = {}; ((ra && ra.data) || []).forEach((a) => { aut[a.data] = a.minutos; });
+  const exc = {}; ((rx && rx.data) || []).forEach((a) => { exc[a.data] = a.minutos_excedidos; });
+  const falt = {}; ((rfa && rfa.data) || []).forEach((f) => { falt[f.data] = f; });
+  const atst = (rat && rat.data) || [];
+  const ocor = {}; ((roc && roc.data) || []).forEach((o) => { if (o.data) ocor[o.data] = (ocor[o.data] ? ocor[o.data] + " · " : "") + (o.descricao || ""); });
+
+  const porDia = {};
+  ((rr.data) || []).forEach((r) => {
+    const dt = new Date(r.batida);
+    const dLoc = dt.toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+    const hLoc = dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    (porDia[dLoc] = porDia[dLoc] || []).push(hLoc);
+  });
+
+  const dowDe = (dISO) => new Date(dISO + "T12:00:00Z").getUTCDay();
+  const addDias = (dISO, n) => { const dt = new Date(dISO + "T12:00:00Z"); dt.setUTCDate(dt.getUTCDate() + n); return dt.toISOString().slice(0, 10); };
+  const segundaDe = (dISO) => { const dw = dowDe(dISO); return addDias(dISO, dw === 0 ? -6 : 1 - dw); };
+  const sabSemana = {};
+  Object.keys(porDia).forEach((dISO) => { if (dowDe(dISO) === 6 && flagSab && !feri[dISO]) sabSemana[segundaDe(dISO)] = true; });
+
+  function previstoDia(dISO) {
+    if (!carga) return 0;
+    const dw = dowDe(dISO);
+    if (dw === 0) return 0;
+    if (feri[dISO]) return 0;
+    const comSab = !!sabSemana[segundaDe(dISO)];
+    if (dw === 6) return comSab ? 240 : 0;
+    return Math.max(Math.round(((comSab ? carga - 4 : carga) * 60) / 5), 0);
+  }
+  function realizadoDia(dISO) {
+    const hs = porDia[dISO] || []; let t = 0;
+    for (let i = 0; i + 1 < hs.length; i += 2) {
+      const a = hs[i].split(":"), b = hs[i + 1].split(":");
+      t += (Number(b[0]) * 60 + Number(b[1])) - (Number(a[0]) * 60 + Number(a[1]));
+    }
+    return Math.max(t, 0);
+  }
+
+  const SEMANA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+  const body = []; const semRows = []; const apagadas = [];
+  let prevSem = 0, realSem = 0, prevMes = 0, realMes = 0, nSem = 0, semIni = null;
+  let nFaltas = 0, nAtest = 0, minAut = 0, minExc = 0;
+  Object.keys(aut).forEach((d) => { minAut += aut[d]; });
+  Object.keys(exc).forEach((d) => { minExc += exc[d]; });
+
+  for (let d = 1; d <= nDias; d++) {
+    const dISO = mesRef + "-" + String(d).padStart(2, "0");
+    if (!semIni) semIni = dISO;
+    const dw = dowDe(dISO);
+    const hs = porDia[dISO] || [];
+    const prev = previstoDia(dISO);
+    const real = realizadoDia(dISO);
+    const emAtest = atst.some((a) => a.inicio <= dISO && a.fim >= dISO);
+    const obs = [];
+    if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
+    if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
+    else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
+    else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
+    if (aut[dISO]) obs.push("Extra autorizada +" + fmtHMc(aut[dISO]));
+    if (exc[dISO]) obs.push("EXCEDEU " + fmtHMc(exc[dISO]) + " s/ autorização");
+    if (hs.length % 2 === 1) obs.push("batida ímpar — conferir");
+    if (ocor[dISO]) obs.push(String(ocor[dISO]).slice(0, 58));
+    const ent = hs[0] || "", sai = hs.length > 1 ? hs[hs.length - 1] : "", i1 = hs.length > 2 ? hs[1] : "", i2 = hs.length > 3 ? hs[2] : "";
+    const saldo = real - prev;
+    body.push([String(d).padStart(2, "0"), SEMANA[dw], ent, i1, i2, sai,
+      prev ? fmtHMc(prev) : "—", (hs.length || prev) ? fmtHMc(real) : "—",
+      (prev || hs.length) ? fmtHMc(saldo, true) : "—", obs.join(" · ")]);
+    if ((dw === 0 || feri[dISO]) && hs.length === 0) apagadas.push(body.length - 1);
+    prevSem += prev; realSem += real; prevMes += prev; realMes += real;
+    if (dw === 0 || d === nDias) {
+      nSem++;
+      body.push(["SEMANA " + nSem + "  (" + dBR(semIni) + " a " + dBR(dISO) + ")", "", "", "", "", "",
+        fmtHMc(prevSem), fmtHMc(realSem), fmtHMc(realSem - prevSem, true), ""]);
+      semRows.push(body.length - 1);
+      prevSem = 0; realSem = 0; semIni = null;
+    }
+  }
+
+  const E = EQ_PDF, W = 297, H = 210, ML = 12, MR = 12;
+  const doc = new window.jspdf.jsPDF({ orientation: "landscape", unit: "mm", format: "a4" });
+
+  // Bloco de identificação
+  doc.setFillColor(E.CAMPO[0], E.CAMPO[1], E.CAMPO[2]);
+  doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+  doc.roundedRect(ML, 21, W - ML - MR, 19, 2.5, 2.5, "FD");
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.6);
+  doc.text("FUNCIONÁRIO", ML + 5, 26);
+  doc.text("CARGO", ML + 118, 26);
+  doc.text("UNIDADE / REGIME", ML + 200, 26);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFontSize(9.6);
+  doc.text(String(col.nome || "").toUpperCase().slice(0, 58), ML + 5, 30.6);
+  doc.setFontSize(8.6); doc.setFont("helvetica", "normal");
+  doc.text(String(col.cargo || "—").slice(0, 44), ML + 118, 30.6);
+  doc.text(((col.unidade || "—") + " · " + (col.regime || "—")).slice(0, 40), ML + 200, 30.6);
+  doc.setFontSize(7.4); doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]);
+  const fmH = (u) => { const h = Math.floor(u), m = Math.round((u - h) * 60); return h + "h" + (m ? String(m).padStart(2, "0") : ""); };
+  let jorn;
+  if (!carga) jorn = "Carga semanal não cadastrada na ficha — previsto zerado neste espelho.";
+  else if (flagSab) jorn = "Carga semanal " + fmH(carga) + "  ·  dia útil " + fmH(carga / 5) + " (sem sábado) ou " + fmH((carga - 4) / 5) + " + sábado 4h  ·  tolerância 10 min/dia";
+  else jorn = "Carga semanal " + fmH(carga) + "  ·  dia útil " + fmH(carga / 5) + " (seg–sex)  ·  tolerância 10 min/dia";
+  doc.text(jorn, ML + 5, 36.4);
+  doc.setFont("helvetica", "bold"); doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]);
+  doc.text((EQ_MESES[mm - 1] + " de " + ano).toUpperCase(), W - MR - 5, 36.4, { align: "right" });
+
+  doc.autoTable({
+    startY: 43,
+    margin: { left: ML, right: MR, top: 21, bottom: 16 },
+    head: [["DIA", "SEM", "ENTRADA", "INT. INÍCIO", "INT. FIM", "SAÍDA", "PREVISTO", "REALIZADO", "SALDO", "OBSERVAÇÕES"]],
+    body: body,
+    styles: { font: "helvetica", fontSize: 7.4, cellPadding: 1.3, lineColor: E.LINHA, lineWidth: 0.14, textColor: E.INK, valign: "middle" },
+    headStyles: { fillColor: E.MARCA, textColor: [255, 255, 255], fontSize: 7.4, fontStyle: "bold", halign: "center", cellPadding: 1.6 },
+    alternateRowStyles: { fillColor: [250, 252, 254] },
+    columnStyles: {
+      0: { cellWidth: 10, halign: "center" }, 1: { cellWidth: 12, halign: "center" },
+      2: { cellWidth: 18, halign: "center" }, 3: { cellWidth: 18, halign: "center" },
+      4: { cellWidth: 18, halign: "center" }, 5: { cellWidth: 18, halign: "center" },
+      6: { cellWidth: 19, halign: "center" }, 7: { cellWidth: 20, halign: "center" },
+      8: { cellWidth: 18, halign: "center" }, 9: { cellWidth: "auto" },
+    },
+    didParseCell: function (dt) {
+      if (dt.section !== "body") return;
+      const i = dt.row.index, ci = dt.column.index, v = String(dt.cell.raw || "");
+      if (semRows.indexOf(i) !== -1) {
+        dt.cell.styles.fillColor = E.TINT; dt.cell.styles.fontStyle = "bold"; dt.cell.styles.fontSize = 7.6;
+        dt.cell.styles.textColor = E.INK;
+        if (ci === 0) dt.cell.styles.halign = "left";
+        if (ci === 8) dt.cell.styles.textColor = v.indexOf("−") === 0 ? [185, 28, 28] : (v.indexOf("+") === 0 ? [21, 128, 61] : E.INK);
+        return;
+      }
+      if (apagadas.indexOf(i) !== -1) dt.cell.styles.textColor = E.MUTED;
+      if (ci === 8) {
+        if (v.indexOf("−") === 0) dt.cell.styles.textColor = [185, 28, 28];
+        else if (v.indexOf("+") === 0) dt.cell.styles.textColor = [21, 128, 61];
+      }
+      if (ci === 9) {
+        if (v.indexOf("EXCEDEU") !== -1) { dt.cell.styles.textColor = [185, 28, 28]; dt.cell.styles.fontStyle = "bold"; }
+        else if (v.indexOf("Extra autorizada") !== -1) dt.cell.styles.textColor = [154, 88, 10];
+        else if (v.indexOf("FERIADO") !== -1) dt.cell.styles.textColor = E.MUTED;
+      }
+    },
+  });
+
+  // Fechamento do mês
+  let y = (doc.lastAutoTable && doc.lastAutoTable.finalY ? doc.lastAutoTable.finalY : 60) + 6;
+  if (y > H - 56) { doc.addPage(); y = 26; }
+  const difMes = realMes - prevMes;
+  const larg3 = (W - ML - MR - 12) / 3;
+  const caixas = [
+    ["HORAS ACORDADAS", fmtHMc(prevMes), E.INK],
+    ["HORAS REALIZADAS", fmtHMc(realMes), E.MARCA],
+    ["DIFERENÇA", fmtHMc(difMes, true), difMes < 0 ? [185, 28, 28] : [21, 128, 61]],
+  ];
+  caixas.forEach(function (cx, i) {
+    const x = ML + i * (larg3 + 6);
+    doc.setFillColor(E.CAMPO[0], E.CAMPO[1], E.CAMPO[2]);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+    doc.roundedRect(x, y, larg3, 17, 2.5, 2.5, "FD");
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.6);
+    doc.text(cx[0], x + 5, y + 5.4);
+    doc.setTextColor(cx[2][0], cx[2][1], cx[2][2]); doc.setFontSize(13.5);
+    doc.text(cx[1], x + 5, y + 12.8);
+  });
+  const selo = difMes < 0 ? "NEGATIVO" : (difMes > 0 ? "POSITIVO" : "EM DIA");
+  const seloCor = difMes < 0 ? [185, 28, 28] : (difMes > 0 ? [21, 128, 61] : [91, 101, 114]);
+  doc.setFillColor(seloCor[0], seloCor[1], seloCor[2]);
+  const sx = ML + 2 * (larg3 + 6) + larg3 - 26;
+  doc.roundedRect(sx, y + 4.4, 22, 7.4, 3.6, 3.6, "F");
+  doc.setTextColor(255, 255, 255); doc.setFontSize(7.6);
+  doc.text(selo, sx + 11, y + 9.2, { align: "center" });
+
+  y += 22;
+  doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text(nFaltas + " falta(s) sem justificativa  ·  " + nAtest + " dia(s) de atestado  ·  extras autorizadas +" + fmtHMc(minAut) + "  ·  excedente sem autorização " + fmtHMc(minExc), ML, y);
+
+  y += 12;
+  if (y > H - 22) { doc.addPage(); y = 30; }
+  doc.setDrawColor(E.INK[0], E.INK[1], E.INK[2]); doc.setLineWidth(0.3);
+  doc.line(ML + 8, y + 8, ML + 108, y + 8);
+  doc.line(W - MR - 108, y + 8, W - MR - 8, y + 8);
+  doc.setFontSize(7.4); doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]);
+  doc.text(String(col.nome || "").toUpperCase().slice(0, 52), ML + 58, y + 12.2, { align: "center" });
+  doc.text("CLÍNICA EQUILIBRIUM MED CENTER LTDA", W - MR - 58, y + 12.2, { align: "center" });
+
+  // Cabeçalho e rodapé (todas as páginas), paisagem
+  const nP = doc.getNumberOfPages();
+  for (let i = 1; i <= nP; i++) {
+    doc.setPage(i);
+    const cx0 = ML + 4.6, cy0 = 11.4, r0 = 3.5;
+    doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.6); doc.setLineCap("round");
+    [90, 0, 45, 135].forEach(function (ang) {
+      const a = ang * Math.PI / 180, dx = r0 * Math.cos(a), dy = r0 * Math.sin(a);
+      doc.line(cx0 - dx, cy0 - dy, cx0 + dx, cy0 + dy);
+    });
+    doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(11.5);
+    doc.text("GRUPO EQUILIBRIUM", ML + 11, 10.6);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
+    doc.text("CLÍNICA EQUILIBRIUM MED CENTER LTDA · CNPJ 34.032.586/0001-98", ML + 11, 14);
+    doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(8);
+    doc.text("ESPELHO MENSAL DE PONTO", W - MR, 10.6, { align: "right" });
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(6.8);
+    doc.text("Controle de frequência · " + EQ_MESES[mm - 1] + "/" + ano, W - MR, 14, { align: "right" });
+    doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.45);
+    doc.line(ML, 16.4, W - MR, 16.4);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.2);
+    doc.line(ML, H - 10.5, W - MR, H - 10.5);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFontSize(6.6);
+    doc.text("Av. Cesário Alvim, 2001 · salas 101 a 303 · Nossa Senhora Aparecida · Uberlândia/MG", ML, H - 6.8);
+    doc.text("Gerado pelo CORTEX Gestão · página " + i + " de " + nP, W - MR, H - 6.8, { align: "right" });
+  }
+
+  registrarEvento("gerar", "rh", "Espelho mensal de " + col.nome + " (" + mesRef + ")");
+  doc.save("Espelho_" + eqSlug(col.nome) + "_" + mesRef + ".pdf");
+}
+
 function pdfEstagioTermo(d) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
@@ -6150,6 +6484,23 @@ function PaginaStub({ m }) {
 // ------------------------------------------------------------
 function Shell({ ctx, aoSair }) {
   const [meuCard, setMeuCard] = useState(null);
+  const [alertasExc, setAlertasExc] = useState([]);
+  const [meuEmailDir, setMeuEmailDir] = useState("");
+  useEffect(() => {
+    if (!sb || nivelModulo(ctx, "rh") !== "editar") return;
+    let vivo = true;
+    async function checarExcessos() {
+      try {
+        if (!meuEmailDir) { const u = await sb.auth.getUser(); if (vivo && u && u.data && u.data.user) setMeuEmailDir(u.data.user.email || ""); }
+        const { data, error } = await sb.from("ponto_alertas_excesso").select("id, data, minutos_realizados, minutos_limite, minutos_excedidos, vistos, colaboradores(nome)").order("criado_em", { ascending: false }).limit(15);
+        if (!error && vivo) setAlertasExc(data || []);
+      } catch (e) {}
+    }
+    checarExcessos();
+    const t = setInterval(checarExcessos, 60000);
+    return () => { vivo = false; clearInterval(t); };
+  }, [meuEmailDir]);
+  const excPendentes = alertasExc.filter((a) => !((a.vistos || []).indexOf(meuEmailDir || "@") !== -1));
   useEffect(() => {
     if (!sb) return;
     sb.rpc("meu_card").then(({ data }) => { if (data && data[0]) setMeuCard(data[0]); }).catch(() => {});
@@ -6227,6 +6578,28 @@ function Shell({ ctx, aoSair }) {
           </div>
         )}
         {conteudo}
+      {excPendentes.length > 0 && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(12,18,26,.6)", zIndex: 120, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }}>
+          <div className="anim-pop" style={{ background: "var(--branco)", border: "2px solid var(--vermelho)", borderRadius: 18, padding: 20, maxWidth: 580, width: "100%", boxShadow: "0 24px 60px rgba(0,0,0,.35)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 10 }}>
+              <span style={{ fontSize: 22 }}>⚠️</span>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: "var(--vermelho)" }}>Carga horária ultrapassada sem autorização</div>
+            </div>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7, maxHeight: 300, overflowY: "auto" }}>
+              {excPendentes.map((a) => (
+                <div key={a.id} style={{ display: "flex", alignItems: "center", gap: 10, background: "#FDECEC", border: "1px solid rgba(220,38,38,.35)", borderRadius: 10, padding: "8px 11px", fontSize: 13 }}>
+                  <div style={{ flex: 1 }}>
+                    <b>{(a.colaboradores && a.colaboradores.nome) || "Colaborador"}</b> excedeu <b style={{ color: "var(--vermelho)" }}>{fmtHMc(a.minutos_excedidos)}</b> em {(a.data || "").split("-").reverse().join("/")}
+                    <div style={{ fontSize: 11.5, color: "var(--sec)" }}>registrado {fmtHMc(a.minutos_realizados)} · limite do dia {fmtHMc(a.minutos_limite)} (previsto + extra autorizada + 10 min)</div>
+                  </div>
+                  <button className="btn-fantasma" style={{ width: "auto", padding: "6px 11px", fontSize: 11.5 }} onClick={async () => { try { await sb.rpc("alerta_excesso_ciente", { p_id: a.id }); } catch (e) {} setAlertasExc(alertasExc.map((x) => x.id === a.id ? { ...x, vistos: [...(x.vistos || []), meuEmailDir || "@"] } : x)); }}>Ciente</button>
+                </div>
+              ))}
+            </div>
+            <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 10 }}>O aviso some para você ao dar ciente; os demais da direção continuam vendo até o ciente deles. Autorize horas extras na ficha do colaborador (RH › Fichas).</div>
+          </div>
+        </div>
+      )}
       </main>
     </div>
   );

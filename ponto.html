@@ -180,6 +180,8 @@ function App(){
   const [ocupado, setOcupado] = useState(false);
   const [toast, setToast] = useState(null);
   const [occModal, setOccModal] = useState(null);    // { data, descricao }
+  const [excesso, setExcesso] = useState(null);     // alerta de carga excedida (pop-up da saída)
+  const fmtHM = (m) => { const n = Math.abs(Math.round(m || 0)); return Math.floor(n / 60) + "h" + String(n % 60).padStart(2, "0"); };
   const buscaRef = useRef(null);
   const avisar = (msg, tipo) => setToast({msg, tipo});
 
@@ -209,6 +211,7 @@ function App(){
   }, [carregar]);
 
   function concluir(){
+    setExcesso(null);
     setTela("inicio"); setSel(null); setPin(""); setPinErro(""); setLogado(null);
     setBatidas([]); setUltima(null); setBusca(""); setOccModal(null);
   }
@@ -268,6 +271,13 @@ function App(){
         if (!dia.error && dia.data.ok) setBatidas(dia.data.batidas || []);
         else setBatidas(b => [...b, { tipo, hora: data.hora }]);
         setTela("sucesso");
+        if (tipo === "saida") {
+          try {
+            const hj = new Date().toLocaleDateString("en-CA", { timeZone: "America/Sao_Paulo" });
+            const al = await sb.from("ponto_alertas_excesso").select("minutos_realizados, minutos_limite, minutos_excedidos").eq("colaborador_id", logado.colab.id).eq("data", hj).maybeSingle();
+            if (!al.error && al.data) setExcesso(al.data);
+          } catch (e2) {}
+        }
       }
     } catch (e) { avisar("Sem conexão. A batida NÃO foi registrada.", "erro"); }
     setOcupado(false);
@@ -288,7 +298,7 @@ function App(){
 
   // Retorno automático na tela de sucesso (pausa se o modal de ocorrência abrir).
   useEffect(() => {
-    if (tela !== "sucesso" || occModal) return;
+    if (tela !== "sucesso" || occModal || excesso) return;
     setConta(6);
     const t = setInterval(() => {
       setConta(c => {
@@ -297,7 +307,7 @@ function App(){
       });
     }, 1000);
     return () => clearInterval(t);
-  }, [tela, occModal]);
+  }, [tela, occModal, excesso]);
 
   // Mural ocioso por 60s volta sozinho a tela inicial.
   useEffect(() => {
@@ -371,6 +381,20 @@ function App(){
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:20}}>
       {toast && <Toast msg={toast.msg} tipo={toast.tipo} aoFechar={()=>setToast(null)}/>}
 
+      {excesso && (
+        <div style={{position:"fixed",inset:0,background:"rgba(8,12,18,.85)",zIndex:95,display:"flex",alignItems:"center",justifyContent:"center",padding:20}}>
+          <div className="anim-pop" style={{background:"linear-gradient(160deg,#3a0d0d,#5a1414)",border:"2px solid var(--vermelho)",borderRadius:22,padding:"30px 30px 26px",maxWidth:540,textAlign:"center",boxShadow:"0 24px 64px rgba(0,0,0,.6)"}}>
+            <div style={{fontSize:46,lineHeight:1}}>⚠️</div>
+            <div style={{fontSize:21,fontWeight:800,color:"#ffd7d7",letterSpacing:.4,marginTop:10}}>ULTRAPASSOU CARGA HORÁRIA</div>
+            <div style={{fontSize:15,fontWeight:700,color:"#ffb0b0",marginTop:2}}>SEM AUTORIZAÇÃO DA COORDENAÇÃO</div>
+            <div style={{fontSize:14.5,color:"#ffe3e3",marginTop:14,lineHeight:1.65}}>
+              Hoje você registrou <b>{fmtHM(excesso.minutos_realizados)}</b> — o limite do dia é <b>{fmtHM(excesso.minutos_limite)}</b>.<br/>
+              Excedente: <b>{fmtHM(excesso.minutos_excedidos)}</b>. A direção foi avisada automaticamente.
+            </div>
+            <button onClick={()=>setExcesso(null)} style={{marginTop:18,padding:"12px 36px",fontSize:16,fontWeight:800,border:"none",borderRadius:14,background:"var(--vermelho)",color:"#fff",cursor:"pointer"}}>ENTENDI</button>
+          </div>
+        </div>
+      )}
       {occModal && (
         <Modal titulo="📝 Registrar Ocorrência" aoFechar={()=>setOccModal(null)}>
           <div style={{marginBottom:14}}>
@@ -513,7 +537,7 @@ function App(){
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v48</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v49</div>
     </div>
   );
 }
