@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v50</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v51</div>
       </aside>
     </React.Fragment>
   );
@@ -5733,7 +5733,7 @@ function pdfEqCabecalhos(doc, titulo, subtitulo) {
 function fmtHMc(min, comSinal) {
   const neg = (min || 0) < 0; const n = Math.abs(Math.round(min || 0));
   const t = Math.floor(n / 60) + "h" + String(n % 60).padStart(2, "0");
-  return (neg ? "−" : (comSinal ? "+" : "")) + t;
+  return (neg ? "-" : (comSinal ? "+" : "")) + t;
 }
 
 async function gerarEspelhoMensal(sb, colabId, mesRef) {
@@ -5832,7 +5832,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
     prevSem += prev; realSem += real; prevMes += prev; realMes += real;
     if (dw === 0 || d === nDias) {
       nSem++;
-      body.push(["SEMANA " + nSem + "  (" + dBR(semIni) + " a " + dBR(dISO) + ")", "", "", "", "", "",
+      body.push([{ content: "SEMANA " + nSem + " · " + dBR(semIni).slice(0, 5) + " a " + dBR(dISO).slice(0, 5), colSpan: 6 },
         fmtHMc(prevSem), fmtHMc(realSem), fmtHMc(realSem - prevSem, true), ""]);
       semRows.push(body.length - 1);
       prevSem = 0; realSem = 0; semIni = null;
@@ -5867,10 +5867,11 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
 
   doc.autoTable({
     startY: 43,
+    rowPageBreak: "avoid",
     margin: { left: ML, right: MR, top: 21, bottom: 16 },
     head: [["DIA", "SEM", "ENTRADA", "INT. INÍCIO", "INT. FIM", "SAÍDA", "PREVISTO", "REALIZADO", "SALDO", "OBSERVAÇÕES"]],
     body: body,
-    styles: { font: "helvetica", fontSize: 7.4, cellPadding: 1.3, lineColor: E.LINHA, lineWidth: 0.14, textColor: E.INK, valign: "middle" },
+    styles: { font: "helvetica", fontSize: 7.4, cellPadding: 1.3, lineColor: [176, 194, 212], lineWidth: 0.22, textColor: E.INK, valign: "middle" },
     headStyles: { fillColor: E.MARCA, textColor: [255, 255, 255], fontSize: 7.4, fontStyle: "bold", halign: "center", cellPadding: 1.6 },
     alternateRowStyles: { fillColor: [250, 252, 254] },
     columnStyles: {
@@ -5887,12 +5888,12 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
         dt.cell.styles.fillColor = E.TINT; dt.cell.styles.fontStyle = "bold"; dt.cell.styles.fontSize = 7.6;
         dt.cell.styles.textColor = E.INK;
         if (ci === 0) dt.cell.styles.halign = "left";
-        if (ci === 8) dt.cell.styles.textColor = v.indexOf("−") === 0 ? [185, 28, 28] : (v.indexOf("+") === 0 ? [21, 128, 61] : E.INK);
+        if (ci === 8) dt.cell.styles.textColor = v.indexOf("-") === 0 ? [185, 28, 28] : (v.indexOf("+") === 0 ? [21, 128, 61] : E.INK);
         return;
       }
       if (apagadas.indexOf(i) !== -1) dt.cell.styles.textColor = E.MUTED;
       if (ci === 8) {
-        if (v.indexOf("−") === 0) dt.cell.styles.textColor = [185, 28, 28];
+        if (v.indexOf("-") === 0) dt.cell.styles.textColor = [185, 28, 28];
         else if (v.indexOf("+") === 0) dt.cell.styles.textColor = [21, 128, 61];
       }
       if (ci === 9) {
