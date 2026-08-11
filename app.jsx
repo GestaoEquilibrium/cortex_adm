@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v54</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v55</div>
       </aside>
     </React.Fragment>
   );
@@ -1449,6 +1449,7 @@ function AbaPonto({ ctx }) {
   const [relMes, setRelMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [relDados, setRelDados] = useState(null);
   const [gerando, setGerando] = useState(false);
+  const [espelhoPrev, setEspelhoPrev] = useState(null);
 
   async function carregarHoje() {
     const ini = new Date(); ini.setHours(0, 0, 0, 0);
@@ -1713,7 +1714,8 @@ function AbaPonto({ ctx }) {
               {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.status === "desligado" ? " (desligado)" : ""}</option>)}
             </select>
             <input className="campo" type="month" style={{ width: 150, padding: "8px 10px", fontSize: 13 }} value={mes} onChange={(e) => setMes(e.target.value)} />
-            <button className="btn-fantasma" style={{ width: "auto", padding: "8px 13px", fontSize: 12.5 }} disabled={!colabSel || gerando} onClick={async () => { if (!colabSel) return; setGerando(true); try { await gerarEspelhoMensal(sb, colabSel, mes); } catch (e) { alert("Erro ao gerar espelho: " + e.message); } setGerando(false); }}><i className="ti ti-file-type-pdf" style={{ marginRight: 5 }} aria-hidden="true"></i>{gerando ? "Gerando…" : "Espelho paisagem (PDF)"}</button>
+            <button className="btn-fantasma" style={{ width: "auto", padding: "8px 13px", fontSize: 12.5 }} disabled={!colabSel || gerando} onClick={async () => { if (!colabSel) return; setGerando(true); try { const pv = await gerarEspelhoMensal(sb, colabSel, mes, "ver"); setEspelhoPrev(pv); } catch (e) { alert("Erro ao gerar espelho: " + e.message); } setGerando(false); }}><i className="ti ti-eye" style={{ marginRight: 5 }} aria-hidden="true"></i>{gerando ? "Gerando…" : "Espelho do mês"}</button>
+            {espelhoPrev && <PreviaEspelho prev={espelhoPrev} aoFechar={() => { try { URL.revokeObjectURL(espelhoPrev.url); } catch (e2) {} setEspelhoPrev(null); }} />}
           </div>
 
           {podeEditar && colabSel && (
@@ -4975,6 +4977,7 @@ function PaginaRelatorios({ ctx }) {
     { id: "pee", ico: "ti-book", tit: "PEE — vencimentos", desc: "Documentos a vencer", vivo: false },
   ];
   const [rel, setRel] = useState(null);
+  const [espelhoPrev, setEspelhoPrev] = useState(null);
   const [colabs, setColabs] = useState([]);
   const [mes, setMes] = useState(() => new Date().toISOString().slice(0, 7));
   const [setor, setSetor] = useState("");
@@ -5017,7 +5020,7 @@ function PaginaRelatorios({ ctx }) {
 
         if (rel === "ponto") {
           if (!colabId) { if (vivo) { setDados(null); setMsg("Escolha o colaborador — o espelho é individual, no padrão oficial (paisagem, semana a semana)."); } }
-          else { await gerarEspelhoMensal(sb, colabId, mes); if (vivo) { setDados(null); setMsg("✓ Espelho de " + ((porId[colabId] || {}).nome || "colaborador") + " gerado — confira o download."); } }
+          else { const pv = await gerarEspelhoMensal(sb, colabId, mes, "ver"); if (vivo) { setDados(null); setEspelhoPrev(function (ant) { if (ant) { try { URL.revokeObjectURL(ant.url); } catch (e2) {} } return pv; }); setMsg("✓ Espelho de " + ((porId[colabId] || {}).nome || "colaborador") + " pronto — visualização aberta."); } }
         }
 
         if (rel === "faltas") {
@@ -5141,7 +5144,8 @@ function PaginaRelatorios({ ctx }) {
 
   return (
     <div>
-      <button className="btn-fantasma" style={{ width: "auto", padding: "6px 12px", marginBottom: 12 }} onClick={() => { setRel(null); setMsg(""); }}>
+      {espelhoPrev && <PreviaEspelho prev={espelhoPrev} aoFechar={() => { setEspelhoPrev(function (ant) { if (ant) { try { URL.revokeObjectURL(ant.url); } catch (e2) {} } return null; }); }} />}
+      <button className="btn-fantasma" style={{ width: "auto", padding: "6px 12px", marginBottom: 12 }} onClick={() => { setRel(null); setMsg(""); setEspelhoPrev(function (ant) { if (ant) { try { URL.revokeObjectURL(ant.url); } catch (e2) {} } return null; }); }}>
         <i className="ti ti-arrow-left" style={{ fontSize: 14, marginRight: 5 }} aria-hidden="true"></i>Relatórios
       </button>
       <div style={{ fontWeight: 700, fontSize: 15.5, marginBottom: 10 }}>{nomeRel()}</div>
@@ -5730,13 +5734,36 @@ function pdfEqCabecalhos(doc, titulo, subtitulo) {
   }
 }
 
+function PreviaEspelho({ prev, aoFechar }) {
+  useEffect(() => {
+    const h = (e) => { if (e.key === "Escape") aoFechar(); };
+    window.addEventListener("keydown", h);
+    return () => window.removeEventListener("keydown", h);
+  }, []);
+  if (!prev) return null;
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(10,16,24,.66)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }} onClick={(e) => { if (e.target === e.currentTarget) aoFechar(); }}>
+      <div className="anim-pop" style={{ background: "var(--branco)", borderRadius: 16, width: "min(1200px, 96vw)", height: "min(760px, 92vh)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 26px 70px rgba(0,0,0,.45)", border: "1px solid var(--linha)" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--linha)" }}>
+          <i className="ti ti-report" style={{ color: "var(--marca-texto)", fontSize: 17 }} aria-hidden="true"></i>
+          <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Espelho de ponto — {prev.titulo}</div>
+          <a href={prev.url} download={prev.nome} className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12.5, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}><i className="ti ti-download" aria-hidden="true"></i>Baixar PDF</a>
+          <button className="btn-fantasma" style={{ width: "auto", padding: "7px 11px", fontSize: 12.5 }} onClick={aoFechar} title="Fechar"><i className="ti ti-x" aria-hidden="true"></i></button>
+        </div>
+        <iframe title="Espelho de ponto" src={prev.url} style={{ border: "none", width: "100%", flex: 1, background: "#525659" }} />
+        <div style={{ padding: "6px 14px", fontSize: 11, color: "var(--muted)", borderTop: "1px solid var(--linha)" }}>Visualização — nada foi baixado ainda. No iPhone, se a prévia mostrar só a primeira página, use o Baixar PDF.</div>
+      </div>
+    </div>
+  );
+}
+
 function fmtHMc(min, comSinal) {
   const neg = (min || 0) < 0; const n = Math.abs(Math.round(min || 0));
   const t = Math.floor(n / 60) + "h" + String(n % 60).padStart(2, "0");
   return (neg ? "-" : (comSinal ? "+" : "")) + t;
 }
 
-async function gerarEspelhoMensal(sb, colabId, mesRef) {
+async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   const ano = Number(mesRef.slice(0, 4)), mm = Number(mesRef.slice(5, 7));
   const nDias = new Date(ano, mm, 0).getDate();
   const d1 = mesRef + "-01", d2 = mesRef + "-" + String(nDias).padStart(2, "0");
@@ -5986,8 +6013,12 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
     doc.text("Gerado pelo CORTEX Gestão · página " + i + " de " + nP, W - MR, H - 6.8, { align: "right" });
   }
 
-  registrarEvento("gerar", "rh", "Espelho mensal de " + col.nome + " (" + mesRef + ")");
-  doc.save("Espelho_" + eqSlug(col.nome) + "_" + mesRef + ".pdf");
+  registrarEvento("gerar", "rh", "Espelho mensal de " + col.nome + " (" + mesRef + ")" + (modo === "ver" ? " — visualização" : ""));
+  const nomeArq = "Espelho_" + eqSlug(col.nome) + "_" + mesRef + ".pdf";
+  if (modo === "ver") {
+    return { url: doc.output("bloburl"), nome: nomeArq, titulo: col.nome + " — " + EQ_MESES[mm - 1] + "/" + ano };
+  }
+  doc.save(nomeArq);
 }
 
 function pdfEstagioTermo(d) {
