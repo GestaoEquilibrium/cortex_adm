@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v49</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v50</div>
       </aside>
     </React.Fragment>
   );
@@ -4967,8 +4967,7 @@ function AbaNotificacoes({ ctx }) {
 
 function PaginaRelatorios({ ctx }) {
   const RELS = [
-    { id: "ponto", ico: "ti-clock", tit: "Ponto do mês", desc: "Dias e horas por pessoa", vivo: true },
-    { id: "espelho", ico: "ti-layout-rows", tit: "Espelho mensal (paisagem)", desc: "Semana a semana, previsto × realizado, no modelo oficial", vivo: true },
+    { id: "ponto", ico: "ti-clock", tit: "Ponto do mês", desc: "Espelho individual — semana a semana, no padrão oficial", vivo: true },
     { id: "faltas", ico: "ti-calendar-off", tit: "Faltas e atestados", desc: "Período, por pessoa e tipo", vivo: true },
     { id: "quadro", ico: "ti-users", tit: "Quadro de pessoal", desc: "Ativos por setor, regime e unidade", vivo: true },
     { id: "ocorrencias", ico: "ti-message-report", tit: "Ocorrências do ponto", desc: "Tudo que foi registrado no período", vivo: true },
@@ -5017,33 +5016,7 @@ function PaginaRelatorios({ ctx }) {
         const d1 = mes + "-01", d2 = mes + "-" + ultimoDiaMes(mes);
 
         if (rel === "ponto") {
-          let q1 = sb.from("ponto_registros").select("colaborador_id, tipo, batida")
-            .gte("batida", ini.toISOString()).lt("batida", fim.toISOString()).order("batida").limit(20000);
-          let q2 = sb.from("ponto_ocorrencias").select("colaborador_id").gte("data", d1).lte("data", d2).limit(20000);
-          if (colabId) { q1 = q1.eq("colaborador_id", colabId); q2 = q2.eq("colaborador_id", colabId); }
-          const [r1, r2] = await Promise.all([q1, q2]);
-          if (r1.error || r2.error) throw (r1.error || r2.error);
-          const alvo = colabs.filter((c) => c.status === "ativo" && dentroSetor(c) && (!colabId || c.id === colabId));
-          let totalMin = 0;
-          const linhas = alvo.map((c) => {
-            const regs = (r1.data || []).filter((r) => r.colaborador_id === c.id);
-            const dias = {}; let min = 0, ent = null;
-            regs.forEach((r) => {
-              const d = new Date(r.batida);
-              dias[d.getFullYear() + "-" + d.getMonth() + "-" + d.getDate()] = 1;
-              if (r.tipo === "entrada") { ent = new Date(r.batida); }
-              else if (ent) { min += (new Date(r.batida) - ent) / 60000; ent = null; }
-            });
-            totalMin += min;
-            const oc = (r2.data || []).filter((o) => o.colaborador_id === c.id).length;
-            return [c.nome, String(Object.keys(dias).length), fmtH(min), String(oc), c.cargo || "", c.setor || ""];
-          });
-          if (vivo) setDados({ cab: ["Colaborador", "Dias", "Horas", "Ocorrências"], linhas, extra: 2,
-            rodape: linhas.length + " pessoa(s) · total " + fmtH(totalMin) + " no período" });
-        }
-
-        if (rel === "espelho") {
-          if (!colabId) { if (vivo) { setDados(null); setMsg("Escolha o colaborador para gerar o espelho em PDF."); } }
+          if (!colabId) { if (vivo) { setDados(null); setMsg("Escolha o colaborador — o espelho é individual, no padrão oficial (paisagem, semana a semana)."); } }
           else { await gerarEspelhoMensal(sb, colabId, mes); if (vivo) { setDados(null); setMsg("✓ Espelho de " + ((porId[colabId] || {}).nome || "colaborador") + " gerado — confira o download."); } }
         }
 
