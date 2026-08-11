@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v53</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v54</div>
       </aside>
     </React.Fragment>
   );
@@ -5809,43 +5809,33 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
   Object.keys(aut).forEach(function (dk) { if (dk >= d1 && dk <= d2) minAut += aut[dk]; });
   Object.keys(exc).forEach(function (dk) { if (dk >= d1 && dk <= d2) minExc += exc[dk]; });
 
-  const diasLista = [];
-  for (let d = 1; d <= nDias; d++) diasLista.push({ dISO: mesRef + "-" + String(d).padStart(2, "0"), borda: false });
-  let cauda = d2;
-  while (dowDe(cauda) !== 0) { cauda = addD(cauda, 1); diasLista.push({ dISO: cauda, borda: true }); }
-
-  for (let ix = 0; ix < diasLista.length; ix++) {
-    const dISO = diasLista[ix].dISO, borda = diasLista[ix].borda;
+  for (let d = 1; d <= nDias; d++) {
+    const dISO = mesRef + "-" + String(d).padStart(2, "0");
     if (!semIni) semIni = dISO;
     const dw = dowDe(dISO);
     const hs = porDia[dISO] || [];
     const prev = previstoDia(dISO);
     const real = realizadoDia(dISO);
-    const emAtest = !borda && atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
+    const emAtest = atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
     const obs = [];
-    if (borda) obs.push("mês seguinte — fecha a semana");
     if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
-    if (!borda) {
-      if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
-      else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
-      else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
-    }
+    if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
+    else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
+    else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
     if (aut[dISO]) obs.push("Extra autorizada +" + fmtHMc(aut[dISO]));
     if (exc[dISO]) obs.push("EXCEDEU " + fmtHMc(exc[dISO]) + " s/ autorização");
     if (hs.length % 2 === 1) obs.push("batida ímpar — conferir");
     if (ocor[dISO]) obs.push(String(ocor[dISO]).slice(0, 58));
     const ent = hs[0] || "", sai = hs.length > 1 ? hs[hs.length - 1] : "", i1 = hs.length > 2 ? hs[1] : "", i2 = hs.length > 3 ? hs[2] : "";
     const saldo = real - prev;
-    const rotDia = borda ? dISO.slice(8, 10) + "/" + dISO.slice(5, 7) : dISO.slice(8, 10);
-    body.push([rotDia, SEMANA[dw], ent, i1, i2, sai,
+    body.push([String(d).padStart(2, "0"), SEMANA[dw], ent, i1, i2, sai,
       prev ? fmtHMc(prev) : "—", (hs.length || prev) ? fmtHMc(real) : "—",
       (prev || hs.length) ? fmtHMc(saldo, true) : "—", obs.join(" · ")]);
-    if (borda || ((dw === 0 || feri[dISO]) && hs.length === 0)) apagadas.push(body.length - 1);
-    prevSem += prev; realSem += real;
-    if (!borda) { prevMes += prev; realMes += real; }
-    if (dw === 0 || ix === diasLista.length - 1) {
+    if ((dw === 0 || feri[dISO]) && hs.length === 0) apagadas.push(body.length - 1);
+    prevSem += prev; realSem += real; prevMes += prev; realMes += real;
+    if (dw === 0 || d === nDias) {
       nSem++;
-      body.push([{ content: "SEMANA " + nSem + " \u00b7 " + dBR(semIni).slice(0, 5) + " a " + dBR(dISO).slice(0, 5), colSpan: 6 },
+      body.push([{ content: "SEMANA " + nSem + " · " + dBR(semIni).slice(0, 5) + " a " + dBR(dISO).slice(0, 5), colSpan: 6 },
         fmtHMc(prevSem), fmtHMc(realSem), fmtHMc(realSem - prevSem, true), ""]);
       semRows.push(body.length - 1);
       prevSem = 0; realSem = 0; semIni = null;
