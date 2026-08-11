@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v51</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v52</div>
       </aside>
     </React.Fragment>
   );
@@ -5865,13 +5865,14 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
   doc.setFont("helvetica", "bold"); doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]);
   doc.text((EQ_MESES[mm - 1] + " de " + ano).toUpperCase(), W - MR - 5, 36.4, { align: "right" });
 
+  const molduraTab = [];
   doc.autoTable({
     startY: 43,
     rowPageBreak: "avoid",
     margin: { left: ML, right: MR, top: 21, bottom: 16 },
     head: [["DIA", "SEM", "ENTRADA", "INT. INÍCIO", "INT. FIM", "SAÍDA", "PREVISTO", "REALIZADO", "SALDO", "OBSERVAÇÕES"]],
     body: body,
-    styles: { font: "helvetica", fontSize: 7.4, cellPadding: 1.3, lineColor: [176, 194, 212], lineWidth: 0.22, textColor: E.INK, valign: "middle" },
+    styles: { font: "helvetica", fontSize: 7.4, cellPadding: 1.3, lineColor: [238, 241, 245], lineWidth: 0.2, textColor: E.INK, valign: "middle" },
     headStyles: { fillColor: E.MARCA, textColor: [255, 255, 255], fontSize: 7.4, fontStyle: "bold", halign: "center", cellPadding: 1.6 },
     alternateRowStyles: { fillColor: [250, 252, 254] },
     columnStyles: {
@@ -5902,6 +5903,16 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
         else if (v.indexOf("FERIADO") !== -1) dt.cell.styles.textColor = E.MUTED;
       }
     },
+    didDrawPage: function (dpg) {
+      molduraTab.push({ pg: doc.internal.getCurrentPageInfo().pageNumber, y0: dpg.pageNumber === 1 ? 43 : dpg.settings.margin.top, y1: dpg.cursor.y });
+    },
+  });
+
+  // Moldura-cartão arredondada da tabela (por página)
+  molduraTab.forEach(function (m) {
+    doc.setPage(m.pg);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.35);
+    doc.roundedRect(ML - 1.6, m.y0 - 1.6, (W - ML - MR) + 3.2, (m.y1 - m.y0) + 3.2, 2.6, 2.6, "S");
   });
 
   // Fechamento do mês
