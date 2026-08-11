@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v52</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v53</div>
       </aside>
     </React.Fragment>
   );
@@ -5742,6 +5742,9 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
   const d1 = mesRef + "-01", d2 = mesRef + "-" + String(nDias).padStart(2, "0");
   const isoIni = d1 + "T00:00:00-03:00";
   const isoFim = (mm === 12 ? (ano + 1) + "-01" : ano + "-" + String(mm + 1).padStart(2, "0")) + "-01T00:00:00-03:00";
+  const addD = (iso, n) => { const t = new Date(iso + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); };
+  const d1m = addD(d1, -6), d2m = addD(d2, 7);
+  const isoIniM = d1m + "T00:00:00-03:00", isoFimM = addD(d2m, 1) + "T00:00:00-03:00";
   const dBR = (d) => (d || "").split("-").reverse().join("/");
 
   const rc = await sb.from("colaboradores").select("nome, cargo, unidade, regime, carga_semanal_horas, trabalha_sabado").eq("id", colabId).single();
@@ -5751,13 +5754,13 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
   const flagSab = !!col.trabalha_sabado;
 
   const [rr, rf, ra, rx, rfa, rat, roc] = await Promise.all([
-    sb.from("ponto_registros").select("tipo, batida").eq("colaborador_id", colabId).gte("batida", isoIni).lt("batida", isoFim).order("batida").limit(4000),
-    sb.from("feriados").select("data, nome").gte("data", d1).lte("data", d2),
-    sb.from("horas_extras_autorizacoes").select("data, minutos").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
-    sb.from("ponto_alertas_excesso").select("data, minutos_excedidos").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+    sb.from("ponto_registros").select("tipo, batida").eq("colaborador_id", colabId).gte("batida", isoIniM).lt("batida", isoFimM).order("batida").limit(4600),
+    sb.from("feriados").select("data, nome").gte("data", d1m).lte("data", d2m),
+    sb.from("horas_extras_autorizacoes").select("data, minutos").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
+    sb.from("ponto_alertas_excesso").select("data, minutos_excedidos").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
     sb.from("faltas").select("data, tipo, justificada").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
     sb.from("atestados").select("inicio, fim").eq("colaborador_id", colabId).lte("inicio", d2).gte("fim", d1),
-    sb.from("ponto_ocorrencias").select("data, descricao").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
+    sb.from("ponto_ocorrencias").select("data, descricao").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
   ]);
   if (rr.error) throw rr.error;
   const feri = {}; ((rf && rf.data) || []).forEach((f) => { feri[f.data] = f.nome; });
@@ -5803,36 +5806,46 @@ async function gerarEspelhoMensal(sb, colabId, mesRef) {
   const body = []; const semRows = []; const apagadas = [];
   let prevSem = 0, realSem = 0, prevMes = 0, realMes = 0, nSem = 0, semIni = null;
   let nFaltas = 0, nAtest = 0, minAut = 0, minExc = 0;
-  Object.keys(aut).forEach((d) => { minAut += aut[d]; });
-  Object.keys(exc).forEach((d) => { minExc += exc[d]; });
+  Object.keys(aut).forEach(function (dk) { if (dk >= d1 && dk <= d2) minAut += aut[dk]; });
+  Object.keys(exc).forEach(function (dk) { if (dk >= d1 && dk <= d2) minExc += exc[dk]; });
 
-  for (let d = 1; d <= nDias; d++) {
-    const dISO = mesRef + "-" + String(d).padStart(2, "0");
+  const diasLista = [];
+  for (let d = 1; d <= nDias; d++) diasLista.push({ dISO: mesRef + "-" + String(d).padStart(2, "0"), borda: false });
+  let cauda = d2;
+  while (dowDe(cauda) !== 0) { cauda = addD(cauda, 1); diasLista.push({ dISO: cauda, borda: true }); }
+
+  for (let ix = 0; ix < diasLista.length; ix++) {
+    const dISO = diasLista[ix].dISO, borda = diasLista[ix].borda;
     if (!semIni) semIni = dISO;
     const dw = dowDe(dISO);
     const hs = porDia[dISO] || [];
     const prev = previstoDia(dISO);
     const real = realizadoDia(dISO);
-    const emAtest = atst.some((a) => a.inicio <= dISO && a.fim >= dISO);
+    const emAtest = !borda && atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
     const obs = [];
+    if (borda) obs.push("mês seguinte — fecha a semana");
     if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
-    if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
-    else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
-    else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
+    if (!borda) {
+      if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
+      else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
+      else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
+    }
     if (aut[dISO]) obs.push("Extra autorizada +" + fmtHMc(aut[dISO]));
     if (exc[dISO]) obs.push("EXCEDEU " + fmtHMc(exc[dISO]) + " s/ autorização");
     if (hs.length % 2 === 1) obs.push("batida ímpar — conferir");
     if (ocor[dISO]) obs.push(String(ocor[dISO]).slice(0, 58));
     const ent = hs[0] || "", sai = hs.length > 1 ? hs[hs.length - 1] : "", i1 = hs.length > 2 ? hs[1] : "", i2 = hs.length > 3 ? hs[2] : "";
     const saldo = real - prev;
-    body.push([String(d).padStart(2, "0"), SEMANA[dw], ent, i1, i2, sai,
+    const rotDia = borda ? dISO.slice(8, 10) + "/" + dISO.slice(5, 7) : dISO.slice(8, 10);
+    body.push([rotDia, SEMANA[dw], ent, i1, i2, sai,
       prev ? fmtHMc(prev) : "—", (hs.length || prev) ? fmtHMc(real) : "—",
       (prev || hs.length) ? fmtHMc(saldo, true) : "—", obs.join(" · ")]);
-    if ((dw === 0 || feri[dISO]) && hs.length === 0) apagadas.push(body.length - 1);
-    prevSem += prev; realSem += real; prevMes += prev; realMes += real;
-    if (dw === 0 || d === nDias) {
+    if (borda || ((dw === 0 || feri[dISO]) && hs.length === 0)) apagadas.push(body.length - 1);
+    prevSem += prev; realSem += real;
+    if (!borda) { prevMes += prev; realMes += real; }
+    if (dw === 0 || ix === diasLista.length - 1) {
       nSem++;
-      body.push([{ content: "SEMANA " + nSem + " · " + dBR(semIni).slice(0, 5) + " a " + dBR(dISO).slice(0, 5), colSpan: 6 },
+      body.push([{ content: "SEMANA " + nSem + " \u00b7 " + dBR(semIni).slice(0, 5) + " a " + dBR(dISO).slice(0, 5), colSpan: 6 },
         fmtHMc(prevSem), fmtHMc(realSem), fmtHMc(realSem - prevSem, true), ""]);
       semRows.push(body.length - 1);
       prevSem = 0; realSem = 0; semIni = null;
