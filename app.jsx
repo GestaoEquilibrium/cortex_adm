@@ -350,7 +350,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v58</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v59</div>
       </aside>
     </React.Fragment>
   );
@@ -6251,8 +6251,66 @@ function pdfEstagioFolha(d, modo) {
   doc.save(nomeArqF);
 }
 
+const ATIV_PADRAO = {
+  "Psicologia — Análise do Comportamento Aplicada (ABA)": [
+    "Acompanhamento das sessões de intervenção ABA sob supervisão",
+    "Coleta e registro de dados dos programas de ensino",
+    "Apoio na preparação de materiais e ambientes de atendimento",
+    "Participação em discussões de caso e supervisões clínicas",
+    "Registro das atividades no sistema interno",
+  ],
+  "Neuropsicologia": [
+    "Observação e apoio em avaliações neuropsicológicas sob supervisão",
+    "Aplicação assistida de instrumentos autorizados ao estágio",
+    "Tabulação e organização de protocolos e resultados",
+    "Participação em devolutivas e discussões de caso com o supervisor",
+    "Registro das atividades no sistema interno",
+  ],
+  "Fonoaudiologia": [
+    "Observação e apoio em atendimentos fonoaudiológicos sob supervisão",
+    "Auxílio na preparação de materiais terapêuticos",
+    "Registro de evolução das sessões acompanhadas",
+    "Participação em discussões de caso e orientações a famílias",
+    "Registro das atividades no sistema interno",
+  ],
+  "Psicologia Clínica": [
+    "Observação de atendimentos clínicos sob supervisão",
+    "Apoio em acolhimentos e triagens",
+    "Estudo e discussão de casos com o supervisor",
+    "Elaboração de registros e relatórios de estágio",
+    "Registro das atividades no sistema interno",
+  ],
+  "Call Center": [
+    "Atendimento telefônico e por WhatsApp a pacientes e responsáveis",
+    "Agendamento, confirmação e remarcação de consultas e terapias",
+    "Orientações sobre convênios, valores e documentação",
+    "Registro de ocorrências e informativos no sistema interno",
+    "Apoio à recepção e à coordenação administrativa",
+  ],
+  "Recepção": [
+    "Acolhimento presencial de pacientes e responsáveis",
+    "Cadastro, conferência de documentos e atualização de dados",
+    "Organização de agendas e apoio ao fluxo das salas",
+    "Recebimento de pagamentos e emissão de comprovantes",
+    "Registro das atividades no sistema interno",
+  ],
+  "Administrativo": [
+    "Apoio às rotinas administrativas e de arquivo",
+    "Organização de documentos e pastas de colaboradores",
+    "Lançamentos e conferências em planilhas e sistemas internos",
+    "Apoio ao call center e à recepção quando necessário",
+    "Registro das atividades no sistema interno",
+  ],
+  "Estágio de Observação": [
+    "Observação estruturada dos atendimentos autorizados",
+    "Registro de observações conforme roteiro do supervisor",
+    "Participação em discussões de caso e supervisões",
+    "Cumprimento das normas de sigilo e conduta da clínica",
+  ],
+};
+
 function AbaDocsEstagio({ ctx }) {
-  const AREAS = ["Psicologia — Análise do Comportamento Aplicada (ABA)", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Administrativo", "Estágio de Observação"];
+  const AREAS = ["Psicologia — Análise do Comportamento Aplicada (ABA)", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Call Center", "Recepção", "Administrativo", "Estágio de Observação"];
   const DURACOES = [{ v: 3, r: "3 (três) meses" }, { v: 6, r: "6 (seis) meses" }, { v: 12, r: "12 (doze) meses" }];
   const JORNADAS = [
     { id: "430", clausula: "4 (quatro) horas e 30 (trinta) minutos", quadro: "Seg. a sex., 4h30 diárias (22h30 semanais)" },
@@ -6269,15 +6327,15 @@ function AbaDocsEstagio({ ctx }) {
   const [f, setF] = useState({
     colaboradorId: "", tipo: "pacote", instituicaoId: "", area: AREAS[0], duracao: 6,
     inicio: "", jornada: "430", jornadaCustom: "", bolsa: "1.200,00", bolsaExtenso: "mil e duzentos reais",
-    supervisorId: "", horario: "07:00 às 11:30", vinculo: "Estagiário", atribuicoes: "",
+    supervisorId: "", horario: "07:00 às 11:30", vinculo: "Estagiário", atribuicoes: (ATIV_PADRAO["Psicologia — Análise do Comportamento Aplicada (ABA)"] || []).join("\n"),
   });
 
   useEffect(() => {
     (async () => {
       const r = await sb.from("colaboradores")
-        .select("id, nome, cpf, rg, endereco, cidade, cep, estado_civil, telefone, email, nascimento, cargo, admissao, formacao, periodo_curso, instituicao_id, dados_bancarios, registro_profissional, status")
+        .select("id, nome, cpf, rg, endereco, cidade, cep, estado_civil, telefone, email, nascimento, cargo, admissao, formacao, periodo_curso, instituicao_id, dados_bancarios, registro_profissional, status, contrato_arquivo_id")
         .order("nome").limit(20000);
-      if (r.error) { setMsg("Erro: " + r.error.message + (r.error.message.indexOf("instituicao_id") !== -1 || r.error.message.indexOf("periodo_curso") !== -1 ? " — rode o 28_documentos_estagio.sql." : "")); setColabs([]); return; }
+      if (r.error) { setMsg("Erro: " + r.error.message + (r.error.message.indexOf("instituicao_id") !== -1 || r.error.message.indexOf("periodo_curso") !== -1 ? " — rode o 28_documentos_estagio.sql." : (r.error.message.indexOf("contrato_arquivo_id") !== -1 ? " — rode o 31_contrato_vinculo.sql." : ""))); setColabs([]); return; }
       setColabs(r.data || []);
       const i = await sb.from("instituicoes").select("id, sigla, nome, cnpj, endereco").eq("ativo", true).order("sigla");
       if (!i.error) setInsts(i.data || []);
@@ -6337,18 +6395,52 @@ function AbaDocsEstagio({ ctx }) {
     };
   }
 
-  function gerar() {
+  async function gerar() {
     setMsg("");
     if (!colab) { setMsg("Escolha o colaborador."); return; }
+    if (colab.contrato_arquivo_id) { setMsg("Este colaborador já tem contrato vinculado. Exclua o arquivo antigo em CONTRATOS ESTAGIÁRIOS para regerar."); return; }
     if (!window.jspdf || !window.jspdf.jsPDF) { setMsg("O gerador de PDF não carregou. Atualize com Ctrl+F5."); return; }
     if (f.tipo !== "folha" && !f.inicio) { setMsg("Informe a data de início do estágio."); return; }
     const d = montar();
     registrarEvento("gerar", "rh", "documentos_estagio: " + f.tipo + " · " + colab.nome, colab.id);
     const docsPrev = [];
-    if (f.tipo === "termo" || f.tipo === "pacote") { const pv = pdfEstagioTermo(d, "ver"); docsPrev.push({ url: pv.url, nome: pv.nome, rotulo: "Termo + Plano de Atividades" }); }
-    if (f.tipo === "folha" || f.tipo === "pacote") { const pv = pdfEstagioFolha(d, "ver"); docsPrev.push({ url: pv.url, nome: pv.nome, rotulo: "Folha de rosto" }); }
+    let pvTermo = null, pvFolha = null;
+    if (f.tipo === "termo" || f.tipo === "pacote") { pvTermo = pdfEstagioTermo(d, "ver"); docsPrev.push({ url: pvTermo.url, nome: pvTermo.nome, rotulo: "Termo + Plano de Atividades" }); }
+    if (f.tipo === "folha" || f.tipo === "pacote") { pvFolha = pdfEstagioFolha(d, "ver"); docsPrev.push({ url: pvFolha.url, nome: pvFolha.nome, rotulo: "Folha de rosto" }); }
     setDocPrev({ docs: docsPrev, titulo: "Documentos de estágio — " + d.nome });
-    setMsg("✓ Documento(s) pronto(s) — visualize e baixe na janela.");
+    setMsg("Arquivando na pasta CONTRATOS ESTAGIÁRIOS…");
+    try {
+      let pastaId = null;
+      const pr = await sb.from("pastas").select("id").eq("nome", "CONTRATOS ESTAGIÁRIOS").limit(1);
+      if (!pr.error && pr.data && pr.data.length) pastaId = pr.data[0].id;
+      if (!pastaId) {
+        const pc = await sb.from("pastas").insert({ nome: "CONTRATOS ESTAGIÁRIOS", pasta_pai_id: null, criado_por: ctx.profile.id }).select("id").single();
+        if (!pc.error && pc.data) pastaId = pc.data.id;
+      }
+      if (!pastaId) throw new Error("não encontrei nem consegui criar a pasta CONTRATOS ESTAGIÁRIOS");
+      async function arquivar(pv) {
+        const blob = await (await fetch(pv.url)).blob();
+        const caminho = pastaId + "/" + crypto.randomUUID() + "_" + pv.nome;
+        const up = await sb.storage.from("arquivos").upload(caminho, blob, { contentType: "application/pdf" });
+        if (up.error) throw up.error;
+        const ins = await sb.from("arquivos").insert({ pasta_id: pastaId, nome: pv.nome, storage_path: caminho, tamanho: blob.size, tipo: "application/pdf", enviado_por: ctx.profile.id }).select("id").single();
+        if (ins.error) { await sb.storage.from("arquivos").remove([caminho]); throw ins.error; }
+        return ins.data.id;
+      }
+      let contratoId = null;
+      if (pvTermo) contratoId = await arquivar(pvTermo);
+      if (pvFolha) await arquivar(pvFolha);
+      if (contratoId) {
+        const upd = await sb.from("colaboradores").update({ contrato_arquivo_id: contratoId }).eq("id", colab.id);
+        if (upd.error) throw upd.error;
+        setColabs((colabs || []).map(function (c) { return c.id === colab.id ? { ...c, contrato_arquivo_id: contratoId } : c; }));
+        setF(function (ant) { return { ...ant, colaboradorId: "" }; });
+        registrarEvento("criar", "arquivos", "Contrato de estágio arquivado e vinculado: " + colab.nome);
+      }
+      setMsg("✓ Pronto: visualize na janela — já arquivado em CONTRATOS ESTAGIÁRIOS" + (contratoId ? " e vinculado ao colaborador (saiu da lista)." : "."));
+    } catch (e2) {
+      setMsg("✓ Documentos prontos na janela, mas o arquivamento falhou: " + (e2.message || e2) + (String(e2.message || "").indexOf("contrato_arquivo_id") !== -1 ? " — rode o 31_contrato_vinculo.sql." : ""));
+    }
   }
 
   const rot = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3, textTransform: "uppercase", letterSpacing: .4 };
@@ -6369,8 +6461,11 @@ function AbaDocsEstagio({ ctx }) {
             <label style={rot}>Colaborador</label>
             <select className="campo" style={cxi} value={f.colaboradorId} onChange={(e) => escolherColab(e.target.value)}>
               <option value="">Escolha…</option>
-              {(colabs || []).filter((c) => c.status !== "desligado").map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
+              {(colabs || []).filter((c) => c.status !== "desligado" && !c.contrato_arquivo_id).map((c) => <option key={c.id} value={c.id}>{c.nome}</option>)}
             </select>
+            {colabs && (colabs || []).filter((c) => c.status !== "desligado" && !c.contrato_arquivo_id).length === 0 && (
+              <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 4 }}>Todos os ativos já têm contrato vinculado. Para regerar alguém, exclua o contrato dele na pasta CONTRATOS ESTAGIÁRIOS (módulo Arquivos) — o vínculo cai sozinho.</div>
+            )}
           </div>
           <div>
             <label style={rot}>O que gerar</label>
@@ -6396,7 +6491,7 @@ function AbaDocsEstagio({ ctx }) {
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={rot}>Área do estágio</label>
-            <select className="campo" style={cxi} value={f.area} onChange={(e) => setF({ ...f, area: e.target.value })}>
+            <select className="campo" style={cxi} value={f.area} onChange={(e) => { const ar = e.target.value; setF({ ...f, area: ar, atribuicoes: (ATIV_PADRAO[ar] || []).join("\n") }); }}>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
             </select>
           </div>
@@ -6451,7 +6546,7 @@ function AbaDocsEstagio({ ctx }) {
             </select>
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
-            <label style={rot}>Atribuições — Descrição das Atividades (uma por linha; sempre manual)</label>
+            <label style={rot}>Atribuições — Descrição das Atividades (pré-preenchidas pela área; edite à vontade, uma por linha)</label>
             <textarea className="campo" style={{ ...cxi, minHeight: 90, resize: "vertical" }}
               placeholder={"Apoio ao acolhimento e triagem telefônica de pacientes\nOrganização de agendas e confirmações de atendimento"}
               value={f.atribuicoes} onChange={(e) => setF({ ...f, atribuicoes: e.target.value })} />
