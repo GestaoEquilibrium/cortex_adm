@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v55</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v56</div>
       </aside>
     </React.Fragment>
   );
@@ -5750,7 +5750,7 @@ function PreviaEspelho({ prev, aoFechar }) {
           <a href={prev.url} download={prev.nome} className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12.5, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}><i className="ti ti-download" aria-hidden="true"></i>Baixar PDF</a>
           <button className="btn-fantasma" style={{ width: "auto", padding: "7px 11px", fontSize: 12.5 }} onClick={aoFechar} title="Fechar"><i className="ti ti-x" aria-hidden="true"></i></button>
         </div>
-        <iframe title="Espelho de ponto" src={prev.url} style={{ border: "none", width: "100%", flex: 1, background: "#525659" }} />
+        <iframe title="Espelho de ponto" src={prev.url + "#toolbar=0&navpanes=0&view=FitH"} style={{ border: "none", width: "100%", flex: 1, background: "#F3F6FA" }} />
         <div style={{ padding: "6px 14px", fontSize: 11, color: "var(--muted)", borderTop: "1px solid var(--linha)" }}>Visualização — nada foi baixado ainda. No iPhone, se a prévia mostrar só a primeira página, use o Baixar PDF.</div>
       </div>
     </div>
