@@ -349,7 +349,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v56</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v57</div>
       </aside>
     </React.Fragment>
   );
@@ -5735,22 +5735,33 @@ function pdfEqCabecalhos(doc, titulo, subtitulo) {
 }
 
 function PreviaEspelho({ prev, aoFechar }) {
+  const [ix, setIx] = useState(0);
   useEffect(() => {
     const h = (e) => { if (e.key === "Escape") aoFechar(); };
     window.addEventListener("keydown", h);
     return () => window.removeEventListener("keydown", h);
   }, []);
+  useEffect(() => { setIx(0); }, [prev]);
   if (!prev) return null;
+  const docs = prev.docs && prev.docs.length ? prev.docs : [{ url: prev.url, nome: prev.nome, rotulo: null }];
+  const atual = docs[Math.min(ix, docs.length - 1)];
   return (
     <div style={{ position: "fixed", inset: 0, background: "rgba(10,16,24,.66)", zIndex: 110, display: "flex", alignItems: "center", justifyContent: "center", padding: 14 }} onClick={(e) => { if (e.target === e.currentTarget) aoFechar(); }}>
       <div className="anim-pop" style={{ background: "var(--branco)", borderRadius: 16, width: "min(1200px, 96vw)", height: "min(760px, 92vh)", display: "flex", flexDirection: "column", overflow: "hidden", boxShadow: "0 26px 70px rgba(0,0,0,.45)", border: "1px solid var(--linha)" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "10px 14px", borderBottom: "1px solid var(--linha)" }}>
           <i className="ti ti-report" style={{ color: "var(--marca-texto)", fontSize: 17 }} aria-hidden="true"></i>
-          <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>Espelho de ponto — {prev.titulo}</div>
-          <a href={prev.url} download={prev.nome} className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12.5, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}><i className="ti ti-download" aria-hidden="true"></i>Baixar PDF</a>
+          <div style={{ fontSize: 13.5, fontWeight: 700, flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{prev.titulo}{atual.rotulo ? " — " + atual.rotulo : ""}</div>
+          {docs.length > 1 && (
+            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+              <button className="btn-fantasma" style={{ width: "auto", padding: "5px 10px", fontSize: 13 }} disabled={ix === 0} onClick={() => setIx(ix - 1)}>&lsaquo;</button>
+              <span style={{ fontSize: 12, color: "var(--sec)", fontWeight: 700 }}>{ix + 1}/{docs.length}</span>
+              <button className="btn-fantasma" style={{ width: "auto", padding: "5px 10px", fontSize: 13 }} disabled={ix === docs.length - 1} onClick={() => setIx(ix + 1)}>&rsaquo;</button>
+            </div>
+          )}
+          <a href={atual.url} download={atual.nome} className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12.5, textDecoration: "none", display: "inline-flex", alignItems: "center", gap: 6 }}><i className="ti ti-download" aria-hidden="true"></i>Baixar PDF</a>
           <button className="btn-fantasma" style={{ width: "auto", padding: "7px 11px", fontSize: 12.5 }} onClick={aoFechar} title="Fechar"><i className="ti ti-x" aria-hidden="true"></i></button>
         </div>
-        <iframe title="Espelho de ponto" src={prev.url + "#toolbar=0&navpanes=0&view=FitH"} style={{ border: "none", width: "100%", flex: 1, background: "#F3F6FA" }} />
+        <iframe title="Documento" src={atual.url + "#toolbar=0&navpanes=0&view=FitH"} style={{ border: "none", width: "100%", flex: 1, background: "#F3F6FA" }} />
         <div style={{ padding: "6px 14px", fontSize: 11, color: "var(--muted)", borderTop: "1px solid var(--linha)" }}>Visualização — nada foi baixado ainda. No iPhone, se a prévia mostrar só a primeira página, use o Baixar PDF.</div>
       </div>
     </div>
@@ -6016,12 +6027,12 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   registrarEvento("gerar", "rh", "Espelho mensal de " + col.nome + " (" + mesRef + ")" + (modo === "ver" ? " — visualização" : ""));
   const nomeArq = "Espelho_" + eqSlug(col.nome) + "_" + mesRef + ".pdf";
   if (modo === "ver") {
-    return { url: doc.output("bloburl"), nome: nomeArq, titulo: col.nome + " — " + EQ_MESES[mm - 1] + "/" + ano };
+    return { url: doc.output("bloburl"), nome: nomeArq, titulo: "Espelho de ponto — " + col.nome + " — " + EQ_MESES[mm - 1] + "/" + ano };
   }
   doc.save(nomeArq);
 }
 
-function pdfEstagioTermo(d) {
+function pdfEstagioTermo(d, modo) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const E = EQ_PDF, LARG = E.W - E.ML - E.MR;
@@ -6158,10 +6169,12 @@ function pdfEstagioTermo(d) {
   linhasAssinatura([[eqVal(d.nome), "Estagiário(a)"], [eqVal(d.supervisor), "Supervisor(a) responsável"]]);
 
   pdfEqCabecalhos(doc, "TERMO DE COMPROMISSO DE ESTÁGIO", "Lei nº 11.788/2008");
-  doc.save("Termo_Estagio_" + eqSlug(d.nome) + ".pdf");
+  const nomeArqT = "Termo_Estagio_" + eqSlug(d.nome) + ".pdf";
+  if (modo === "ver") return { url: doc.output("bloburl"), nome: nomeArqT };
+  doc.save(nomeArqT);
 }
 
-function pdfEstagioFolha(d) {
+function pdfEstagioFolha(d, modo) {
   const { jsPDF } = window.jspdf;
   const doc = new jsPDF({ unit: "mm", format: "a4" });
   const E = EQ_PDF, LARG = E.W - E.ML - E.MR;
@@ -6232,7 +6245,9 @@ function pdfEstagioFolha(d) {
   });
 
   pdfEqCabecalhos(doc, "FOLHA DE ROSTO — PASTA DO COLABORADOR", "Documento interno");
-  doc.save("Folha_Rosto_" + eqSlug(d.nome) + ".pdf");
+  const nomeArqF = "Folha_Rosto_" + eqSlug(d.nome) + ".pdf";
+  if (modo === "ver") return { url: doc.output("bloburl"), nome: nomeArqF };
+  doc.save(nomeArqF);
 }
 
 function AbaDocsEstagio({ ctx }) {
@@ -6247,6 +6262,7 @@ function AbaDocsEstagio({ ctx }) {
   const VINCULOS = ["Funcionário CLT", "Estagiário", "Prestador PJ", "Prestador PF", "Outros"];
 
   const [colabs, setColabs] = useState(null);
+  const [docPrev, setDocPrev] = useState(null);
   const [insts, setInsts] = useState([]);
   const [msg, setMsg] = useState("");
   const [f, setF] = useState({
@@ -6327,9 +6343,11 @@ function AbaDocsEstagio({ ctx }) {
     if (f.tipo !== "folha" && !f.inicio) { setMsg("Informe a data de início do estágio."); return; }
     const d = montar();
     registrarEvento("gerar", "rh", "documentos_estagio: " + f.tipo + " · " + colab.nome, colab.id);
-    if (f.tipo === "termo" || f.tipo === "pacote") pdfEstagioTermo(d);
-    if (f.tipo === "folha" || f.tipo === "pacote") pdfEstagioFolha(d);
-    setMsg("✓ Documento(s) gerado(s) — confira os downloads.");
+    const docsPrev = [];
+    if (f.tipo === "termo" || f.tipo === "pacote") { const pv = pdfEstagioTermo(d, "ver"); docsPrev.push({ url: pv.url, nome: pv.nome, rotulo: "Termo + Plano de Atividades" }); }
+    if (f.tipo === "folha" || f.tipo === "pacote") { const pv = pdfEstagioFolha(d, "ver"); docsPrev.push({ url: pv.url, nome: pv.nome, rotulo: "Folha de rosto" }); }
+    setDocPrev({ docs: docsPrev, titulo: "Documentos de estágio — " + d.nome });
+    setMsg("✓ Documento(s) pronto(s) — visualize e baixe na janela.");
   }
 
   const rot = { display: "block", fontSize: 10.5, fontWeight: 700, color: "var(--muted)", marginBottom: 3, textTransform: "uppercase", letterSpacing: .4 };
@@ -6338,6 +6356,7 @@ function AbaDocsEstagio({ ctx }) {
 
   return (
     <div style={{ display: "grid", gap: 12, maxWidth: 860 }}>
+      {docPrev && <PreviaEspelho prev={docPrev} aoFechar={() => { (docPrev.docs || []).forEach(function (dd) { try { URL.revokeObjectURL(dd.url); } catch (e2) {} }); setDocPrev(null); }} />}
       <div className="card-fl" style={{ padding: 16 }}>
         <div style={{ fontWeight: 800, fontSize: 13.5, marginBottom: 3 }}>Gerar documentos de estágio</div>
         <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 12 }}>
