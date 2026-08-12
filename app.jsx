@@ -29,6 +29,7 @@ const MODULOS = [
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
   { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
+  { id: "callcenter",    rotulo: "Call Center",    icone: "ti-headset",          cor: "#0E7490",              fundo: "#E0F7FA" },
   { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
   { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
   { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
@@ -349,7 +350,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v57</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v58</div>
       </aside>
     </React.Fragment>
   );
@@ -6520,6 +6521,158 @@ function PaginaStub({ m }) {
 // ------------------------------------------------------------
 // Shell
 // ------------------------------------------------------------
+function PaginaCallCenter({ ctx }) {
+  const podeEditar = nivelModulo(ctx, "callcenter") === "editar";
+  const [aba, setAba] = useState("informativos");
+  return (
+    <div>
+      <div className="abas" style={{ marginBottom: 14 }}>
+        <div className={"aba" + (aba === "informativos" ? " on" : "")} onClick={() => setAba("informativos")}>Informativos</div>
+        <div className="aba" style={{ opacity: .45, cursor: "default" }} title="Novas abas em construção">Em breve…</div>
+      </div>
+      {aba === "informativos" && <AbaInformativosCC ctx={ctx} podeEditar={podeEditar} />}
+    </div>
+  );
+}
+
+function AbaInformativosCC({ ctx, podeEditar }) {
+  const AREAS_CC = ["Psicologia — ABA", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Psiquiatria", "Administrativo", "Convênios", "Agenda", "Valores", "Geral"];
+  const [lista, setLista] = useState(null);
+  const [profs, setProfs] = useState([]);
+  const [fArea, setFArea] = useState("");
+  const [fProf, setFProf] = useState("");
+  const [busca, setBusca] = useState("");
+  const [modal, setModal] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+
+  async function carregar() {
+    const { data, error } = await sb.from("cc_informativos").select("id, titulo, conteudo, area, profissional_id, criado_por, criado_em, colaboradores(nome)").order("criado_em", { ascending: false }).limit(300);
+    if (error) { setMsg("Erro ao carregar: " + error.message + (error.message.indexOf("cc_informativos") !== -1 ? " — rode o 30_call_center.sql." : "")); setLista([]); return; }
+    setMsg(""); setLista(data || []);
+  }
+  useEffect(() => {
+    carregar();
+    (async () => { const r = await sb.from("colaboradores").select("id, nome").neq("status", "desligado").order("nome"); if (!r.error) setProfs(r.data || []); })();
+  }, []);
+
+  const dtCC = (iso) => {
+    const dt = new Date(iso);
+    const dia = dt.toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const hora = dt.toLocaleTimeString("pt-BR", { timeZone: "America/Sao_Paulo", hour: "2-digit", minute: "2-digit" });
+    const hoje = new Date().toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    const ontem = new Date(Date.now() - 86400000).toLocaleDateString("pt-BR", { timeZone: "America/Sao_Paulo" });
+    return (dia === hoje ? "hoje" : dia === ontem ? "ontem" : dia) + " \u00b7 " + hora;
+  };
+  const ehNovo = (iso) => Date.now() - new Date(iso).getTime() < 48 * 3600 * 1000;
+
+  const areasExistentes = Array.from(new Set(AREAS_CC.concat((lista || []).map((i) => i.area).filter(Boolean))));
+  const filtrados = (lista || []).filter((i) => {
+    if (fArea && i.area !== fArea) return false;
+    if (fProf && i.profissional_id !== fProf) return false;
+    if (busca) {
+      const t = (i.titulo + " " + i.conteudo + " " + ((i.colaboradores && i.colaboradores.nome) || "")).toLowerCase();
+      if (t.indexOf(busca.toLowerCase()) === -1) return false;
+    }
+    return true;
+  });
+
+  async function salvar() {
+    if (!modal.titulo.trim() || !modal.conteudo.trim()) { setMsg("Erro: título e conteúdo são obrigatórios."); return; }
+    setSalvando(true);
+    const payload = { titulo: modal.titulo.trim(), conteudo: modal.conteudo.trim(), area: (modal.area || "").trim() || null, profissional_id: modal.profissional_id || null };
+    let error;
+    if (modal.id) {
+      payload.atualizado_em = new Date().toISOString();
+      ({ error } = await sb.from("cc_informativos").update(payload).eq("id", modal.id));
+      if (!error) registrarEvento("editar", "callcenter", "Editou o informativo \"" + payload.titulo + "\"");
+    } else {
+      payload.criado_por = (ctx && ctx.profile && (ctx.profile.nome || ctx.profile.email)) || "equipe";
+      ({ error } = await sb.from("cc_informativos").insert(payload));
+      if (!error) registrarEvento("criar", "callcenter", "Publicou o informativo \"" + payload.titulo + "\"");
+    }
+    setSalvando(false);
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("cc_informativos") !== -1 ? " — rode o 30_call_center.sql." : "")); return; }
+    setModal(null); setMsg("\u2713 Informativo " + (payload.criado_por ? "publicado" : "atualizado") + ".");
+    carregar();
+  }
+
+  async function excluir(it) {
+    if (!window.confirm("Excluir o informativo \"" + it.titulo + "\"?")) return;
+    const { error } = await sb.from("cc_informativos").delete().eq("id", it.id);
+    if (error) { setMsg("Erro: " + error.message); return; }
+    registrarEvento("excluir", "callcenter", "Excluiu o informativo \"" + it.titulo + "\"");
+    setMsg("\u2713 Informativo exclu\u00eddo.");
+    carregar();
+  }
+
+  const chip = (fundo, cor) => ({ display: "inline-flex", alignItems: "center", gap: 5, fontSize: 11.5, fontWeight: 700, background: fundo, color: cor, borderRadius: 999, padding: "4px 10px" });
+
+  return (
+    <div style={{ maxWidth: 880 }}>
+      <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center", marginBottom: 12 }}>
+        <input className="campo" style={{ flex: 1, minWidth: 180, padding: "8px 10px", fontSize: 12.5 }} placeholder="Buscar por texto, título ou doutor(a)…" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        <select className="campo" style={{ width: 190, padding: "8px 10px", fontSize: 12.5 }} value={fArea} onChange={(e) => setFArea(e.target.value)}>
+          <option value="">Todas as áreas</option>
+          {areasExistentes.map((a) => <option key={a} value={a}>{a}</option>)}
+        </select>
+        <select className="campo" style={{ width: 200, padding: "8px 10px", fontSize: 12.5 }} value={fProf} onChange={(e) => setFProf(e.target.value)}>
+          <option value="">Todos os profissionais</option>
+          {profs.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+        </select>
+        {podeEditar && <button className="btn-primaria" style={{ padding: "8px 14px", fontSize: 12.5 }} onClick={() => { setMsg(""); setModal({ titulo: "", conteudo: "", area: "", profissional_id: "" }); }}>+ Novo informativo</button>}
+      </div>
+      {msg && <div className="anim-pop" style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 10, color: msg.indexOf("Erro") === 0 ? "var(--vermelho)" : "var(--verde)" }}>{msg}</div>}
+      <div style={{ fontSize: 11.5, color: "var(--muted)", marginBottom: 8 }}>{lista === null ? "Carregando\u2026" : filtrados.length + " informativo(s)" + (fArea || fProf || busca ? " no filtro" : "")}</div>
+
+      {lista !== null && filtrados.length === 0 && (
+        <div className="card-fl" style={{ padding: 22, textAlign: "center", color: "var(--muted)", fontSize: 13 }}>
+          Nenhum informativo por aqui{fArea || fProf || busca ? " com esses filtros" : " ainda"}.{podeEditar ? " Publique o primeiro no bot\u00e3o acima." : ""}
+        </div>
+      )}
+
+      {filtrados.map((i) => (
+        <div key={i.id} className="card-fl" style={{ padding: "13px 15px", marginBottom: 10, borderLeft: "4px solid #0E7490" }}>
+          <div style={{ display: "flex", gap: 6, flexWrap: "wrap", alignItems: "center", marginBottom: 7 }}>
+            {ehNovo(i.criado_em) && <span style={chip("#FFF7E6", "#B45309")}>NOVO</span>}
+            <span style={chip("var(--tint)", "var(--marca-texto)")}><i className="ti ti-calendar-event" aria-hidden="true"></i>{dtCC(i.criado_em)}</span>
+            {i.colaboradores && i.colaboradores.nome && <span style={chip("#F3E8FF", "#7C3AED")}><i className="ti ti-stethoscope" aria-hidden="true"></i>{i.colaboradores.nome}</span>}
+            {i.area && <span style={chip("var(--campo)", "var(--sec)")}>{i.area}</span>}
+            <span style={{ flex: 1 }}></span>
+            {podeEditar && <i className="ti ti-pencil" style={{ cursor: "pointer", color: "var(--sec)", fontSize: 15 }} title="Editar" onClick={() => { setMsg(""); setModal({ id: i.id, titulo: i.titulo, conteudo: i.conteudo, area: i.area || "", profissional_id: i.profissional_id || "" }); }}></i>}
+            {podeEditar && <i className="ti ti-trash" style={{ cursor: "pointer", color: "var(--vermelho)", fontSize: 15 }} title="Excluir" onClick={() => excluir(i)}></i>}
+          </div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 4 }}>{i.titulo}</div>
+          <div style={{ fontSize: 13, color: "var(--sec)", whiteSpace: "pre-wrap", lineHeight: 1.55 }}>{i.conteudo}</div>
+          <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 7 }}>publicado por {i.criado_por || "equipe"}</div>
+        </div>
+      ))}
+
+      {modal && (
+        <div style={{ position: "fixed", inset: 0, background: "rgba(15,23,32,.55)", zIndex: 80, display: "flex", alignItems: "center", justifyContent: "center", padding: 18 }} onClick={(e) => { if (e.target === e.currentTarget) setModal(null); }}>
+          <div className="anim-pop" style={{ background: "var(--branco)", borderRadius: 16, padding: 18, maxWidth: 520, width: "100%", boxShadow: "0 20px 50px rgba(0,0,0,.3)", border: "1px solid var(--linha)" }}>
+            <div style={{ fontSize: 14.5, fontWeight: 700, marginBottom: 10 }}>{modal.id ? "Editar informativo" : "Novo informativo"}</div>
+            <input className="campo" style={{ width: "100%", padding: "8px 10px", fontSize: 13, marginBottom: 8 }} placeholder="Título — ex.: Dra. Fulana sem convênio X em setembro" value={modal.titulo} onChange={(e) => setModal({ ...modal, titulo: e.target.value })} />
+            <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
+              <input className="campo" list="cc-areas" style={{ flex: 1, padding: "8px 10px", fontSize: 12.5 }} placeholder="Área (opcional)" value={modal.area} onChange={(e) => setModal({ ...modal, area: e.target.value })} />
+              <datalist id="cc-areas">{AREAS_CC.map((a) => <option key={a} value={a} />)}</datalist>
+              <select className="campo" style={{ flex: 1, padding: "8px 10px", fontSize: 12.5 }} value={modal.profissional_id} onChange={(e) => setModal({ ...modal, profissional_id: e.target.value })}>
+                <option value="">Sem profissional específico</option>
+                {profs.map((p) => <option key={p.id} value={p.id}>{p.nome}</option>)}
+              </select>
+            </div>
+            <textarea className="campo" rows={5} style={{ width: "100%", padding: "8px 10px", fontSize: 13, resize: "vertical", marginBottom: 12 }} placeholder="O que o call center precisa saber…" value={modal.conteudo} onChange={(e) => setModal({ ...modal, conteudo: e.target.value })}></textarea>
+            <div style={{ display: "flex", gap: 8, justifyContent: "flex-end" }}>
+              <button className="btn-fantasma" style={{ width: "auto", padding: "8px 14px", fontSize: 12.5 }} onClick={() => setModal(null)}>Cancelar</button>
+              <button className="btn-primaria" style={{ padding: "8px 15px", fontSize: 12.5 }} disabled={salvando} onClick={salvar}>{salvando ? "Salvando\u2026" : (modal.id ? "Salvar altera\u00e7\u00f5es" : "Publicar")}</button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Shell({ ctx, aoSair }) {
   const [meuCard, setMeuCard] = useState(null);
   const [alertasExc, setAlertasExc] = useState([]);
@@ -6582,6 +6735,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
+  } else if (pagina === "callcenter") {
+    conteudo = <PaginaCallCenter ctx={ctx} />;
   } else if (pagina === "demandas") {
     conteudo = <PaginaDemandas ctx={ctx} />;
   } else if (pagina === "infinity") {
