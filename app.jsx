@@ -350,7 +350,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v59</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v60</div>
       </aside>
     </React.Fragment>
   );
@@ -6097,28 +6097,35 @@ function pdfEstagioTermo(d, modo) {
     y += 2;
   }
   clausula("CLÁUSULA PRIMEIRA — OBJETO DO ESTÁGIO", [
-    "1.1. O presente Termo estabelece as condições para a realização do estágio na área de " + eqVal(d.area) + ", nas dependências da CONCEDENTE.",
-    "1.2. O estágio visa o exercício prático de competências próprias da atividade profissional e a contextualização curricular, objetivando o desenvolvimento do(a) educando(a) para a vida cidadã e para o trabalho.",
+    "1.1. O presente Termo estabelece as condições básicas para a consecução do estágio em " + eqVal(d.area) + ", nas dependências da CONCEDENTE.",
+    "1.2. O estágio visa o exercício prático de competências próprias da atividade profissional e a contextualização curricular, objetivando o desenvolvimento do(a) educando(a) para a vida cidadã e para o trabalho, proporcionadas pela aprendizagem social, profissional e cultural no ambiente de trabalho.",
     "1.3. O(A) ESTAGIÁRIO(A) declara estar regularmente matriculado(a) na INSTITUIÇÃO DE ENSINO INTERVENIENTE, condição indispensável para a realização do estágio.",
-    "1.4. As atividades a serem desenvolvidas constam do Plano de Atividades anexo, parte integrante deste Termo.",
+    "1.4. As atividades a serem desenvolvidas constam do ANEXO I — Plano de Atividades de Estágio, parte integrante deste Termo, ajustado conforme o curso do(a) estagiário(a) e a função exercida.",
   ]);
-  clausula("CLÁUSULA SEGUNDA — DO PERÍODO E DA JORNADA", [
+  clausula("CLÁUSULA SEGUNDA — DO PERÍODO E DO ESTÁGIO", [
     "2.1. O estágio terá duração inicial de " + eqVal(d.duracao) + ", com início em " + eqVal(d.inicioBr) + ".",
     "2.1.1. Rescisão: este Termo poderá ser rescindido unilateralmente por qualquer das partes, a qualquer tempo, mediante comunicação escrita, sem multa ou indenização, observada a comunicação à Instituição de Ensino.",
-    "2.1.2. Prorrogação: o estágio poderá ser prorrogado uma vez, por igual período, mediante Termo Aditivo, respeitado o limite legal de 2 (dois) anos.",
-    "2.2. A jornada será cumprida de segunda a sexta-feira, em " + eqVal(d.jornadaClausula) + " diários, com distribuição definida conforme as necessidades da CONCEDENTE.",
+    "2.1.2. Prorrogação: o estágio poderá ser prorrogado uma vez, por igual período, caso a empresa concedente tenha necessidade, respeitado o limite legal de 2 (dois) anos. Essa prorrogação será formalizada por meio de um Termo de Encerramento de Compromisso de Estágio.",
+    "2.2. O estágio será cumprido nas dependências da CONCEDENTE, de segunda a sexta-feira, em " + eqVal(d.jornadaClausula) + " diários, com a distribuição dessas horas definida conforme as necessidades da CONCEDENTE.",
     "2.3. O horário do estágio é compatível com o horário escolar, sendo concedidos períodos especiais quando conflitante com atividades obrigatórias do curso.",
     "2.4. Serão elaborados relatórios de acompanhamento do estágio em conformidade com as exigências da INSTITUIÇÃO DE ENSINO INTERVENIENTE.",
   ]);
   clausula("CLÁUSULA TERCEIRA — DA BOLSA-AUXÍLIO E DO SEGURO", [
-    "3.1. Será concedida bolsa-auxílio no valor de " + eqVal(d.bolsaClausula) + " mensais, paga mediante depósito em conta bancária até o 5º dia útil do mês subsequente, já incluído o auxílio-transporte.",
-    "3.2. A CONCEDENTE manterá seguro contra acidentes pessoais em favor do(a) ESTAGIÁRIO(A), mediante inclusão na Apólice Coletiva de Acidentes Pessoais da CONCEDENTE.",
+    "3.1. Será concedida bolsa-auxílio no valor de " + eqVal(d.bolsaClausula) + " mensais, paga mediante depósito em conta bancária até o 5º dia útil do mês subsequente" + (d.vtClausula || ", já incluído o auxílio-transporte") + ".",
+    "3.2. Haverá a contratação de seguro pela parte Concedente, através da inclusão do(a) estagiário(a) na Apólice Coletiva de Acidentes Pessoais da CONCEDENTE.",
     "3.3. A bolsa-auxílio possui natureza contraprestativa, sendo devida exclusivamente nos períodos de efetiva realização das atividades de estágio, nos termos deste instrumento e da legislação aplicável.",
   ]);
   clausula("CLÁUSULA QUARTA — CONDIÇÕES GERAIS", [
     "4.1. Aplicam-se a este Termo as disposições da Lei nº 11.788/2008. O estágio não cria vínculo empregatício de qualquer natureza, observados os requisitos legais.",
-    "4.2. O(A) ESTAGIÁRIO(A) compromete-se a observar as normas internas da CONCEDENTE, em especial o sigilo sobre informações clínicas e administrativas a que tiver acesso.",
-    "4.3. Fica eleito o foro da comarca de Uberlândia/MG para dirimir quaisquer questões oriundas deste Termo.",
+    "4.2. O(A) ESTAGIÁRIO(A) compromete-se a observar as normas internas da CONCEDENTE.",
+    "4.3. É assegurado ao(à) estagiário(a), sempre que o estágio tenha duração igual ou superior a 1 (um) ano, período de recesso de 30 (trinta) dias — ou o proporcional ao período estagiado — a ser gozado preferencialmente durante suas férias escolares.",
+    "4.4. Caberá ao(à) estagiário(a) a obrigação de informar à parte Concedente quaisquer alterações ocorridas no transcurso da sua atividade escolar, tais como interrupção de frequência às aulas, mudança de curso ou transferência de Instituição de Ensino.",
+    "4.5. É de responsabilidade do(a) Estagiário(a) preservar o sigilo e a confidencialidade das informações a que tiver acesso no decorrer do seu estágio junto à Parte Concedente.",
+    "4.6. Serão motivos de rescisão automática do presente Instrumento Jurídico:",
+    "4.6.1. O abandono ou a interrupção do curso pelo(a) Estagiário(a), o trancamento de matrícula ou a conclusão do curso;",
+    "4.6.2. O descumprimento de quaisquer das cláusulas previstas neste Termo.",
+    "4.7. O presente instrumento poderá ser renovado na forma da Lei e denunciado, a qualquer tempo, mediante comunicação escrita, pela parte Concedente ou pelo(a) Estagiário(a).",
+    "4.8. Fica eleito o foro da comarca de Uberlândia/MG para dirimir quaisquer questões oriundas deste Termo.",
   ]);
 
   ensure(52);
@@ -6146,9 +6153,13 @@ function pdfEstagioTermo(d, modo) {
                     [eqVal(d.nome), "Estagiário(a)"],
                     [d.instSigla || "INSTITUIÇÃO DE ENSINO", "Interveniente"]]);
 
-  ensure(70);
+  doc.addPage(); y = 30;
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(12.5);
+  doc.text("ANEXO I — PLANO DE ATIVIDADES DE ESTÁGIO", E.W / 2, y, { align: "center" }); y += 4.6;
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.2);
+  doc.text("Parte integrante do Termo de Compromisso de Estágio", E.W / 2, y, { align: "center" }); y += 7;
   doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
-  doc.text("PLANO DE ATIVIDADES DE ESTÁGIO", E.ML, y); y += 4.8;
+  y += 0;
   doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.6);
   doc.text("Estagiário(a): " + eqVal(d.nome) + "   ·   Supervisor responsável: " + eqVal(d.supervisor), E.ML, y, { maxWidth: LARG }); y += 7;
 
@@ -6166,7 +6177,16 @@ function pdfEstagioTermo(d, modo) {
   doc.text("DESCRIÇÃO DAS ATIVIDADES", E.ML + 3, y + 4.5);
   doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8);
   doc.text(atvLinhas, E.ML + 4, y + 12, { lineHeightFactor: 1.45 });
-  y += hBox + 22;
+  y += hBox + 8;
+  ensure(46);
+  doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(10);
+  doc.text("DECLARAÇÃO DE RESPONSABILIDADE", E.ML, y); y += 4.6;
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.8);
+  const declTxt = "O(A) supervisor(a) " + eqVal(d.supervisor) + " declara assumir a responsabilidade técnica pela supervisão das atividades descritas neste Plano, desenvolvidas por " + eqVal(d.nome) + " nas dependências da CONCEDENTE, zelando pela compatibilidade entre as atividades, o curso de formação do(a) estagiário(a) e a função exercida. O(A) estagiário(a) declara ciência das atividades previstas e compromisso com sua execução sob supervisão.";
+  const declLin = doc.splitTextToSize(declTxt, LARG);
+  ensure(declLin.length * 4.4 + 28);
+  doc.text(declTxt, E.ML, y, { maxWidth: LARG, align: "justify", lineHeightFactor: 1.42 });
+  y += declLin.length * 4.4 + 18;
   linhasAssinatura([[eqVal(d.nome), "Estagiário(a)"], [eqVal(d.supervisor), "Supervisor(a) responsável"]]);
 
   pdfEqCabecalhos(doc, "TERMO DE COMPROMISSO DE ESTÁGIO", "Lei nº 11.788/2008");
@@ -6327,7 +6347,7 @@ function AbaDocsEstagio({ ctx }) {
   const [f, setF] = useState({
     colaboradorId: "", tipo: "pacote", instituicaoId: "", area: AREAS[0], duracao: 6,
     inicio: "", jornada: "430", jornadaCustom: "", bolsa: "1.200,00", bolsaExtenso: "mil e duzentos reais",
-    supervisorId: "", horario: "07:00 às 11:30", vinculo: "Estagiário", atribuicoes: (ATIV_PADRAO["Psicologia — Análise do Comportamento Aplicada (ABA)"] || []).join("\n"),
+    supervisorId: "", horario: "07:00 às 11:30", vinculo: "Estagiário", areaCustom: "", vt: "incluso", atribuicoes: (ATIV_PADRAO["Psicologia — Análise do Comportamento Aplicada (ABA)"] || []).join("\n"),
   });
 
   useEffect(() => {
@@ -6382,11 +6402,12 @@ function AbaDocsEstagio({ ctx }) {
       funcao: colab.cargo,
       instNome: inst ? (inst.sigla + " — " + inst.nome) : "", instSigla: inst ? inst.sigla : "",
       instCnpj: inst ? inst.cnpj : "", instEnd: inst ? inst.endereco : "",
-      area: f.area, duracao: durTxt,
+      area: f.area === "__outra" ? f.areaCustom : f.area, duracao: durTxt,
       inicioBr: dataBrOu(f.inicio), periodoBr: f.inicio ? (dataBr(f.inicio) + " a " + dataBr(fim)) : "",
       jornadaClausula, jornadaQuadro,
-      bolsaQuadro: "R$ " + f.bolsa + "/mês (auxílio-transporte incluso)",
+      bolsaQuadro: "R$ " + f.bolsa + "/mês " + (f.vt === "adicional" ? "(+ auxílio-transporte à parte)" : "(auxílio-transporte incluso)"),
       bolsaClausula: "R$ " + f.bolsa + " (" + f.bolsaExtenso + ")",
+      vtClausula: f.vt === "adicional" ? ", acrescido do auxílio-transporte, pago separadamente" : ", já incluído o auxílio-transporte",
       bolsaPix: "R$ " + f.bolsa + (colab.dados_bancarios ? " · " + colab.dados_bancarios : ""),
       supervisor: sup ? (sup.nome + (sup.registro_profissional ? " — " + sup.registro_profissional : "")) : "",
       horario: f.horario, vinculo: f.vinculo,
@@ -6491,10 +6512,17 @@ function AbaDocsEstagio({ ctx }) {
           </div>
           <div style={{ gridColumn: "1 / -1" }}>
             <label style={rot}>Área do estágio</label>
-            <select className="campo" style={cxi} value={f.area} onChange={(e) => { const ar = e.target.value; setF({ ...f, area: ar, atribuicoes: (ATIV_PADRAO[ar] || []).join("\n") }); }}>
+            <select className="campo" style={cxi} value={f.area} onChange={(e) => { const ar = e.target.value; setF({ ...f, area: ar, atribuicoes: (ATIV_PADRAO[ar] || []).join("\n"), vt: (ar === "Call Center" || ar === "Recepção") ? "adicional" : "incluso" }); }}>
               {AREAS.map((a) => <option key={a} value={a}>{a}</option>)}
+              <option value="__outra">Outra — digitar…</option>
             </select>
           </div>
+          {f.area === "__outra" && (
+            <div style={{ gridColumn: "1 / -1" }}>
+              <label style={rot}>Objeto do estágio (texto que entra na cláusula 1.1)</label>
+              <input className="campo" style={cxi} placeholder="ex.: Marketing e Comunicação" value={f.areaCustom} onChange={(e) => setF({ ...f, areaCustom: e.target.value })} />
+            </div>
+          )}
           <div>
             <label style={rot}>Duração</label>
             <select className="campo" style={cxi} value={f.duracao} onChange={(e) => setF({ ...f, duracao: e.target.value })}>
@@ -6527,6 +6555,13 @@ function AbaDocsEstagio({ ctx }) {
           <div>
             <label style={rot}>Valor por extenso</label>
             <input className="campo" style={cxi} value={f.bolsaExtenso} onChange={(e) => setF({ ...f, bolsaExtenso: e.target.value })} />
+          </div>
+          <div>
+            <label style={rot}>Auxílio-transporte</label>
+            <select className="campo" style={cxi} value={f.vt} onChange={(e) => setF({ ...f, vt: e.target.value })}>
+              <option value="incluso">Incluso na bolsa</option>
+              <option value="adicional">Adicional — pago à parte</option>
+            </select>
           </div>
           <div>
             <label style={rot}>Horário (folha de rosto)</label>
