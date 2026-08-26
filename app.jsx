@@ -350,7 +350,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v60</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v61</div>
       </aside>
     </React.Fragment>
   );
@@ -2339,6 +2339,7 @@ function AbaFaltas({ ctx }) {
   const [colabSel, setColabSel] = useState("");
   const [faltas, setFaltas] = useState(null);
   const [atestados, setAtestados] = useState(null);
+  const [ferias, setFerias] = useState(null);
   const [msg, setMsg] = useState("");
   const [novo, setNovo] = useState(null);
   const [edit, setEdit] = useState(null);
@@ -2368,7 +2369,16 @@ function AbaFaltas({ ctx }) {
     if (error) { setMsg("Erro: " + error.message); return; }
     setMsg(""); setAtestados(data || []);
   }
-  useEffect(() => { setNovo(null); setEdit(null); if (visao === "faltas") carregarFaltas(); else carregarAtestados(); }, [visao, mes, colabSel]);
+  async function carregarFerias() {
+    let q = sb.from("ferias").select("id, colaborador_id, inicio, fim, observacao, colaboradores(nome)")
+      .lte("inicio", fimMes(mes)).gte("fim", mes + "-01")
+      .order("inicio", { ascending: false }).limit(20000);
+    if (colabSel) q = q.eq("colaborador_id", colabSel);
+    const { data, error } = await q;
+    if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("ferias") !== -1 ? " — rode o 32_ferias.sql." : "")); return; }
+    setMsg(""); setFerias(data || []);
+  }
+  useEffect(() => { setNovo(null); setEdit(null); if (visao === "faltas") carregarFaltas(); else if (visao === "atestados") carregarAtestados(); else carregarFerias(); }, [visao, mes, colabSel]);
 
   const rotTipo = { falta: "Falta", atraso: "Atraso", saida_antecipada: "Saída antecipada" };
   const corTipo = {
@@ -2389,7 +2399,7 @@ function AbaFaltas({ ctx }) {
       });
       if (error) { setMsg("Erro: " + error.message); return; }
       setMsg(""); setNovo(null); carregarFaltas();
-    } else {
+    } else if (visao === "atestados") {
       if (!novo.colaborador_id || !novo.inicio || !novo.fim) { setMsg("Escolha colaborador, início e fim."); return; }
       if (novo.fim < novo.inicio) { setMsg("O fim não pode vir antes do início."); return; }
       const { error } = await sb.from("atestados").insert({
@@ -2400,6 +2410,16 @@ function AbaFaltas({ ctx }) {
       });
       if (error) { setMsg("Erro: " + error.message); return; }
       setMsg(""); setNovo(null); carregarAtestados();
+    } else {
+      if (!novo.colaborador_id || !novo.inicio || !novo.fim) { setMsg("Escolha colaborador, início e fim."); return; }
+      if (novo.fim < novo.inicio) { setMsg("O fim não pode vir antes do início."); return; }
+      const { error } = await sb.from("ferias").insert({
+        colaborador_id: novo.colaborador_id, inicio: novo.inicio, fim: novo.fim,
+        observacao: (novo.observacao || "").trim() || null,
+        registrado_por: ctx.profile.id,
+      });
+      if (error) { setMsg("Erro: " + error.message + (error.message.indexOf("ferias") !== -1 ? " — rode o 32_ferias.sql." : "")); return; }
+      setMsg(""); setNovo(null); carregarFerias();
     }
   }
 
@@ -2412,7 +2432,7 @@ function AbaFaltas({ ctx }) {
       }).eq("id", edit.id);
       if (error) { setMsg("Erro: " + error.message); return; }
       setMsg(""); setEdit(null); carregarFaltas();
-    } else {
+    } else if (visao === "atestados") {
       if (!edit.inicio || !edit.fim || edit.fim < edit.inicio) { setMsg("Confira as datas do atestado."); return; }
       const { error } = await sb.from("atestados").update({
         inicio: edit.inicio, fim: edit.fim, dias: diasEntre(edit.inicio, edit.fim),
@@ -2420,14 +2440,22 @@ function AbaFaltas({ ctx }) {
       }).eq("id", edit.id);
       if (error) { setMsg("Erro: " + error.message); return; }
       setMsg(""); setEdit(null); carregarAtestados();
+    } else {
+      if (!edit.inicio || !edit.fim || edit.fim < edit.inicio) { setMsg("Confira as datas das férias."); return; }
+      const { error } = await sb.from("ferias").update({
+        inicio: edit.inicio, fim: edit.fim,
+        observacao: (edit.observacao || "").trim() || null,
+      }).eq("id", edit.id);
+      if (error) { setMsg("Erro: " + error.message); return; }
+      setMsg(""); setEdit(null); carregarFerias();
     }
   }
 
   async function excluir(item) {
     if (!window.confirm("Excluir este registro? A exclusão fica na auditoria.")) return;
-    const { error } = await sb.from(visao === "faltas" ? "faltas" : "atestados").delete().eq("id", item.id);
+    const { error } = await sb.from(visao === "faltas" ? "faltas" : visao === "atestados" ? "atestados" : "ferias").delete().eq("id", item.id);
     if (error) { setMsg("Erro: " + error.message); return; }
-    if (visao === "faltas") carregarFaltas(); else carregarAtestados();
+    if (visao === "faltas") carregarFaltas(); else if (visao === "atestados") carregarAtestados(); else carregarFerias();
   }
 
   async function alternarJustificada(f) {
@@ -2446,7 +2474,7 @@ function AbaFaltas({ ctx }) {
   return (
     <div>
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {[["faltas", "Faltas"], ["atestados", "Atestados"]].map(([v, r]) => (
+        {[["faltas", "Faltas"], ["atestados", "Atestados"], ["ferias", "Férias"]].map(([v, r]) => (
           <span key={v} className="chip" onClick={() => setVisao(v)}
             style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
         ))}
@@ -2459,8 +2487,10 @@ function AbaFaltas({ ctx }) {
           <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }}
             onClick={() => setNovo(novo ? null : (visao === "faltas"
               ? { colaborador_id: colabSel || "", data: hojeLocalISO(), tipo: "falta", justificada: false, motivo: "" }
-              : { colaborador_id: colabSel || "", inicio: hojeLocalISO(), fim: hojeLocalISO(), cid: "", observacao: "" }))}>
-            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>{visao === "faltas" ? "Nova falta" : "Novo atestado"}
+              : visao === "atestados"
+              ? { colaborador_id: colabSel || "", inicio: hojeLocalISO(), fim: hojeLocalISO(), cid: "", observacao: "" }
+              : { colaborador_id: colabSel || "", inicio: hojeLocalISO(), fim: hojeLocalISO(), observacao: "" }))}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>{visao === "faltas" ? "Nova falta" : visao === "atestados" ? "Novo atestado" : "Novas férias"}
           </button>
         )}
       </div>
@@ -2490,6 +2520,21 @@ function AbaFaltas({ ctx }) {
           <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
           <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.fim} onChange={(e) => setNovo({ ...novo, fim: e.target.value })} />
           <input className="campo" style={{ width: 110, padding: "7px 9px", fontSize: 12.5 }} placeholder="CID (opcional)" value={novo.cid} onChange={(e) => setNovo({ ...novo, cid: e.target.value })} />
+          <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação (opcional)" value={novo.observacao} onChange={(e) => setNovo({ ...novo, observacao: e.target.value })} />
+          <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Registrar</button>
+          <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
+        </div>
+      )}
+
+      {novo && podeEditar && visao === "ferias" && (
+        <div className="card-fl anim-pop" style={{ padding: 10, marginBottom: 12, display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center" }}>
+          {selColab(novo.colaborador_id, (e) => setNovo({ ...novo, colaborador_id: e.target.value }), true)}
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.inicio} onChange={(e) => setNovo({ ...novo, inicio: e.target.value })} />
+          <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
+          <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={novo.fim} onChange={(e) => setNovo({ ...novo, fim: e.target.value })} />
+          {novo.inicio && novo.fim && novo.fim >= novo.inicio && (
+            <span className="chip" style={{ background: "var(--verde-bg)", color: "var(--verde)" }}>{diasEntre(novo.inicio, novo.fim)} dia(s)</span>
+          )}
           <input className="campo" style={{ flex: 2, minWidth: 200, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação (opcional)" value={novo.observacao} onChange={(e) => setNovo({ ...novo, observacao: e.target.value })} />
           <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarNovo}>Registrar</button>
           <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setNovo(null)}>Cancelar</button>
@@ -2575,6 +2620,45 @@ function AbaFaltas({ ctx }) {
                   <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
                   <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.fim} onChange={(e) => setEdit({ ...edit, fim: e.target.value })} />
                   <input className="campo" style={{ width: 110, padding: "7px 9px", fontSize: 12.5 }} placeholder="CID" value={edit.cid} onChange={(e) => setEdit({ ...edit, cid: e.target.value })} />
+                  <input className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação" value={edit.observacao} onChange={(e) => setEdit({ ...edit, observacao: e.target.value })} />
+                  <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
+                  <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+
+      {visao === "ferias" && (
+        <div className="card-fl" style={{ overflow: "hidden" }}>
+          {!ferias && <div style={{ padding: 16, fontSize: 13, color: "var(--muted)" }}>Carregando…</div>}
+          {ferias && ferias.length === 0 && (
+            <div style={{ padding: "26px 16px", textAlign: "center", fontSize: 13, color: "var(--muted)" }}>Nenhum período de férias tocando este mês.</div>
+          )}
+          {ferias && ferias.map((a) => (
+            <div key={a.id} style={{ padding: "10px 14px", borderBottom: "1px solid var(--linha-suave)" }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 9, flexWrap: "wrap" }}>
+                <span style={{ fontSize: 12.5, fontWeight: 600, flex: "none" }}>{dataBr(a.inicio)} a {dataBr(a.fim)}</span>
+                <span style={{ fontSize: 13, fontWeight: 600, flex: "none" }}>{a.colaboradores ? a.colaboradores.nome : "—"}</span>
+                <span className="chip" style={{ background: "var(--verde-bg)", color: "var(--verde)" }}>{diasEntre(a.inicio, a.fim)} dia(s) de férias</span>
+                <span style={{ flex: 1 }}></span>
+                {podeEditar && (
+                  <span style={{ display: "flex", gap: 10, flex: "none" }}>
+                    <i className="ti ti-pencil" title="Editar" aria-label="Editar" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }}
+                      onClick={() => setEdit(edit && edit.id === a.id ? null : { id: a.id, inicio: a.inicio, fim: a.fim, observacao: a.observacao || "" })}></i>
+                    <i className="ti ti-trash" title="Excluir" aria-label="Excluir" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(a)}></i>
+                  </span>
+                )}
+              </div>
+              {a.observacao && (!edit || edit.id !== a.id) && (
+                <div style={{ fontSize: 12.5, color: "var(--sec)", marginTop: 4, whiteSpace: "pre-wrap" }}>{a.observacao}</div>
+              )}
+              {edit && edit.id === a.id && (
+                <div className="anim-pop" style={{ display: "flex", gap: 7, flexWrap: "wrap", alignItems: "center", marginTop: 7 }}>
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.inicio} onChange={(e) => setEdit({ ...edit, inicio: e.target.value })} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>até</span>
+                  <input className="campo" type="date" style={{ width: 140, padding: "7px 9px", fontSize: 12.5 }} value={edit.fim} onChange={(e) => setEdit({ ...edit, fim: e.target.value })} />
                   <input className="campo" style={{ flex: 1, minWidth: 180, padding: "7px 9px", fontSize: 12.5 }} placeholder="observação" value={edit.observacao} onChange={(e) => setEdit({ ...edit, observacao: e.target.value })} />
                   <button className="btn-primaria" style={{ padding: "7px 13px", fontSize: 12 }} onClick={salvarEdit}>Salvar</button>
                   <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12 }} onClick={() => setEdit(null)}>Cancelar</button>
@@ -5792,13 +5876,14 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   const carga = parseFloat(col.carga_semanal_horas) || 0;
   const flagSab = !!col.trabalha_sabado;
 
-  const [rr, rf, ra, rx, rfa, rat, roc] = await Promise.all([
+  const [rr, rf, ra, rx, rfa, rat, rfe, roc] = await Promise.all([
     sb.from("ponto_registros").select("tipo, batida").eq("colaborador_id", colabId).gte("batida", isoIniM).lt("batida", isoFimM).order("batida").limit(4600),
     sb.from("feriados").select("data, nome").gte("data", d1m).lte("data", d2m),
     sb.from("horas_extras_autorizacoes").select("data, minutos").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
     sb.from("ponto_alertas_excesso").select("data, minutos_excedidos").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
     sb.from("faltas").select("data, tipo, justificada").eq("colaborador_id", colabId).gte("data", d1).lte("data", d2),
     sb.from("atestados").select("inicio, fim").eq("colaborador_id", colabId).lte("inicio", d2).gte("fim", d1),
+    sb.from("ferias").select("inicio, fim").eq("colaborador_id", colabId).lte("inicio", d2).gte("fim", d1),
     sb.from("ponto_ocorrencias").select("data, descricao").eq("colaborador_id", colabId).gte("data", d1m).lte("data", d2m),
   ]);
   if (rr.error) throw rr.error;
@@ -5807,6 +5892,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   const exc = {}; ((rx && rx.data) || []).forEach((a) => { exc[a.data] = a.minutos_excedidos; });
   const falt = {}; ((rfa && rfa.data) || []).forEach((f) => { falt[f.data] = f; });
   const atst = (rat && rat.data) || [];
+  const fer = (rfe && rfe.data) || [];
   const ocor = {}; ((roc && roc.data) || []).forEach((o) => { if (o.data) ocor[o.data] = (ocor[o.data] ? ocor[o.data] + " · " : "") + (o.descricao || ""); });
 
   const porDia = {};
@@ -5844,7 +5930,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   const SEMANA = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
   const body = []; const semRows = []; const apagadas = [];
   let prevSem = 0, realSem = 0, prevMes = 0, realMes = 0, nSem = 0, semIni = null;
-  let nFaltas = 0, nAtest = 0, minAut = 0, minExc = 0;
+  let nFaltas = 0, nAtest = 0, nFerias = 0, minAut = 0, minExc = 0;
   Object.keys(aut).forEach(function (dk) { if (dk >= d1 && dk <= d2) minAut += aut[dk]; });
   Object.keys(exc).forEach(function (dk) { if (dk >= d1 && dk <= d2) minExc += exc[dk]; });
 
@@ -5853,12 +5939,14 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
     if (!semIni) semIni = dISO;
     const dw = dowDe(dISO);
     const hs = porDia[dISO] || [];
-    const prev = previstoDia(dISO);
+    const prev = emFer ? 0 : previstoDia(dISO);
     const real = realizadoDia(dISO);
     const emAtest = atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
+    const emFer = fer.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
     const obs = [];
     if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
-    if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
+    if (emFer) { obs.push("FÉRIAS"); nFerias++; }
+    else if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
     else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
     else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
     if (aut[dISO]) obs.push("Extra autorizada +" + fmtHMc(aut[dISO]));
@@ -5870,7 +5958,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
     body.push([String(d).padStart(2, "0"), SEMANA[dw], ent, i1, i2, sai,
       prev ? fmtHMc(prev) : "—", (hs.length || prev) ? fmtHMc(real) : "—",
       (prev || hs.length) ? fmtHMc(saldo, true) : "—", obs.join(" · ")]);
-    if ((dw === 0 || feri[dISO]) && hs.length === 0) apagadas.push(body.length - 1);
+    if ((dw === 0 || feri[dISO] || emFer) && hs.length === 0) apagadas.push(body.length - 1);
     prevSem += prev; realSem += real; prevMes += prev; realMes += real;
     if (dw === 0 || d === nDias) {
       nSem++;
@@ -5987,7 +6075,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
 
   y += 22;
   doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text(nFaltas + " falta(s) sem justificativa  ·  " + nAtest + " dia(s) de atestado  ·  extras autorizadas +" + fmtHMc(minAut) + "  ·  excedente sem autorização " + fmtHMc(minExc), ML, y);
+  doc.text(nFaltas + " falta(s) sem justificativa  ·  " + nAtest + " dia(s) de atestado  ·  " + nFerias + " dia(s) de férias  ·  extras autorizadas +" + fmtHMc(minAut) + "  ·  excedente sem autorização " + fmtHMc(minExc), ML, y);
 
   y += 12;
   if (y > H - 22) { doc.addPage(); y = 30; }
