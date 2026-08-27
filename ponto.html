@@ -2,8 +2,15 @@
 <html lang="pt-BR">
 <head>
   <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover" />
   <title>Ponto · Grupo Equilibrium</title>
+  <link rel="manifest" href="manifest-ponto.webmanifest" />
+  <meta name="theme-color" content="#0B4E86" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="Ponto" />
+  <link rel="apple-touch-icon" sizes="180x180" href="icons/apple-touch-icon-ponto.png" />
   <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24'%3E%3Cpath d='M12 3v18M3 12h18M5.6 5.6l12.8 12.8M18.4 5.6L5.6 18.4' stroke='%231068B0' stroke-width='2.6' stroke-linecap='round' fill='none'/%3E%3C/svg%3E" />
   <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;600;800&display=swap" rel="stylesheet" />
   <script src="https://unpkg.com/react@18.3.1/umd/react.production.min.js"></script>
@@ -20,7 +27,7 @@
       --mono:'JetBrains Mono',monospace;
     }
     *{box-sizing:border-box;margin:0;padding:0}
-    body{font-family:'Outfit',sans-serif;background:var(--fundo);color:var(--ink);-webkit-font-smoothing:antialiased}
+    body{font-family:'Outfit',sans-serif;background:var(--fundo);color:var(--ink);-webkit-font-smoothing:antialiased;padding:env(safe-area-inset-top) env(safe-area-inset-right) env(safe-area-inset-bottom) env(safe-area-inset-left)}
     input,select,button,textarea{font-family:inherit}
     input:focus,select:focus,textarea:focus{border-color:var(--marca)!important;box-shadow:0 0 0 3px rgba(16,104,176,.13);outline:none}
     button{transition:all .15s ease}button:hover{opacity:.92}button:active{transform:scale(.97)}
@@ -537,7 +544,7 @@ function App(){
         )}
       </div>
 
-      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v61</div>
+      <div style={{marginTop:14,fontSize:11,color:"var(--muted)",opacity:.5}}>Ponto Equilibrium · CORTEX Gestão · v63</div>
     </div>
   );
 }

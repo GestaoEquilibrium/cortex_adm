@@ -350,7 +350,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v61</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v63</div>
       </aside>
     </React.Fragment>
   );
@@ -5939,10 +5939,10 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
     if (!semIni) semIni = dISO;
     const dw = dowDe(dISO);
     const hs = porDia[dISO] || [];
+    const emFer = fer.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
     const prev = emFer ? 0 : previstoDia(dISO);
     const real = realizadoDia(dISO);
     const emAtest = atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
-    const emFer = fer.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
     const obs = [];
     if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
     if (emFer) { obs.push("FÉRIAS"); nFerias++; }

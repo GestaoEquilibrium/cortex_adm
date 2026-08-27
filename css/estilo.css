@@ -524,7 +524,7 @@ html, button, [role="button"], .clicavel, .item-menu, .chip, a, .campo {
 @media (max-width: 820px) {
   .casca-app { padding: 8px !important; gap: 0 !important; }
   .conteudo-app {
-    padding: calc(60px + env(safe-area-inset-top)) 6px 26px !important;
+    padding: calc(60px + env(safe-area-inset-top)) 6px calc(26px + env(safe-area-inset-bottom)) !important;
   }
 }
 
