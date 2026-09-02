@@ -372,7 +372,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v65</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v66</div>
       </aside>
     </React.Fragment>
   );
@@ -5969,20 +5969,23 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   Object.keys(aut).forEach(function (dk) { if (dk >= d1 && dk <= d2) minAut += aut[dk]; });
   Object.keys(exc).forEach(function (dk) { if (dk >= d1 && dk <= d2) minExc += exc[dk]; });
 
+  const ehEstagio = String((col && col.regime) || "").toLowerCase().indexOf("est") === 0;
+
   for (let d = 1; d <= nDias; d++) {
     const dISO = mesRef + "-" + String(d).padStart(2, "0");
     if (!semIni) semIni = dISO;
     const dw = dowDe(dISO);
     const hs = porDia[dISO] || [];
     const emFer = fer.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
-    const prev = emFer ? 0 : previstoDia(dISO);
-    const real = realizadoDia(dISO);
     const emAtest = atst.some(function (a) { return a.inicio <= dISO && a.fim >= dISO; });
+    const abonaAtest = emAtest && !ehEstagio;
+    const prev = (emFer || abonaAtest) ? 0 : previstoDia(dISO);
+    const real = realizadoDia(dISO);
     const obs = [];
     if (feri[dISO]) obs.push("FERIADO — " + feri[dISO]);
-    if (emFer) { obs.push("FÉRIAS"); nFerias++; }
+    if (emFer) { obs.push("FÉRIAS/RECESSO"); nFerias++; }
     else if (falt[dISO]) { obs.push(falt[dISO].justificada ? "FALTA JUSTIFICADA" : "FALTA"); if (!falt[dISO].justificada) nFaltas++; }
-    else if (emAtest) { obs.push("ATESTADO"); nAtest++; }
+    else if (emAtest) { obs.push(abonaAtest ? "ATESTADO (abonado)" : "ATESTADO (desconta · estágio)"); nAtest++; }
     else if (prev > 0 && hs.length === 0) { obs.push("FALTA (sem registro)"); nFaltas++; }
     if (aut[dISO]) obs.push("Extra autorizada +" + fmtHMc(aut[dISO]));
     if (exc[dISO]) obs.push("EXCEDEU " + fmtHMc(exc[dISO]) + " s/ autorização");
@@ -6088,7 +6091,7 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
   const caixas = [
     ["HORAS ACORDADAS", fmtHMc(prevMes), E.INK],
     ["HORAS REALIZADAS", fmtHMc(realMes), E.MARCA],
-    ["DIFERENÇA", fmtHMc(difMes, true), difMes < 0 ? [185, 28, 28] : [21, 128, 61]],
+    [difMes < 0 ? "HORAS FALTA (SEM AUTORIZAÇÃO)" : (difMes > 0 ? "HORAS EXCEDIDAS (SEM AUTORIZAÇÃO)" : "DIFERENÇA"), fmtHMc(difMes, true), difMes < 0 ? [185, 28, 28] : [21, 128, 61]],
   ];
   caixas.forEach(function (cx, i) {
     const x = ML + i * (larg3 + 6);
@@ -6100,17 +6103,17 @@ async function gerarEspelhoMensal(sb, colabId, mesRef, modo) {
     doc.setTextColor(cx[2][0], cx[2][1], cx[2][2]); doc.setFontSize(13.5);
     doc.text(cx[1], x + 5, y + 12.8);
   });
-  const selo = difMes < 0 ? "NEGATIVO" : (difMes > 0 ? "POSITIVO" : "EM DIA");
+  const selo = difMes < 0 ? "FALTOU HORAS" : (difMes > 0 ? "EXCEDEU HORAS" : "EM DIA");
   const seloCor = difMes < 0 ? [185, 28, 28] : (difMes > 0 ? [21, 128, 61] : [91, 101, 114]);
   doc.setFillColor(seloCor[0], seloCor[1], seloCor[2]);
-  const sx = ML + 2 * (larg3 + 6) + larg3 - 26;
-  doc.roundedRect(sx, y + 4.4, 22, 7.4, 3.6, 3.6, "F");
+  const sx = ML + 2 * (larg3 + 6) + larg3 - 38;
+  doc.roundedRect(sx, y + 4.4, 34, 7.4, 3.6, 3.6, "F");
   doc.setTextColor(255, 255, 255); doc.setFontSize(7.6);
-  doc.text(selo, sx + 11, y + 9.2, { align: "center" });
+  doc.text(selo, sx + 17, y + 9.2, { align: "center" });
 
   y += 22;
   doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
-  doc.text(nFaltas + " falta(s) sem justificativa  ·  " + nAtest + " dia(s) de atestado  ·  " + nFerias + " dia(s) de férias  ·  extras autorizadas +" + fmtHMc(minAut) + "  ·  excedente sem autorização " + fmtHMc(minExc), ML, y);
+  doc.text(nFaltas + " falta(s) sem justificativa  ·  " + nAtest + " dia(s) de atestado  ·  " + nFerias + " dia(s) de férias/recesso  ·  extras autorizadas +" + fmtHMc(minAut) + "  ·  excedente sem autorização " + fmtHMc(minExc), ML, y);
 
   y += 12;
   if (y > H - 22) { doc.addPage(); y = 30; }
