@@ -217,6 +217,7 @@ function TelaLogin() {
   const [senha, setSenha] = useState("");
   const [erro, setErro] = useState("");
   const [enviando, setEnviando] = useState(false);
+  const [aviso, setAviso] = useState("");
 
   async function entrar(e) {
     e.preventDefault();
@@ -232,6 +233,17 @@ function TelaLogin() {
       return;
     }
     registrarEvento("login", "sistema");
+  }
+
+  async function esqueciSenha() {
+    setErro(""); setAviso("");
+    const em = email.trim();
+    if (!em) { setErro("Digite seu e-mail acima e toque de novo em Esqueci minha senha."); return; }
+    setEnviando(true);
+    const { error } = await sb.auth.resetPasswordForEmail(em, { redirectTo: window.location.origin + window.location.pathname });
+    setEnviando(false);
+    if (error) { setErro("Não foi possível enviar: " + error.message); return; }
+    setAviso("✓ Se este e-mail tiver acesso, o link de redefinição chegou na caixa de entrada — vale conferir o spam.");
   }
 
   return (
@@ -261,6 +273,15 @@ function TelaLogin() {
             {!enviando && <i className="ti ti-arrow-right" style={{ fontSize: 16 }} aria-hidden="true"></i>}
           </button>
         </form>
+
+        <button type="button" onClick={esqueciSenha} disabled={enviando} style={{ background: "none", border: "none", color: "var(--marca-texto)", fontSize: 12.5, fontWeight: 600, cursor: "pointer", marginTop: 14, width: "100%", fontFamily: "inherit" }}>
+          Esqueci minha senha
+        </button>
+        {aviso && (
+          <div className="anim-pop" style={{ background: "var(--verde-bg)", color: "var(--verde)", fontSize: 12.5, fontWeight: 500, padding: "9px 12px", borderRadius: 9, marginTop: 10, display: "flex", alignItems: "flex-start", gap: 7 }}>
+            <i className="ti ti-mail-check" style={{ fontSize: 15, flex: "none" }} aria-hidden="true"></i><span>{aviso}</span>
+          </div>
+        )}
 
         <p style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 20, textAlign: "center" }}>
           Acesso criado pela Direção · toda atividade fica registrada
@@ -351,7 +372,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v64</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v65</div>
       </aside>
     </React.Fragment>
   );
@@ -4156,6 +4177,15 @@ function AbaPessoas({ ctx, podeEditar }) {
     carregar();
   }
 
+  async function redefinirSenha(p) {
+    if (!p.email) { setMsg("Esta pessoa não tem e-mail cadastrado."); return; }
+    if (!window.confirm("Enviar e-mail de redefinição de senha para " + p.email + "?")) return;
+    const { error } = await sb.auth.resetPasswordForEmail(p.email, { redirectTo: window.location.origin + window.location.pathname });
+    if (error) { setMsg("Erro ao enviar: " + error.message); return; }
+    registrarEvento("editar", "configuracoes", "Redefinição de senha enviada: " + p.email);
+    setMsg("✓ E-mail de redefinição enviado para " + p.email + ".");
+  }
+
   async function vincular(p, colabId) {
     const { error } = await sb.from("profiles").update({ colaborador_id: colabId }).eq("id", p.id);
     if (error) {
@@ -4308,6 +4338,10 @@ function AbaPessoas({ ctx, podeEditar }) {
                   </div>
                 );
               })()}
+              {podeEditar && (
+                <i className="ti ti-key" title={"Enviar redefinição de senha para " + p.email} aria-label="Enviar redefinição de senha"
+                  style={{ fontSize: 15, color: "var(--muted)", cursor: "pointer", flex: "none" }} onClick={() => redefinirSenha(p)}></i>
+              )}
               <select className="campo" style={{ width: 170, padding: "7px 10px", fontSize: 12.5 }}
                 value={p.perfil_id || ""} disabled={!podeEditar || euMesmo}
                 title={euMesmo ? "Você não pode alterar o próprio perfil" : undefined}
@@ -6922,6 +6956,36 @@ function icoLinkCP(url) {
   return "ti-external-link";
 }
 
+function BlocoCP({ tit, ico, cls, icoItem, lista }) {
+  if (!lista || !lista.length) return null;
+  return (
+    <div className="cp-sec">
+      <div className="cp-sec-tit"><i className={"ti " + ico} aria-hidden="true"></i>{tit}</div>
+      <ul className="cp-lista">{lista.map((it) => <li key={it.id} className={cls}><i className={"ti " + icoItem} aria-hidden="true"></i>{it.texto}</li>)}</ul>
+    </div>
+  );
+}
+
+function RepCP({ ed, setEd, campo, cols }) {
+  const arr = ed[campo];
+  return (
+    <div className="cp-rep">
+      {arr.map((lin, i) => (
+        <div key={lin._k || i} className="cp-rep-lin">
+          {cols.map((c) => (
+            <input key={c.k} className="campo" placeholder={c.ph} style={{ flex: c.f || 1, minWidth: 0 }} value={lin[c.k]}
+              onChange={(e) => { const nv = arr.slice(); nv[i] = { ...nv[i], [c.k]: e.target.value }; setEd({ ...ed, [campo]: nv }); }} />
+          ))}
+          <button className="btn-fantasma" title="Remover" onClick={() => setEd({ ...ed, [campo]: arr.filter((_, j) => j !== i) })}><i className="ti ti-trash" aria-hidden="true"></i></button>
+        </div>
+      ))}
+      <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12.5, alignSelf: "flex-start" }}
+        onClick={() => setEd({ ...ed, [campo]: arr.concat([cols.reduce((a, c) => { a[c.k] = ""; return a; }, { _k: "n" + Date.now() + Math.random() })]) })}>
+        <i className="ti ti-plus" aria-hidden="true"></i>Adicionar</button>
+    </div>
+  );
+}
+
 function PaginaProjetos({ ctx }) {
   const [projetos, setProjetos] = useState(null);
   const [itens, setItens] = useState({});
@@ -6970,9 +7034,9 @@ function PaginaProjetos({ ctx }) {
       objetivo: p.objetivo || "", quem_entra: p.quem_entra || "", como_funciona: p.como_funciona || "",
       proximo_passo: p.proximo_passo || "",
       listas: LISTAS_CP.reduce(function (a, par) { a[par[0]] = linhasDe(par[0]); return a; }, {}),
-      links: its(p, "link").map((i) => ({ rot: i.rotulo || "", url: i.texto || "" })),
-      marcos: its(p, "marco").map((i) => ({ q: i.rotulo || "", t: i.texto || "" })),
-      dados: its(p, "dado").map((i) => ({ k: i.rotulo || "", v: i.texto || "" })),
+      links: its(p, "link").map((i) => ({ _k: i.id, rot: i.rotulo || "", url: i.texto || "" })),
+      marcos: its(p, "marco").map((i) => ({ _k: i.id, q: i.rotulo || "", t: i.texto || "" })),
+      dados: its(p, "dado").map((i) => ({ _k: i.id, k: i.rotulo || "", v: i.texto || "" })),
     });
     setAba("editar");
   }
@@ -7042,37 +7106,6 @@ function PaginaProjetos({ ctx }) {
 
   const P = (projetos || []).find((x) => x.slug === aberto) || null;
   const s = P ? (STATUS_CP[P.situacao] || STATUS_CP.planejado) : null;
-
-  function Bloco({ tit, ico, tipo, cls, icoItem, proj }) {
-    const lista = its(proj, tipo);
-    if (!lista.length) return null;
-    return (
-      <div className="cp-sec">
-        <div className="cp-sec-tit"><i className={"ti " + ico} aria-hidden="true"></i>{tit}</div>
-        <ul className="cp-lista">{lista.map((it) => <li key={it.id} className={cls}><i className={"ti " + icoItem} aria-hidden="true"></i>{it.texto}</li>)}</ul>
-      </div>
-    );
-  }
-
-  function Rep({ campo, cols }) {
-    const arr = ed[campo];
-    return (
-      <div className="cp-rep">
-        {arr.map((lin, i) => (
-          <div key={i} className="cp-rep-lin">
-            {cols.map((c) => (
-              <input key={c.k} className="campo" placeholder={c.ph} style={{ flex: c.f || 1, minWidth: 0 }} value={lin[c.k]}
-                onChange={(e) => { const nv = arr.slice(); nv[i] = { ...nv[i], [c.k]: e.target.value }; setEd({ ...ed, [campo]: nv }); }} />
-            ))}
-            <button className="btn-fantasma" title="Remover" onClick={() => setEd({ ...ed, [campo]: arr.filter((_, j) => j !== i) })}><i className="ti ti-trash" aria-hidden="true"></i></button>
-          </div>
-        ))}
-        <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12.5, alignSelf: "flex-start" }}
-          onClick={() => setEd({ ...ed, [campo]: arr.concat([cols.reduce((a, c) => { a[c.k] = ""; return a; }, {})]) })}>
-          <i className="ti ti-plus" aria-hidden="true"></i>Adicionar</button>
-      </div>
-    );
-  }
 
   return (
     <div className="anim-pop">
@@ -7177,11 +7210,11 @@ function PaginaProjetos({ ctx }) {
                     </div>
                   )}
                   {P.objetivo && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-flag" aria-hidden="true"></i>Objetivo final</div><p>{P.objetivo}</p></div>}
-                  <Bloco tit="Já feito" ico="ti-checks" tipo="feito" cls="ok" icoItem="ti-circle-check-filled" proj={P} />
-                  <Bloco tit="Em andamento" ico="ti-progress" tipo="andamento" cls="and" icoItem="ti-loader-2" proj={P} />
-                  <Bloco tit="O que falta" ico="ti-list-check" tipo="falta" cls="falta" icoItem="ti-square" proj={P} />
-                  <Bloco tit="Bloqueios" ico="ti-alert-triangle" tipo="trava" cls="trava" icoItem="ti-alert-circle-filled" proj={P} />
-                  <Bloco tit="Decisões pendentes" ico="ti-help-circle" tipo="decisao" cls="dec" icoItem="ti-point-filled" proj={P} />
+                  <BlocoCP tit="Já feito" ico="ti-checks" cls="ok" icoItem="ti-circle-check-filled" lista={its(P, "feito")} />
+                  <BlocoCP tit="Em andamento" ico="ti-progress" cls="and" icoItem="ti-loader-2" lista={its(P, "andamento")} />
+                  <BlocoCP tit="O que falta" ico="ti-list-check" cls="falta" icoItem="ti-square" lista={its(P, "falta")} />
+                  <BlocoCP tit="Bloqueios" ico="ti-alert-triangle" cls="trava" icoItem="ti-alert-circle-filled" lista={its(P, "trava")} />
+                  <BlocoCP tit="Decisões pendentes" ico="ti-help-circle" cls="dec" icoItem="ti-point-filled" lista={its(P, "decisao")} />
                 </React.Fragment>
               )}
               {aba === "uso" && (
@@ -7244,7 +7277,7 @@ function PaginaProjetos({ ctx }) {
                   ) : (
                     <div className="cp-aviso"><i className="ti ti-database-off" aria-hidden="true"></i>Sem dados técnicos registrados.</div>
                   )}
-                  <Bloco tit="Regras fixas" ico="ti-lock" tipo="regra" cls="regra" icoItem="ti-minus" proj={P} />
+                  <BlocoCP tit="Regras fixas" ico="ti-lock" cls="regra" icoItem="ti-minus" lista={its(P, "regra")} />
                   {P.fonte && <div className="cp-fonte"><i className="ti ti-info-circle" aria-hidden="true"></i><span>{P.fonte}</span></div>}
                 </React.Fragment>
               )}
@@ -7283,11 +7316,11 @@ function PaginaProjetos({ ctx }) {
                     </div>
                   ))}
                   <div className="cp-ed-sep"><i className="ti ti-link" aria-hidden="true"></i>Links de acesso</div>
-                  <Rep campo="links" cols={[{ k: "rot", ph: "Rótulo do link", f: 2 }, { k: "url", ph: "https://…", f: 3 }]} />
+                  <RepCP ed={ed} setEd={setEd} campo="links" cols={[{ k: "rot", ph: "Rótulo do link", f: 2 }, { k: "url", ph: "https://…", f: 3 }]} />
                   <div className="cp-ed-sep"><i className="ti ti-timeline" aria-hidden="true"></i>Histórico de construção</div>
-                  <Rep campo="marcos" cols={[{ k: "q", ph: "Quando (ex.: Sprint 64)", f: 1 }, { k: "t", ph: "O que foi feito", f: 3 }]} />
+                  <RepCP ed={ed} setEd={setEd} campo="marcos" cols={[{ k: "q", ph: "Quando (ex.: Sprint 64)", f: 1 }, { k: "t", ph: "O que foi feito", f: 3 }]} />
                   <div className="cp-ed-sep"><i className="ti ti-database" aria-hidden="true"></i>Dados técnicos</div>
-                  <Rep campo="dados" cols={[{ k: "k", ph: "Rótulo", f: 1 }, { k: "v", ph: "Valor", f: 2 }]} />
+                  <RepCP ed={ed} setEd={setEd} campo="dados" cols={[{ k: "k", ph: "Rótulo", f: 1 }, { k: "v", ph: "Valor", f: 2 }]} />
                   <div className="cp-ed-sep"><i className="ti ti-list" aria-hidden="true"></i>Listas · um item por linha</div>
                   {LISTAS_CP.map(([k, rot]) => (
                     <div key={k} className="cp-ed-lin"><label>{rot}</label>
@@ -7309,6 +7342,50 @@ function PaginaProjetos({ ctx }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+function RecuperarSenha() {
+  const [ativo, setAtivo] = useState(false);
+  const [sn1, setSn1] = useState("");
+  const [sn2, setSn2] = useState("");
+  const [msgR, setMsgR] = useState("");
+  const [salvandoR, setSalvandoR] = useState(false);
+  useEffect(() => {
+    if (window.location.hash && window.location.hash.indexOf("type=recovery") !== -1) setAtivo(true);
+    const { data: sub } = sb.auth.onAuthStateChange(function (ev) { if (ev === "PASSWORD_RECOVERY") setAtivo(true); });
+    return () => { if (sub && sub.subscription) sub.subscription.unsubscribe(); };
+  }, []);
+  if (!ativo) return null;
+  async function salvarSenha() {
+    setMsgR("");
+    if (sn1.length < 8) { setMsgR("A nova senha precisa de pelo menos 8 caracteres."); return; }
+    if (sn1 !== sn2) { setMsgR("As duas senhas não conferem."); return; }
+    setSalvandoR(true);
+    const { error } = await sb.auth.updateUser({ password: sn1 });
+    setSalvandoR(false);
+    if (error) { setMsgR("Não deu: " + error.message); return; }
+    registrarEvento("editar", "sistema", "Senha redefinida pelo próprio usuário");
+    window.history.replaceState(null, "", window.location.pathname + window.location.search);
+    setMsgR("✓ Senha alterada — você já está conectado.");
+    setTimeout(function () { setAtivo(false); }, 1600);
+  }
+  return (
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.42)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
+      <div className="card-fl anim-pop" style={{ width: "100%", maxWidth: 380, padding: "26px 26px 22px", background: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
+          <i className="ti ti-key" style={{ fontSize: 20, color: "var(--marca)" }} aria-hidden="true"></i>
+          <span style={{ fontWeight: 700, fontSize: 16 }}>Defina sua nova senha</span>
+        </div>
+        <p style={{ fontSize: 12.5, color: "var(--sec)", marginBottom: 16 }}>Você chegou pelo link de redefinição. Escolha a nova senha abaixo.</p>
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--sec)", marginBottom: 5 }}>Nova senha</label>
+        <input className="campo" type="password" value={sn1} onChange={(e) => setSn1(e.target.value)} autoComplete="new-password" style={{ width: "100%", marginBottom: 12 }} />
+        <label style={{ display: "block", fontSize: 12, fontWeight: 600, color: "var(--sec)", marginBottom: 5 }}>Repita a nova senha</label>
+        <input className="campo" type="password" value={sn2} onChange={(e) => setSn2(e.target.value)} autoComplete="new-password" style={{ width: "100%", marginBottom: 14 }} />
+        {msgR && <div style={{ fontSize: 12.5, fontWeight: 600, marginBottom: 12, color: msgR.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)" }}>{msgR}</div>}
+        <button className="btn-primaria" disabled={salvandoR} onClick={salvarSenha} style={{ width: "100%", justifyContent: "center" }}>{salvandoR ? "Salvando…" : "Salvar nova senha"}</button>
+      </div>
     </div>
   );
 }
@@ -7401,6 +7478,7 @@ function Shell({ ctx, aoSair }) {
 
   return (
     <div className="casca-app" style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
+      <RecuperarSenha />
       <Sidebar meuCard={meuCard} ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
       <main className="conteudo-app" style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
         <Topo ctx={ctx} />
