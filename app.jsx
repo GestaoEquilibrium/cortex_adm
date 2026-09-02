@@ -26,6 +26,7 @@ const MODULOS = [
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
+  { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
   { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
@@ -350,7 +351,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v63</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v64</div>
       </aside>
     </React.Fragment>
   );
@@ -6891,6 +6892,427 @@ function AbaInformativosCC({ ctx, podeEditar }) {
   );
 }
 
+const STATUS_CP = {
+  ativo:     { rotulo: "Em execução",    cor: "var(--marca)",    bg: "var(--tint)",        ico: "ti-player-play" },
+  critico:   { rotulo: "Prazo correndo", cor: "var(--vermelho)", bg: "var(--vermelho-bg)", ico: "ti-alert-triangle" },
+  pausado:   { rotulo: "Aguardando",     cor: "var(--ambar)",    bg: "var(--ambar-bg)",    ico: "ti-player-pause" },
+  planejado: { rotulo: "Desenhado",      cor: "var(--roxo)",     bg: "var(--roxo-bg)",     ico: "ti-pencil" },
+  concluido: { rotulo: "Encerrado",      cor: "var(--verde)",    bg: "var(--verde-bg)",    ico: "ti-check" },
+};
+const FRENTES_CP = {
+  "Sistemas de gestão": "ti-building-cog",
+  "Sistemas clínicos": "ti-stethoscope",
+  "Produtos e comercial": "ti-briefcase",
+  "Estratégico": "ti-target-arrow",
+};
+const LISTAS_CP = [
+  ["modulo", "Módulos"], ["uso", "Instruções de uso"], ["feito", "Já feito"], ["andamento", "Em andamento"],
+  ["falta", "O que falta"], ["trava", "Bloqueios"], ["regra", "Regras fixas"], ["decisao", "Decisões pendentes"],
+];
+const TEXTOS_CP = [
+  ["nome", "Nome do projeto", "input"], ["resumo", "Resumo de uma linha", "input"],
+  ["meta", "Linha técnica do cabeçalho", "input"], ["objetivo", "Objetivo final", "textarea"],
+  ["quem_entra", "Quem entra e como", "textarea"], ["como_funciona", "Como funciona", "textarea"],
+  ["proximo_passo", "Próximo passo", "textarea"], ["fonte", "Fonte desta ficha", "textarea"],
+];
+function icoLinkCP(url) {
+  const u = (url || "").toLowerCase();
+  if (u.indexOf("github") !== -1) return "ti-brand-github";
+  if (u.indexOf("supabase") !== -1) return "ti-database";
+  return "ti-external-link";
+}
+
+function PaginaProjetos({ ctx }) {
+  const [projetos, setProjetos] = useState(null);
+  const [itens, setItens] = useState({});
+  const [busca, setBusca] = useState("");
+  const [filtro, setFiltro] = useState("todos");
+  const [aberto, setAberto] = useState(null);
+  const [aba, setAba] = useState("situacao");
+  const [ed, setEd] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const podeEditar = nivelModulo(ctx, "projetos") === "editar";
+  const hintCP = (e) => "Erro: " + e.message + (e.message.indexOf("projetos") !== -1 ? " — rode o 33_central_projetos.sql." : "");
+
+  async function carregar() {
+    const rp = await sb.from("projetos").select("*").order("ordem").order("nome");
+    if (rp.error) { setMsg(hintCP(rp.error)); return; }
+    const ri = await sb.from("projetos_itens").select("*").order("ordem");
+    if (ri.error) { setMsg(hintCP(ri.error)); return; }
+    const mapa = {};
+    (ri.data || []).forEach(function (it) {
+      if (!mapa[it.projeto_id]) mapa[it.projeto_id] = {};
+      if (!mapa[it.projeto_id][it.tipo]) mapa[it.projeto_id][it.tipo] = [];
+      mapa[it.projeto_id][it.tipo].push(it);
+    });
+    setMsg(""); setProjetos(rp.data || []); setItens(mapa);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const its = (p, tipo) => ((itens[p.id] || {})[tipo] || []);
+  const pctCP = (p) => { const f = its(p, "feito").length, q = its(p, "falta").length; return (f + q) ? Math.round(f / (f + q) * 100) : 0; };
+
+  const visiveis = useMemo(() => {
+    const t = busca.trim().toLowerCase();
+    return (projetos || []).filter(function (p) {
+      if (filtro !== "todos" && p.situacao !== filtro) return false;
+      if (!t) return true;
+      return ((p.nome || "") + " " + (p.resumo || "") + " " + (p.frente || "") + " " + (p.objetivo || "") + " " + (p.proximo_passo || "")).toLowerCase().indexOf(t) !== -1;
+    });
+  }, [projetos, busca, filtro]);
+
+  function abrirEditor(p) {
+    const linhasDe = (tipo) => its(p, tipo).map((i) => i.texto).join("\n");
+    setEd({
+      id: p.id, slug: p.slug || "", nome: p.nome || "", frente: p.frente || "", icone: p.icone || "ti-folder",
+      situacao: p.situacao, resumo: p.resumo || "", meta: p.meta || "", fonte: p.fonte || "",
+      objetivo: p.objetivo || "", quem_entra: p.quem_entra || "", como_funciona: p.como_funciona || "",
+      proximo_passo: p.proximo_passo || "",
+      listas: LISTAS_CP.reduce(function (a, par) { a[par[0]] = linhasDe(par[0]); return a; }, {}),
+      links: its(p, "link").map((i) => ({ rot: i.rotulo || "", url: i.texto || "" })),
+      marcos: its(p, "marco").map((i) => ({ q: i.rotulo || "", t: i.texto || "" })),
+      dados: its(p, "dado").map((i) => ({ k: i.rotulo || "", v: i.texto || "" })),
+    });
+    setAba("editar");
+  }
+
+  async function salvarEd() {
+    if (!ed) return;
+    const slug = (ed.slug || "").toLowerCase().replace(/[^a-z0-9-]/g, "-").replace(/-+/g, "-").replace(/^-|-$/g, "");
+    if (!slug) { setMsg("Informe um identificador (letras, números e hífen)."); return; }
+    setSalvando(true); setMsg("");
+    const upd = await sb.from("projetos").update({
+      slug: slug, nome: ed.nome.trim() || "Sem nome", frente: ed.frente.trim() || "Sistemas de gestão",
+      icone: ed.icone.trim() || "ti-folder", situacao: ed.situacao,
+      resumo: ed.resumo.trim() || null, meta: ed.meta.trim() || null, fonte: ed.fonte.trim() || null,
+      objetivo: ed.objetivo.trim() || null, quem_entra: ed.quem_entra.trim() || null,
+      como_funciona: ed.como_funciona.trim() || null,
+      proximo_passo: ed.proximo_passo.trim() || "Definir o próximo passo.",
+      atualizado_em: new Date().toISOString(), atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).eq("id", ed.id);
+    if (upd.error) { setSalvando(false); setMsg(hintCP(upd.error)); return; }
+    const del = await sb.from("projetos_itens").delete().eq("projeto_id", ed.id);
+    if (del.error) { setSalvando(false); setMsg(hintCP(del.error)); return; }
+    const novos = [];
+    let ord = 0;
+    ed.links.forEach(function (l) { if (l.url.trim()) novos.push({ projeto_id: ed.id, tipo: "link", rotulo: l.rot.trim() || l.url.trim(), texto: l.url.trim(), ordem: ord++ }); });
+    LISTAS_CP.forEach(function (par) {
+      (ed.listas[par[0]] || "").split("\n").map((x) => x.trim()).filter(Boolean).forEach(function (t) {
+        novos.push({ projeto_id: ed.id, tipo: par[0], rotulo: null, texto: t, ordem: ord++ });
+      });
+    });
+    ed.marcos.forEach(function (m) { if (m.q.trim() || m.t.trim()) novos.push({ projeto_id: ed.id, tipo: "marco", rotulo: m.q.trim() || "—", texto: m.t.trim() || "—", ordem: ord++ }); });
+    ed.dados.forEach(function (d) { if (d.k.trim()) novos.push({ projeto_id: ed.id, tipo: "dado", rotulo: d.k.trim(), texto: d.v.trim(), ordem: ord++ }); });
+    if (novos.length) {
+      const ins = await sb.from("projetos_itens").insert(novos);
+      if (ins.error) { setSalvando(false); setMsg(hintCP(ins.error)); return; }
+    }
+    registrarEvento("editar", "projetos", "Ficha atualizada: " + (ed.nome || slug));
+    setSalvando(false); setEd(null); setAba("situacao"); await carregar(); setAberto(slug);
+    setMsg("✓ Ficha salva no banco.");
+  }
+
+  async function novoProjeto() {
+    const r = await sb.from("projetos").insert({
+      slug: "novo-" + Date.now(), nome: "Projeto novo", frente: "Sistemas de gestão",
+      icone: "ti-folder", situacao: "planejado", proximo_passo: "Definir o primeiro passo.",
+      ordem: 900, atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).select("*").single();
+    if (r.error) { setMsg(hintCP(r.error)); return; }
+    registrarEvento("criar", "projetos", "Projeto criado: " + r.data.slug);
+    await carregar(); setAberto(r.data.slug); abrirEditor(r.data);
+  }
+
+  async function excluirProj(p) {
+    if (!window.confirm('Excluir "' + p.nome + '" e toda a ficha? A exclusão fica na auditoria.')) return;
+    const r = await sb.from("projetos").delete().eq("id", p.id);
+    if (r.error) { setMsg(hintCP(r.error)); return; }
+    registrarEvento("excluir", "projetos", "Projeto excluído: " + p.nome);
+    setEd(null); setAberto(null); setAba("situacao"); carregar();
+  }
+
+  function copiarPrompt() {
+    const resumo = (projetos || []).map((p) => "- " + p.nome + " [" + (STATUS_CP[p.situacao] || {}).rotulo + "] · próximo passo: " + (p.proximo_passo || "—")).join("\n");
+    const t = "Atualize a Central de Projetos do Grupo Equilibrium (módulo Projetos do CORTEX).\n\nEstado registrado hoje:\n" + resumo + "\n\nLeia os repositórios que puder alcançar, confira contra o registro acima (código vence conversa), aponte o que mudou e devolva as fichas alteradas campo a campo. Onde não houver informação apurada, escreva \"a apurar\" em vez de inventar.";
+    if (navigator.clipboard && navigator.clipboard.writeText) {
+      navigator.clipboard.writeText(t).then(function () { setMsg("✓ Prompt copiado — cole numa conversa com o Claude."); }, function () { setMsg("Não consegui copiar. Verifique a permissão do navegador."); });
+    } else { setMsg("Este navegador não permite copiar automaticamente."); }
+  }
+
+  const P = (projetos || []).find((x) => x.slug === aberto) || null;
+  const s = P ? (STATUS_CP[P.situacao] || STATUS_CP.planejado) : null;
+
+  function Bloco({ tit, ico, tipo, cls, icoItem, proj }) {
+    const lista = its(proj, tipo);
+    if (!lista.length) return null;
+    return (
+      <div className="cp-sec">
+        <div className="cp-sec-tit"><i className={"ti " + ico} aria-hidden="true"></i>{tit}</div>
+        <ul className="cp-lista">{lista.map((it) => <li key={it.id} className={cls}><i className={"ti " + icoItem} aria-hidden="true"></i>{it.texto}</li>)}</ul>
+      </div>
+    );
+  }
+
+  function Rep({ campo, cols }) {
+    const arr = ed[campo];
+    return (
+      <div className="cp-rep">
+        {arr.map((lin, i) => (
+          <div key={i} className="cp-rep-lin">
+            {cols.map((c) => (
+              <input key={c.k} className="campo" placeholder={c.ph} style={{ flex: c.f || 1, minWidth: 0 }} value={lin[c.k]}
+                onChange={(e) => { const nv = arr.slice(); nv[i] = { ...nv[i], [c.k]: e.target.value }; setEd({ ...ed, [campo]: nv }); }} />
+            ))}
+            <button className="btn-fantasma" title="Remover" onClick={() => setEd({ ...ed, [campo]: arr.filter((_, j) => j !== i) })}><i className="ti ti-trash" aria-hidden="true"></i></button>
+          </div>
+        ))}
+        <button className="btn-contorno" style={{ padding: "7px 13px", fontSize: 12.5, alignSelf: "flex-start" }}
+          onClick={() => setEd({ ...ed, [campo]: arr.concat([cols.reduce((a, c) => { a[c.k] = ""; return a; }, {})]) })}>
+          <i className="ti ti-plus" aria-hidden="true"></i>Adicionar</button>
+      </div>
+    );
+  }
+
+  return (
+    <div className="anim-pop">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>Central de Projetos</div>
+          <div style={{ fontSize: 12.5, color: "var(--sec)" }}>Onde cada frente do Grupo Equilibrium está agora</div>
+        </div>
+        {podeEditar && <button className="btn-contorno" onClick={novoProjeto}><i className="ti ti-plus" aria-hidden="true"></i>Novo projeto</button>}
+        <button className="btn-primaria" onClick={copiarPrompt}><i className="ti ti-refresh" aria-hidden="true"></i>Atualizar com o Claude</button>
+      </div>
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)", fontWeight: 600 }}>{msg}</div>}
+      {!projetos && <div style={{ padding: 30, color: "var(--muted)", fontSize: 13 }}>Carregando…</div>}
+      {projetos && (
+        <React.Fragment>
+          <div className="cp-kpis">
+            {["ativo", "critico", "pausado", "planejado", "concluido"].filter((k) => projetos.some((p) => p.situacao === k)).map(function (k) {
+              const st = STATUS_CP[k];
+              return (
+                <div key={k} className="card-fl cp-kpi">
+                  <div className="n" style={{ color: st.cor }}>{projetos.filter((p) => p.situacao === k).length}</div>
+                  <div className="r"><i className={"ti " + st.ico} aria-hidden="true"></i> {st.rotulo}</div>
+                </div>
+              );
+            })}
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <input className="campo" type="search" placeholder="Buscar projeto" style={{ flex: 1, minWidth: 190 }} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <div className="cp-filtros">
+              {[["todos", "Todos"]].concat(Object.keys(STATUS_CP).filter((k) => projetos.some((p) => p.situacao === k)).map((k) => [k, STATUS_CP[k].rotulo])).map(([v, r]) => (
+                <button key={v} className={"cp-filtro" + (filtro === v ? " on" : "")} onClick={() => setFiltro(v)}>{r}</button>
+              ))}
+            </div>
+          </div>
+          {visiveis.length === 0 && (
+            <div className="cp-vazio"><i className="ti ti-search-off" aria-hidden="true"></i>Nenhum projeto com esse filtro. Ajuste a busca ou volte para Todos.</div>
+          )}
+          {Object.keys(visiveis.reduce((a, p) => { a[p.frente] = 1; return a; }, {})).map(function (fr) {
+            return (
+              <React.Fragment key={fr}>
+                <div className="cp-frente"><i className={"ti " + (FRENTES_CP[fr] || "ti-folder")} aria-hidden="true"></i>{fr}<s></s></div>
+                <div className="cp-grade">
+                  {visiveis.filter((p) => p.frente === fr).map(function (p) {
+                    const st = STATUS_CP[p.situacao] || STATUS_CP.planejado;
+                    const v = pctCP(p);
+                    return (
+                      <button key={p.id} className="card-fl clicavel cp-proj" onClick={() => { setAberto(p.slug); setAba("situacao"); setEd(null); }}>
+                        <div className="cp-proj-topo">
+                          <span className="cp-proj-ico" style={{ background: st.bg, color: st.cor }}><i className={"ti " + p.icone} aria-hidden="true"></i></span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span className="cp-proj-nome">{p.nome}</span>
+                            <span className="cp-proj-res">{p.resumo}</span>
+                          </span>
+                          <span className="chip" style={{ background: st.bg, color: st.cor }}><i className={"ti " + st.ico} style={{ fontSize: 12 }} aria-hidden="true"></i>{st.rotulo}</span>
+                        </div>
+                        <div className="cp-proj-passo">{p.proximo_passo}</div>
+                        <div className="cp-proj-pe">
+                          <span className="cp-trilha"><i style={{ width: v + "%", background: st.cor }}></i></span>
+                          <span>{its(p, "feito").length}/{its(p, "feito").length + its(p, "falta").length}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </React.Fragment>
+      )}
+
+      {P && (
+        <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) { setAberto(null); setEd(null); setAba("situacao"); } }}>
+          <div className="cp-pop anim-pop">
+            <div className="cp-pop-cab">
+              <div className="cp-pop-cab-top">
+                <span className="cp-proj-ico" style={{ background: s.bg, color: s.cor }}><i className={"ti " + P.icone} aria-hidden="true"></i></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2>{P.nome}</h2>
+                  <div className="cp-pop-meta">{P.meta || ""}</div>
+                </div>
+                <span className="chip" style={{ background: s.bg, color: s.cor }}><i className={"ti " + s.ico} style={{ fontSize: 12 }} aria-hidden="true"></i>{s.rotulo}</span>
+                <button className="btn-fantasma" aria-label="Fechar" onClick={() => { setAberto(null); setEd(null); setAba("situacao"); }}><i className="ti ti-x" aria-hidden="true"></i></button>
+              </div>
+              <div className="cp-abas">
+                {[["situacao", "Situação", "ti-target"], ["uso", "Como usar", "ti-book-2"], ["construcao", "Construção", "ti-history"], ["tecnico", "Técnico", "ti-database"]]
+                  .concat(podeEditar ? [["editar", "Editar", "ti-edit"]] : [])
+                  .map(([k, r, i]) => (
+                    <button key={k} className={"cp-aba" + (aba === k ? " on" : "")} onClick={() => { if (k === "editar") { abrirEditor(P); } else { setAba(k); } }}>
+                      <i className={"ti " + i} aria-hidden="true"></i>{r}
+                    </button>
+                  ))}
+              </div>
+            </div>
+            <div className="cp-pop-corpo">
+              {aba === "situacao" && (
+                <React.Fragment>
+                  <div className="cp-passo"><b>Próximo passo</b><p>{P.proximo_passo}</p></div>
+                  {(its(P, "feito").length + its(P, "falta").length) > 0 && (
+                    <div className="cp-medidor">
+                      <span className="cp-trilha"><i style={{ width: pctCP(P) + "%", background: s.cor }}></i></span>
+                      <span>{its(P, "feito").length} de {its(P, "feito").length + its(P, "falta").length} entregues · {pctCP(P)}%</span>
+                    </div>
+                  )}
+                  {P.objetivo && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-flag" aria-hidden="true"></i>Objetivo final</div><p>{P.objetivo}</p></div>}
+                  <Bloco tit="Já feito" ico="ti-checks" tipo="feito" cls="ok" icoItem="ti-circle-check-filled" proj={P} />
+                  <Bloco tit="Em andamento" ico="ti-progress" tipo="andamento" cls="and" icoItem="ti-loader-2" proj={P} />
+                  <Bloco tit="O que falta" ico="ti-list-check" tipo="falta" cls="falta" icoItem="ti-square" proj={P} />
+                  <Bloco tit="Bloqueios" ico="ti-alert-triangle" tipo="trava" cls="trava" icoItem="ti-alert-circle-filled" proj={P} />
+                  <Bloco tit="Decisões pendentes" ico="ti-help-circle" tipo="decisao" cls="dec" icoItem="ti-point-filled" proj={P} />
+                </React.Fragment>
+              )}
+              {aba === "uso" && (
+                <React.Fragment>
+                  {its(P, "link").length > 0 ? (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-link" aria-hidden="true"></i>Onde acessar</div>
+                      <div className="cp-acesso">
+                        {its(P, "link").map((l) => (
+                          <a key={l.id} href={l.texto} target="_blank" rel="noopener noreferrer">
+                            <i className={"ti " + icoLinkCP(l.texto)} aria-hidden="true"></i>
+                            <span>{l.rotulo}<small>{l.texto}</small></span>
+                            <i className="ti ti-chevron-right" aria-hidden="true"></i>
+                          </a>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="cp-aviso"><i className="ti ti-link-off" aria-hidden="true"></i>Sem endereço registrado. Use a aba Editar para acrescentar.</div>
+                  )}
+                  {P.quem_entra && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-key" aria-hidden="true"></i>Quem entra e como</div><p>{P.quem_entra}</p></div>}
+                  {P.como_funciona && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-settings-cog" aria-hidden="true"></i>Como funciona</div><p>{P.como_funciona}</p></div>}
+                  {its(P, "modulo").length > 0 && (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-apps" aria-hidden="true"></i>Módulos</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {its(P, "modulo").map((m) => <span key={m.id} className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{m.texto}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {its(P, "uso").length > 0 && (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-list-numbers" aria-hidden="true"></i>Instruções de uso</div>
+                      <ol className="cp-passos">{its(P, "uso").map((u) => <li key={u.id}>{u.texto}</li>)}</ol>
+                    </div>
+                  )}
+                </React.Fragment>
+              )}
+              {aba === "construcao" && (
+                <React.Fragment>
+                  {its(P, "marco").length > 0 ? (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-timeline" aria-hidden="true"></i>Histórico de construção</div>
+                      <div style={{ paddingLeft: 2 }}>
+                        {its(P, "marco").map((c) => (
+                          <div key={c.id} className="cp-linha-t"><b></b><div><div className="q">{c.rotulo}</div><div className="t">{c.texto}</div></div></div>
+                        ))}
+                      </div>
+                    </div>
+                  ) : (
+                    <div className="cp-aviso"><i className="ti ti-history-off" aria-hidden="true"></i>Histórico não apurado. Use a aba Editar para acrescentar marcos.</div>
+                  )}
+                  {P.fonte && <div className="cp-fonte"><i className="ti ti-info-circle" aria-hidden="true"></i><span>{P.fonte}</span></div>}
+                </React.Fragment>
+              )}
+              {aba === "tecnico" && (
+                <React.Fragment>
+                  {its(P, "dado").length > 0 ? (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-database" aria-hidden="true"></i>Dados técnicos</div>
+                      <table className="cp-dados"><tbody>
+                        {its(P, "dado").map((d) => <tr key={d.id}><td>{d.rotulo}</td><td>{d.texto}</td></tr>)}
+                      </tbody></table>
+                    </div>
+                  ) : (
+                    <div className="cp-aviso"><i className="ti ti-database-off" aria-hidden="true"></i>Sem dados técnicos registrados.</div>
+                  )}
+                  <Bloco tit="Regras fixas" ico="ti-lock" tipo="regra" cls="regra" icoItem="ti-minus" proj={P} />
+                  {P.fonte && <div className="cp-fonte"><i className="ti ti-info-circle" aria-hidden="true"></i><span>{P.fonte}</span></div>}
+                </React.Fragment>
+              )}
+              {aba === "editar" && ed && (
+                <React.Fragment>
+                  <div className="cp-aviso"><i className="ti ti-info-circle" aria-hidden="true"></i>Tudo aqui é editável. Salvar grava no banco na hora, para todo mundo.</div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Frente</label>
+                      <input className="campo" style={{ width: "100%" }} list="cpFrentes" value={ed.frente} onChange={(e) => setEd({ ...ed, frente: e.target.value })} />
+                      <datalist id="cpFrentes">{Object.keys(FRENTES_CP).concat((projetos || []).map((x) => x.frente)).filter((v, i, a) => a.indexOf(v) === i).map((f) => <option key={f} value={f} />)}</datalist>
+                    </div>
+                    <div className="cp-ed-lin"><label>Situação</label>
+                      <select className="campo" style={{ width: "100%" }} value={ed.situacao} onChange={(e) => setEd({ ...ed, situacao: e.target.value })}>
+                        {Object.keys(STATUS_CP).map((k) => <option key={k} value={k}>{STATUS_CP[k].rotulo}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Ícone (Tabler)</label>
+                      <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                        <span className="cp-proj-ico" style={{ background: "var(--tint)", color: "var(--marca)" }}><i className={"ti " + (ed.icone || "ti-folder")} aria-hidden="true"></i></span>
+                        <input className="campo" style={{ flex: 1 }} placeholder="ti-folder" value={ed.icone} onChange={(e) => setEd({ ...ed, icone: e.target.value })} />
+                      </div>
+                      <small className="cp-dica">Nomes em tabler.io/icons — ex.: ti-brain, ti-cash-banknote</small>
+                    </div>
+                    <div className="cp-ed-lin"><label>Identificador</label>
+                      <input className="campo" style={{ width: "100%" }} placeholder="sem-espacos" value={ed.slug} onChange={(e) => setEd({ ...ed, slug: e.target.value })} />
+                      <small className="cp-dica">Só letras, números e hífen.</small>
+                    </div>
+                  </div>
+                  {TEXTOS_CP.map(([k, rot, tipo]) => (
+                    <div key={k} className="cp-ed-lin"><label>{rot}</label>
+                      {tipo === "input"
+                        ? <input className="campo" style={{ width: "100%" }} value={ed[k]} onChange={(e) => setEd({ ...ed, [k]: e.target.value })} />
+                        : <textarea className="campo" style={{ width: "100%", minHeight: 62, resize: "vertical" }} value={ed[k]} onChange={(e) => setEd({ ...ed, [k]: e.target.value })} />}
+                    </div>
+                  ))}
+                  <div className="cp-ed-sep"><i className="ti ti-link" aria-hidden="true"></i>Links de acesso</div>
+                  <Rep campo="links" cols={[{ k: "rot", ph: "Rótulo do link", f: 2 }, { k: "url", ph: "https://…", f: 3 }]} />
+                  <div className="cp-ed-sep"><i className="ti ti-timeline" aria-hidden="true"></i>Histórico de construção</div>
+                  <Rep campo="marcos" cols={[{ k: "q", ph: "Quando (ex.: Sprint 64)", f: 1 }, { k: "t", ph: "O que foi feito", f: 3 }]} />
+                  <div className="cp-ed-sep"><i className="ti ti-database" aria-hidden="true"></i>Dados técnicos</div>
+                  <Rep campo="dados" cols={[{ k: "k", ph: "Rótulo", f: 1 }, { k: "v", ph: "Valor", f: 2 }]} />
+                  <div className="cp-ed-sep"><i className="ti ti-list" aria-hidden="true"></i>Listas · um item por linha</div>
+                  {LISTAS_CP.map(([k, rot]) => (
+                    <div key={k} className="cp-ed-lin"><label>{rot}</label>
+                      <textarea className="campo" style={{ width: "100%", minHeight: 76, resize: "vertical" }} value={ed.listas[k]}
+                        onChange={(e) => setEd({ ...ed, listas: { ...ed.listas, [k]: e.target.value } })} />
+                    </div>
+                  ))}
+                  <div className="cp-ed-sep" style={{ color: "var(--vermelho)" }}><i className="ti ti-trash" aria-hidden="true"></i>Zona de risco</div>
+                  <button className="cp-perigo" onClick={() => excluirProj(P)}><i className="ti ti-trash" aria-hidden="true"></i>Excluir este projeto</button>
+                </React.Fragment>
+              )}
+            </div>
+            {aba === "editar" && ed && (
+              <div className="cp-pop-pe">
+                <button className="btn-primaria" disabled={salvando} onClick={salvarEd}><i className="ti ti-check" aria-hidden="true"></i>{salvando ? "Salvando…" : "Salvar no banco"}</button>
+                <button className="btn-contorno" onClick={() => { setEd(null); setAba("situacao"); }}>Cancelar</button>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function Shell({ ctx, aoSair }) {
   const [meuCard, setMeuCard] = useState(null);
   const [alertasExc, setAlertasExc] = useState([]);
@@ -6953,7 +7375,9 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
-  } else if (pagina === "callcenter") {
+  } else if (pagina === "projetos") {
+        conteudo = <PaginaProjetos ctx={ctx} />;
+      } else if (pagina === "callcenter") {
     conteudo = <PaginaCallCenter ctx={ctx} />;
   } else if (pagina === "demandas") {
     conteudo = <PaginaDemandas ctx={ctx} />;
