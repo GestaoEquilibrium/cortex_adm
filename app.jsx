@@ -373,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v71</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v72</div>
       </aside>
     </React.Fragment>
   );
@@ -497,6 +497,7 @@ function PaginaPainel({ ctx, setPagina }) {
 function PaginaAuditoria() {
   const [linhas, setLinhas] = useState(null);
   const [busca, setBusca] = useState("");
+  const [pontoRef, setPontoRef] = useState({});
 
   useEffect(() => {
     let vivo = true;
@@ -504,7 +505,23 @@ function PaginaAuditoria() {
       .select("id,user_nome,acao,modulo,entidade,entidade_id,created_at")
       .order("created_at", { ascending: false })
       .limit(80)
-      .then(({ data }) => { if (vivo) setLinhas(data || []); });
+      .then(({ data }) => {
+        if (!vivo) return;
+        setLinhas(data || []);
+        const ids = (data || []).filter((l) => l.entidade === "ponto_registros" && l.entidade_id && l.entidade_id !== "?").map((l) => l.entidade_id);
+        if (!ids.length) return;
+        sb.from("ponto_registros").select("id, tipo, batida, colaboradores(nome)").in("id", ids).then(({ data: regs }) => {
+          if (!vivo) return;
+          const mapa = {};
+          ids.forEach((i) => { mapa[i] = null; });
+          (regs || []).forEach((r) => {
+            const dt = new Date(r.batida);
+            const nome = (r.colaboradores && r.colaboradores.nome) || "colaborador";
+            mapa[r.id] = nome + " · " + r.tipo + " " + dt.toLocaleDateString("pt-BR").slice(0, 5) + " " + dt.toLocaleTimeString("pt-BR", { hour: "2-digit", minute: "2-digit" });
+          });
+          setPontoRef(mapa);
+        });
+      });
     return () => { vivo = false; };
   }, []);
 
@@ -513,9 +530,9 @@ function PaginaAuditoria() {
     const q = busca.trim().toLowerCase();
     if (!q) return linhas;
     return linhas.filter((l) =>
-      [l.user_nome, l.acao, l.modulo, l.entidade, l.entidade_id].some((v) => String(v || "").toLowerCase().indexOf(q) !== -1)
+      [l.user_nome, l.acao, l.modulo, l.entidade, l.entidade_id, pontoRef[l.entidade_id]].some((v) => String(v || "").toLowerCase().indexOf(q) !== -1)
     );
-  }, [linhas, busca]);
+  }, [linhas, busca, pontoRef]);
 
   return (
     <div>
@@ -545,7 +562,9 @@ function PaginaAuditoria() {
               <div style={{ fontSize: 13, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>
                 <span style={{ fontWeight: 600 }}>{l.user_nome || "Alguém"}</span>{" "}
                 <span style={{ color: "var(--sec)" }}>{VERBOS[l.acao] || l.acao}</span>{" "}
-                {l.entidade && <span style={{ color: "var(--sec)" }}>{l.entidade}{l.entidade_id && l.entidade_id !== "?" ? " · " + String(l.entidade_id).slice(0, 8) : ""}</span>}
+                {l.entidade === "ponto_registros" && pontoRef[l.entidade_id] !== undefined
+                  ? <span style={{ color: "var(--sec)" }} title={l.entidade_id}>batida · <b style={{ color: "var(--ink)", fontWeight: 600 }}>{pontoRef[l.entidade_id] || "registro excluído"}</b></span>
+                  : (l.entidade && <span style={{ color: "var(--sec)" }}>{l.entidade}{l.entidade_id && l.entidade_id !== "?" ? " · " + String(l.entidade_id).slice(0, 8) : ""}</span>)}
               </div>
               <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 1 }}>
                 {l.modulo || "sistema"} · {tempoRelativo(l.created_at)}
