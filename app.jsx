@@ -295,7 +295,7 @@ function TelaLogin() {
 // ------------------------------------------------------------
 // Sidebar flutuante (3 estados: exp, rail, oculta)
 // ------------------------------------------------------------
-function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard }) {
+function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, podeSimular, aoSimular, simulando }) {
   const [celAberta, setCelAberta] = useState(false);
   const visiveis = MODULOS.filter((m) => nivelModulo(ctx, m.id) !== "oculto");
   const principais = visiveis.filter((m) => m.id !== "configuracoes" && m.id !== "conta");
@@ -369,11 +369,17 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <div style={{ fontSize: 12.5, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{ctx.profile.nome}</div>
             <div style={{ fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{exibirPerfil(ctx.perfilNome)}</div>
           </div>
+          {podeSimular && (
+            <button className="btn-fantasma" onClick={aoSimular} aria-label="Ver como outro perfil" title="Ver o sistema como outro perfil"
+              style={{ width: 28, height: 28, flex: "none", color: simulando ? "var(--ambar)" : undefined }}>
+              <i className="ti ti-spy" style={{ fontSize: 15 }} aria-hidden="true"></i>
+            </button>
+          )}
           <button className="btn-fantasma" onClick={aoSair} aria-label="Sair" title="Sair" style={{ width: 28, height: 28, flex: "none" }}>
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v73</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v74</div>
       </aside>
     </React.Fragment>
   );
@@ -7855,7 +7861,54 @@ function RecuperarSenha() {
   </PortalCP>);
 }
 
+function EscolherPerfilSim({ aoEscolher, aoFechar, simulandoId }) {
+  const [lista, setLista] = useState(null);
+  useEffect(() => {
+    let vivo = true;
+    sb.from("perfis").select("id, nome, acesso_total").order("acesso_total", { ascending: false }).order("nome")
+      .then(({ data }) => { if (vivo) setLista(data || []); });
+    return () => { vivo = false; };
+  }, []);
+  return (<PortalCP>
+    <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.42)", zIndex: 290, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}
+      onClick={(e) => { if (e.target === e.currentTarget) aoFechar(); }}>
+      <div className="card-fl anim-pop" style={{ width: "100%", maxWidth: 360, padding: "22px 22px 16px", background: "#fff" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 4 }}>
+          <i className="ti ti-spy" style={{ fontSize: 19, color: "var(--marca)" }} aria-hidden="true"></i>
+          <span style={{ fontWeight: 700, fontSize: 15.5, flex: 1 }}>Ver como outro perfil</span>
+          <button className="btn-fantasma" aria-label="Fechar" onClick={aoFechar}><i className="ti ti-x" aria-hidden="true"></i></button>
+        </div>
+        <p style={{ fontSize: 12, color: "var(--sec)", marginBottom: 12 }}>Troca só a interface, para testar permissões. Seu acesso real no banco continua o mesmo.</p>
+        {!lista && <div style={{ padding: 14, fontSize: 12.5, color: "var(--muted)" }}>Carregando…</div>}
+        {lista && lista.map((p) => (
+          <button key={p.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 9, width: "100%", textAlign: "left", padding: "9px 10px", borderRadius: 9, border: "none", background: "none", cursor: "pointer", fontFamily: "inherit", fontSize: 13 }}
+            onClick={() => aoEscolher(p)}>
+            <i className={"ti " + (p.acesso_total ? "ti-shield-check" : "ti-user")} style={{ fontSize: 15, color: "var(--muted)" }} aria-hidden="true"></i>
+            <span style={{ flex: 1, fontWeight: 600 }}>{p.nome}</span>
+            {simulandoId === p.id && <span className="chip" style={{ background: "var(--ambar-bg)", color: "var(--ambar)" }}>ativo</span>}
+          </button>
+        ))}
+      </div>
+    </div>
+  </PortalCP>);
+}
+
 function Shell({ ctx, aoSair }) {
+  const [simPerfil, setSimPerfil] = useState(null);
+  const [simPerms, setSimPerms] = useState(null);
+  const [simAbrir, setSimAbrir] = useState(false);
+  const ctxReal = ctx;
+  if (simPerfil && simPerms) {
+    ctx = { ...ctxReal, acessoTotal: !!simPerfil.acesso_total, permissoes: simPerms, perfilNome: simPerfil.nome, simulando: simPerfil.nome };
+  }
+  async function ativarSimulacao(p) {
+    if (p === null) { setSimPerfil(null); setSimPerms(null); setSimAbrir(false); return; }
+    const { data } = await sb.from("permissoes").select("modulo, aba, nivel").eq("perfil_id", p.id);
+    setSimPerms(data || []);
+    setSimPerfil(p);
+    setSimAbrir(false);
+    registrarEvento("ver", "sistema", "Simulação de perfil: " + p.nome);
+  }
   const [meuCard, setMeuCard] = useState(null);
   const [alertasExc, setAlertasExc] = useState([]);
   const [meuEmailDir, setMeuEmailDir] = useState("");
@@ -7946,7 +7999,15 @@ function Shell({ ctx, aoSair }) {
   return (
     <div className="casca-app" style={{ minHeight: "100vh", background: "var(--fundo)", display: "flex", gap: 14, padding: 14, alignItems: "stretch" }}>
       <RecuperarSenha />
-      <Sidebar meuCard={meuCard} ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} />
+      {simAbrir && <EscolherPerfilSim aoEscolher={ativarSimulacao} aoFechar={() => setSimAbrir(false)} simulandoId={simPerfil && simPerfil.id} />}
+      {simPerfil && (<PortalCP>
+        <div style={{ position: "fixed", top: 10, left: "50%", transform: "translateX(-50%)", zIndex: 300, background: "var(--ambar-bg)", border: "1px solid var(--ambar)", color: "var(--ambar)", borderRadius: 999, padding: "6px 8px 6px 14px", display: "flex", alignItems: "center", gap: 9, boxShadow: "0 6px 20px rgba(28,37,48,.16)", fontSize: 12.5, fontWeight: 600, maxWidth: "calc(100vw - 24px)", flexWrap: "wrap", justifyContent: "center" }}>
+          <i className="ti ti-spy" style={{ fontSize: 15 }} aria-hidden="true"></i>
+          <span>Vendo como: {simPerfil.nome} · só a interface</span>
+          <button onClick={() => ativarSimulacao(null)} style={{ background: "var(--ambar)", color: "#fff", border: "none", borderRadius: 999, padding: "4px 11px", fontSize: 12, fontWeight: 700, cursor: "pointer", fontFamily: "inherit" }}>Voltar ao meu perfil</button>
+        </div>
+      </PortalCP>)}
+      <Sidebar meuCard={meuCard} ctx={ctx} pagina={pagina} setPagina={setPagina} estado={sbEstado} setEstado={setSbEstado} aoSair={aoSair} podeSimular={ctxReal.acessoTotal} aoSimular={() => setSimAbrir(true)} simulando={!!simPerfil} />
       <main className="conteudo-app" style={{ flex: 1, minWidth: 0, padding: "6px 6px 20px", paddingLeft: sbEstado === "oculta" ? 64 : 6, transition: "padding-left .3s var(--mola)" }}>
         <Topo ctx={ctx} />
         {pagina !== "painel" && (
