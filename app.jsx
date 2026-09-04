@@ -373,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v68</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v69</div>
       </aside>
     </React.Fragment>
   );
@@ -6960,6 +6960,10 @@ function icoLinkCP(url) {
   return "ti-external-link";
 }
 
+function PortalCP({ children }) {
+  return ReactDOM.createPortal(children, document.body);
+}
+
 const AREAS_REU = ["Geral / Direção", "ABA", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Terapia Infantil (EQ2)", "Call Center", "Recepção", "Administrativo / Financeiro", "RH"];
 const LISTAS_REU = [
   ["topico", "Tópicos discutidos", "ti-list-details", "and", "ti-point-filled"],
@@ -7200,7 +7204,7 @@ function PaginaReunioes({ ctx }) {
         </React.Fragment>
       )}
 
-      {R && (
+      {R && (<PortalCP>
         <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) { setAberto(null); setEd(null); } }}>
           <div className="cp-pop anim-pop">
             <div className="cp-pop-cab">
@@ -7273,7 +7277,7 @@ function PaginaReunioes({ ctx }) {
             </div>
           </div>
         </div>
-      )}
+      </PortalCP>)}
     </div>
   );
 }
@@ -7498,7 +7502,7 @@ function PaginaProjetos({ ctx }) {
         </React.Fragment>
       )}
 
-      {P && (
+      {P && (<PortalCP>
         <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) { setAberto(null); setEd(null); setAba("situacao"); } }}>
           <div className="cp-pop anim-pop">
             <div className="cp-pop-cab">
@@ -7663,7 +7667,7 @@ function PaginaProjetos({ ctx }) {
             )}
           </div>
         </div>
-      )}
+      </PortalCP>)}
     </div>
   );
 }
@@ -7693,7 +7697,7 @@ function RecuperarSenha() {
     setMsgR("✓ Senha alterada — você já está conectado.");
     setTimeout(function () { setAtivo(false); }, 1600);
   }
-  return (
+  return (<PortalCP>
     <div style={{ position: "fixed", inset: 0, background: "rgba(28,37,48,.42)", zIndex: 200, display: "flex", alignItems: "center", justifyContent: "center", padding: 20 }}>
       <div className="card-fl anim-pop" style={{ width: "100%", maxWidth: 380, padding: "26px 26px 22px", background: "#fff" }}>
         <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 6 }}>
@@ -7709,7 +7713,7 @@ function RecuperarSenha() {
         <button className="btn-primaria" disabled={salvandoR} onClick={salvarSenha} style={{ width: "100%", justifyContent: "center" }}>{salvandoR ? "Salvando…" : "Salvar nova senha"}</button>
       </div>
     </div>
-  );
+  </PortalCP>);
 }
 
 function Shell({ ctx, aoSair }) {
