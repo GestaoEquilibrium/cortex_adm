@@ -373,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v69</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v70</div>
       </aside>
     </React.Fragment>
   );
@@ -1984,7 +1984,40 @@ function corSetor(s) {
   return CORES_SETOR[k] || ["var(--branco, #fff)", "var(--sec)"];
 }
 
-function AbaOrganograma({ ctx }) {
+function OrganogramaTelaCheia({ ctx, aoFechar }) {
+  const ref = React.useRef(null);
+  useEffect(() => {
+    function tecla(e) { if (e.key === "Escape" && !document.fullscreenElement) aoFechar(); }
+    window.addEventListener("keydown", tecla);
+    return () => window.removeEventListener("keydown", tecla);
+  }, []);
+  function fechar() {
+    try { if (document.fullscreenElement) document.exitFullscreen(); } catch (e) {}
+    aoFechar();
+  }
+  function monitor() {
+    try {
+      if (document.fullscreenElement) document.exitFullscreen();
+      else if (ref.current && ref.current.requestFullscreen) ref.current.requestFullscreen();
+    } catch (e) {}
+  }
+  return (<PortalCP>
+    <div ref={ref} style={{ position: "fixed", inset: 0, background: "var(--fundo)", zIndex: 150, display: "flex", flexDirection: "column" }}>
+      <div style={{ display: "flex", alignItems: "center", gap: 10, padding: "12px 16px", borderBottom: "1px solid var(--linha)", background: "var(--branco)", flex: "none" }}>
+        <i className="ti ti-sitemap" style={{ fontSize: 19, color: "var(--marca)" }} aria-hidden="true"></i>
+        <span style={{ fontWeight: 700, fontSize: 15.5, flex: 1, minWidth: 0 }}>Organograma — tela cheia</span>
+        <button className="btn-contorno" style={{ padding: "7px 12px", fontSize: 12.5 }} onClick={monitor} title="Ocupar o monitor inteiro (F11 do organograma)">
+          <i className="ti ti-arrows-maximize" style={{ marginRight: 5 }} aria-hidden="true"></i>Monitor inteiro</button>
+        <button className="btn-fantasma" aria-label="Fechar tela cheia" onClick={fechar}><i className="ti ti-x" aria-hidden="true"></i></button>
+      </div>
+      <div style={{ flex: 1, minHeight: 0, overflow: "auto", padding: 14 }}>
+        <AbaOrganograma ctx={ctx} telaCheia={true} />
+      </div>
+    </div>
+  </PortalCP>);
+}
+
+function AbaOrganograma({ ctx, telaCheia }) {
   const podeEditar = nivelAba(ctx, "rh", "organograma") === "editar";
 
   // ---- mapa navegavel (sprint 41): zoom + arrastar + setas ----
@@ -2025,6 +2058,7 @@ function AbaOrganograma({ ctx }) {
   const [edit, setEdit] = useState(null);
   const [novo, setNovo] = useState(null);
   const [pop, setPop] = useState(null);
+  const [cheio, setCheio] = useState(false);
   const [verSoltos, setVerSoltos] = useState(false);
   const popTimer = useRef(null);
 
@@ -2212,6 +2246,12 @@ function AbaOrganograma({ ctx }) {
           <span style={{ fontSize: 12, color: "var(--muted)" }}>
             {colabs.length} pessoa(s) · {colabs.length - arvore.soltos.length} no organograma · {arvore.soltos.length} sem vínculo
           </span>
+        )}
+        {!telaCheia && cheio && <OrganogramaTelaCheia ctx={ctx} aoFechar={() => setCheio(false)} />}
+        {!telaCheia && (
+          <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={() => setCheio(true)} title="Abrir o organograma em tela cheia">
+            <i className="ti ti-maximize" style={{ marginRight: 5 }} aria-hidden="true"></i>Tela cheia
+          </button>
         )}
         {podeEditar && (
           <button className="btn-contorno" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={() => (novo ? setNovo(null) : abrirNovo(""))}>
