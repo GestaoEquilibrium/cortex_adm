@@ -27,6 +27,7 @@ const MODULOS = [
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo" },
+  { id: "reunioes",      rotulo: "Reuniões",       icone: "ti-notebook",         cor: "#B45309",              fundo: "#FCF0E4",            status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
   { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
@@ -372,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v66</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v67</div>
       </aside>
     </React.Fragment>
   );
@@ -6959,6 +6960,324 @@ function icoLinkCP(url) {
   return "ti-external-link";
 }
 
+const AREAS_REU = ["Geral / Direção", "ABA", "Neuropsicologia", "Fonoaudiologia", "Psicologia Clínica", "Terapia Infantil (EQ2)", "Call Center", "Recepção", "Administrativo / Financeiro", "RH"];
+const LISTAS_REU = [
+  ["topico", "Tópicos discutidos", "ti-list-details", "and", "ti-point-filled"],
+  ["decisao", "Decisões", "ti-checks", "ok", "ti-circle-check-filled"],
+  ["ideia", "Ideias", "ti-bulb", "regra", "ti-bulb"],
+  ["pendencia", "Fica para a próxima", "ti-clock-pause", "dec", "ti-alert-circle-filled"],
+];
+const dBRreu = (iso) => (iso ? iso.slice(8, 10) + "/" + iso.slice(5, 7) + "/" + iso.slice(0, 4) : "");
+function segReu(iso) {
+  const t = new Date(iso + "T12:00:00Z"); const w = t.getUTCDay();
+  t.setUTCDate(t.getUTCDate() + (w === 0 ? -6 : 1 - w));
+  return t.toISOString().slice(0, 10);
+}
+function addDreu(iso, n) { const t = new Date(iso + "T12:00:00Z"); t.setUTCDate(t.getUTCDate() + n); return t.toISOString().slice(0, 10); }
+
+function gerarAtaReuniao(r, its) {
+  const E = EQ_PDF, W = 210, ML = 16, MR = 16;
+  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4" });
+  let y = 26;
+  const cx0 = ML + 4, cy0 = 13, r0 = 3.4;
+  doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.6); doc.setLineCap("round");
+  [90, 0, 45, 135].forEach(function (ang) {
+    const a = ang * Math.PI / 180, dx = r0 * Math.cos(a), dy = r0 * Math.sin(a);
+    doc.line(cx0 - dx, cy0 - dy, cx0 + dx, cy0 + dy);
+  });
+  doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(12);
+  doc.text("GRUPO EQUILIBRIUM", ML + 11, 12);
+  doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text("Ata de reunião", ML + 11, 16.6);
+  doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+  doc.setFillColor(E.CAMPO[0], E.CAMPO[1], E.CAMPO[2]);
+  doc.roundedRect(ML, y - 4, W - ML - MR, 22, 2.5, 2.5, "FD");
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.4);
+  doc.text("REUNIÃO", ML + 5, y); doc.text("DATA", ML + 118, y); doc.text("ÁREA / SETOR", ML + 145, y);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFontSize(9.4);
+  doc.text(String(r.titulo || "").slice(0, 62), ML + 5, y + 5);
+  doc.setFontSize(8.6); doc.setFont("helvetica", "normal");
+  doc.text(dBRreu(r.data), ML + 118, y + 5);
+  doc.text(String(r.area || "—").slice(0, 26), ML + 145, y + 5);
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.4);
+  doc.text("PARTICIPANTES", ML + 5, y + 10.4);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(8.2);
+  doc.text(doc.splitTextToSize(String(r.participantes || "—"), W - ML - MR - 10), ML + 5, y + 14.4);
+  y += 26;
+  function quebra(alt) { if (y + alt > 276) { doc.addPage(); y = 20; } }
+  function secao(tit, linhas) {
+    if (!linhas.length) return;
+    quebra(14);
+    doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(8.2);
+    doc.text(tit.toUpperCase(), ML, y); y += 1.6;
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.line(ML, y, W - MR, y); y += 4.2;
+    doc.setFont("helvetica", "normal"); doc.setFontSize(8.6); doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]);
+    linhas.forEach(function (ln) {
+      const tx = doc.splitTextToSize(ln, W - ML - MR - 6);
+      quebra(tx.length * 4.2 + 2);
+      doc.circle(ML + 1.4, y - 1.1, 0.7, "F");
+      doc.text(tx, ML + 5, y);
+      y += tx.length * 4.2 + 1.6;
+    });
+    y += 3.4;
+  }
+  if (r.resumo) secao("Resumo", [String(r.resumo)]);
+  const de = (tipo) => (its[tipo] || []).map((i) => i.texto);
+  secao("Tópicos discutidos", de("topico"));
+  secao("Decisões", de("decisao"));
+  secao("Ações e encaminhamentos", (its.acao || []).map((i) => (i.rotulo ? i.rotulo + " — " : "") + i.texto));
+  secao("Ideias", de("ideia"));
+  secao("Fica para a próxima", de("pendencia"));
+  const nP = doc.getNumberOfPages();
+  for (let i = 1; i <= nP; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+    doc.line(ML, 285, W - MR, 285);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(6.6);
+    doc.text("Grupo Equilibrium · CORTEX Gestão · Ata registrada no módulo Reuniões", ML, 289);
+    doc.text(i + " / " + nP, W - MR, 289, { align: "right" });
+  }
+  doc.save("Ata_" + String(r.area || "reuniao").replace(/[^a-z0-9]+/gi, "_") + "_" + String(r.data || "") + ".pdf");
+}
+
+function PaginaReunioes({ ctx }) {
+  const [lista, setLista] = useState(null);
+  const [itens, setItens] = useState({});
+  const [busca, setBusca] = useState("");
+  const [fArea, setFArea] = useState("todas");
+  const [aberto, setAberto] = useState(null);
+  const [ed, setEd] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const podeEditar = nivelModulo(ctx, "reunioes") === "editar";
+  const hintReu = (e) => "Erro: " + e.message + (e.message.indexOf("reunioes") !== -1 ? " — rode o 38_reunioes.sql." : "");
+
+  async function carregar() {
+    const rr = await sb.from("reunioes").select("*").order("data", { ascending: false }).order("criado_em", { ascending: false }).limit(1200);
+    if (rr.error) { setMsg(hintReu(rr.error)); return; }
+    const ri = await sb.from("reunioes_itens").select("*").order("ordem").limit(20000);
+    if (ri.error) { setMsg(hintReu(ri.error)); return; }
+    const mapa = {};
+    (ri.data || []).forEach(function (it) {
+      if (!mapa[it.reuniao_id]) mapa[it.reuniao_id] = {};
+      if (!mapa[it.reuniao_id][it.tipo]) mapa[it.reuniao_id][it.tipo] = [];
+      mapa[it.reuniao_id][it.tipo].push(it);
+    });
+    setMsg(""); setLista(rr.data || []); setItens(mapa);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const its = (r, tipo) => ((itens[r.id] || {})[tipo] || []);
+  const visiveis = useMemo(() => {
+    const t = busca.trim().toLowerCase();
+    return (lista || []).filter(function (r) {
+      if (fArea !== "todas" && r.area !== fArea) return false;
+      if (!t) return true;
+      const blob = [r.titulo, r.area, r.participantes, r.resumo].join(" ").toLowerCase();
+      if (blob.indexOf(t) !== -1) return true;
+      const ii = itens[r.id] || {};
+      return Object.keys(ii).some((k) => ii[k].some((x) => ((x.rotulo || "") + " " + x.texto).toLowerCase().indexOf(t) !== -1));
+    });
+  }, [lista, itens, busca, fArea]);
+
+  const semanas = useMemo(() => {
+    const g = {};
+    visiveis.forEach(function (r) { const s = segReu(r.data); if (!g[s]) g[s] = []; g[s].push(r); });
+    return Object.keys(g).sort().reverse().map((s) => ({ seg: s, reunioes: g[s] }));
+  }, [visiveis]);
+
+  function abrirEditor(r) {
+    setEd({
+      id: r.id, titulo: r.titulo || "", data: r.data || "", area: r.area || "Geral / Direção",
+      participantes: r.participantes || "", resumo: r.resumo || "",
+      listas: LISTAS_REU.reduce(function (a, par) { a[par[0]] = its(r, par[0]).map((i) => i.texto).join("\n"); return a; }, {}),
+      acoes: its(r, "acao").map((i) => ({ _k: i.id, resp: i.rotulo || "", t: i.texto || "" })),
+    });
+  }
+
+  async function salvarEd() {
+    if (!ed) return;
+    setSalvando(true); setMsg("");
+    const upd = await sb.from("reunioes").update({
+      titulo: ed.titulo.trim() || "Reunião", data: ed.data || new Date().toISOString().slice(0, 10),
+      area: ed.area.trim() || "Geral / Direção", participantes: ed.participantes.trim() || null,
+      resumo: ed.resumo.trim() || null,
+      atualizado_em: new Date().toISOString(), atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).eq("id", ed.id);
+    if (upd.error) { setSalvando(false); setMsg(hintReu(upd.error)); return; }
+    const del = await sb.from("reunioes_itens").delete().eq("reuniao_id", ed.id);
+    if (del.error) { setSalvando(false); setMsg(hintReu(del.error)); return; }
+    const novos = []; let ord = 0;
+    LISTAS_REU.forEach(function (par) {
+      (ed.listas[par[0]] || "").split("\n").map((x) => x.trim()).filter(Boolean).forEach(function (t) {
+        novos.push({ reuniao_id: ed.id, tipo: par[0], rotulo: null, texto: t, ordem: ord++ });
+      });
+    });
+    ed.acoes.forEach(function (a) { if (a.t.trim() || a.resp.trim()) novos.push({ reuniao_id: ed.id, tipo: "acao", rotulo: a.resp.trim() || null, texto: a.t.trim() || "—", ordem: ord++ }); });
+    if (novos.length) {
+      const ins = await sb.from("reunioes_itens").insert(novos);
+      if (ins.error) { setSalvando(false); setMsg(hintReu(ins.error)); return; }
+    }
+    registrarEvento("editar", "reunioes", "Ata atualizada: " + (ed.titulo || "") + " (" + dBRreu(ed.data) + ")");
+    setSalvando(false); setEd(null); await carregar(); setMsg("✓ Ata salva no banco.");
+  }
+
+  async function novaReuniao() {
+    const hoje = new Date().toISOString().slice(0, 10);
+    const r = await sb.from("reunioes").insert({
+      titulo: "Reunião de " + dBRreu(hoje), data: hoje, area: "Geral / Direção",
+      criado_por: ctx.profile.nome || ctx.profile.email, atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).select("*").single();
+    if (r.error) { setMsg(hintReu(r.error)); return; }
+    registrarEvento("criar", "reunioes", "Reunião criada: " + r.data.titulo);
+    await carregar(); setAberto(r.data.id); abrirEditor(r.data);
+  }
+
+  async function excluirReu(r) {
+    if (!window.confirm('Excluir a ata "' + r.titulo + '" de ' + dBRreu(r.data) + "? A exclusão fica na auditoria.")) return;
+    const del = await sb.from("reunioes").delete().eq("id", r.id);
+    if (del.error) { setMsg(hintReu(del.error)); return; }
+    registrarEvento("excluir", "reunioes", "Ata excluída: " + r.titulo + " (" + dBRreu(r.data) + ")");
+    setEd(null); setAberto(null); carregar();
+  }
+
+  const R = (lista || []).find((x) => x.id === aberto) || null;
+
+  return (
+    <div className="anim-pop">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>Reuniões</div>
+          <div style={{ fontSize: 12.5, color: "var(--sec)" }}>Atas semanais por área — tópicos, decisões, ações e ideias</div>
+        </div>
+        {podeEditar && <button className="btn-primaria" onClick={novaReuniao}><i className="ti ti-plus" aria-hidden="true"></i>Nova reunião</button>}
+      </div>
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)", fontWeight: 600 }}>{msg}</div>}
+      {!lista && <div style={{ padding: 30, color: "var(--muted)", fontSize: 13 }}>Carregando…</div>}
+      {lista && (
+        <React.Fragment>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <input className="campo" type="search" placeholder="Buscar em títulos, participantes e itens" style={{ flex: 1, minWidth: 200 }} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <div className="cp-filtros">
+              {[["todas", "Todas"]].concat(AREAS_REU.filter((a) => lista.some((r) => r.area === a)).map((a) => [a, a])).map(([v, r]) => (
+                <button key={v} className={"cp-filtro" + (fArea === v ? " on" : "")} onClick={() => setFArea(v)}>{r}</button>
+              ))}
+            </div>
+          </div>
+          {semanas.length === 0 && (
+            <div className="cp-vazio"><i className="ti ti-notebook" aria-hidden="true"></i>{busca || fArea !== "todas" ? "Nenhuma ata com esse filtro." : "Nenhuma reunião registrada ainda. Clique em Nova reunião para abrir a primeira ata."}</div>
+          )}
+          {semanas.map(function (sem) {
+            return (
+              <React.Fragment key={sem.seg}>
+                <div className="cp-frente"><i className="ti ti-calendar-week" aria-hidden="true"></i>Semana de {dBRreu(sem.seg).slice(0, 5)} a {dBRreu(addDreu(sem.seg, 6)).slice(0, 5)} · {sem.seg.slice(0, 4)}<s></s></div>
+                <div className="cp-grade">
+                  {sem.reunioes.map(function (r) {
+                    const nT = its(r, "topico").length, nD = its(r, "decisao").length, nA = its(r, "acao").length, nI = its(r, "ideia").length;
+                    return (
+                      <button key={r.id} className="card-fl clicavel cp-proj" onClick={() => { setAberto(r.id); setEd(null); }}>
+                        <div className="cp-proj-topo">
+                          <span className="cp-proj-ico" style={{ background: "#FCF0E4", color: "#B45309" }}><i className="ti ti-notebook" aria-hidden="true"></i></span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span className="cp-proj-nome">{r.titulo}</span>
+                            <span className="cp-proj-res">{dBRreu(r.data)}{r.participantes ? " · " + r.participantes : ""}</span>
+                          </span>
+                          <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{r.area}</span>
+                        </div>
+                        {r.resumo && <div className="cp-proj-passo">{r.resumo}</div>}
+                        <div className="cp-proj-pe">
+                          <span style={{ fontSize: 11.5, fontWeight: 600, color: "var(--muted)" }}>
+                            {nT} tópico(s) · {nD} decisão(ões) · {nA} ação(ões){nI ? " · " + nI + " ideia(s)" : ""}
+                          </span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </React.Fragment>
+      )}
+
+      {R && (
+        <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) { setAberto(null); setEd(null); } }}>
+          <div className="cp-pop anim-pop">
+            <div className="cp-pop-cab">
+              <div className="cp-pop-cab-top">
+                <span className="cp-proj-ico" style={{ background: "#FCF0E4", color: "#B45309" }}><i className="ti ti-notebook" aria-hidden="true"></i></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2>{R.titulo}</h2>
+                  <div className="cp-pop-meta">{dBRreu(R.data)} · {R.area}</div>
+                </div>
+                <button className="btn-fantasma" aria-label="Fechar" onClick={() => { setAberto(null); setEd(null); }}><i className="ti ti-x" aria-hidden="true"></i></button>
+              </div>
+              <div style={{ paddingBottom: 12 }}></div>
+            </div>
+            <div className="cp-pop-corpo">
+              {!ed && (
+                <React.Fragment>
+                  {R.participantes && (
+                    <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-users" aria-hidden="true"></i>Participantes</div>
+                      <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+                        {R.participantes.split(",").map((p) => p.trim()).filter(Boolean).map((p, i) => <span key={i} className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)" }}>{p}</span>)}
+                      </div>
+                    </div>
+                  )}
+                  {R.resumo && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-align-left" aria-hidden="true"></i>Resumo</div><p>{R.resumo}</p></div>}
+                  <BlocoCP tit="Tópicos discutidos" ico="ti-list-details" cls="and" icoItem="ti-point-filled" lista={its(R, "topico")} />
+                  <BlocoCP tit="Decisões" ico="ti-checks" cls="ok" icoItem="ti-circle-check-filled" lista={its(R, "decisao")} />
+                  {its(R, "acao").length > 0 && (
+                    <div className="cp-sec">
+                      <div className="cp-sec-tit"><i className="ti ti-target-arrow" aria-hidden="true"></i>Ações e encaminhamentos</div>
+                      <ul className="cp-lista">{its(R, "acao").map((a) => (
+                        <li key={a.id} className="falta"><i className="ti ti-square" aria-hidden="true"></i>{a.rotulo ? <b style={{ color: "var(--marca-texto)" }}>{a.rotulo} — </b> : null}{a.texto}</li>
+                      ))}</ul>
+                    </div>
+                  )}
+                  <BlocoCP tit="Ideias" ico="ti-bulb" cls="regra" icoItem="ti-bulb" lista={its(R, "ideia")} />
+                  <BlocoCP tit="Fica para a próxima" ico="ti-clock-pause" cls="dec" icoItem="ti-alert-circle-filled" lista={its(R, "pendencia")} />
+                </React.Fragment>
+              )}
+              {ed && (
+                <React.Fragment>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Título</label><input className="campo" style={{ width: "100%" }} value={ed.titulo} onChange={(e) => setEd({ ...ed, titulo: e.target.value })} /></div>
+                    <div className="cp-ed-lin"><label>Data</label><input className="campo" type="date" style={{ width: "100%" }} value={ed.data} onChange={(e) => setEd({ ...ed, data: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Área / setor</label>
+                      <input className="campo" style={{ width: "100%" }} list="reuAreas" value={ed.area} onChange={(e) => setEd({ ...ed, area: e.target.value })} />
+                      <datalist id="reuAreas">{AREAS_REU.concat((lista || []).map((x) => x.area)).filter((v, i, a) => v && a.indexOf(v) === i).map((a) => <option key={a} value={a} />)}</datalist>
+                    </div>
+                    <div className="cp-ed-lin"><label>Participantes · separados por vírgula</label><input className="campo" style={{ width: "100%" }} value={ed.participantes} onChange={(e) => setEd({ ...ed, participantes: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-lin"><label>Resumo</label><textarea className="campo" style={{ width: "100%", minHeight: 58, resize: "vertical" }} value={ed.resumo} onChange={(e) => setEd({ ...ed, resumo: e.target.value })} /></div>
+                  {LISTAS_REU.map(([k, rot]) => (
+                    <div key={k} className="cp-ed-lin"><label>{rot} · um por linha</label>
+                      <textarea className="campo" style={{ width: "100%", minHeight: 72, resize: "vertical" }} value={ed.listas[k]} onChange={(e) => setEd({ ...ed, listas: { ...ed.listas, [k]: e.target.value } })} />
+                    </div>
+                  ))}
+                  <div className="cp-ed-sep"><i className="ti ti-target-arrow" aria-hidden="true"></i>Ações e encaminhamentos</div>
+                  <RepCP ed={ed} setEd={setEd} campo="acoes" cols={[{ k: "resp", ph: "Responsável", f: 1 }, { k: "t", ph: "O que foi encaminhado", f: 3 }]} />
+                  <div className="cp-ed-sep" style={{ color: "var(--vermelho)" }}><i className="ti ti-trash" aria-hidden="true"></i>Zona de risco</div>
+                  <button className="cp-perigo" onClick={() => excluirReu(R)}><i className="ti ti-trash" aria-hidden="true"></i>Excluir esta ata</button>
+                </React.Fragment>
+              )}
+            </div>
+            <div className="cp-pop-pe">
+              {!ed && <button className="btn-contorno" onClick={() => gerarAtaReuniao(R, itens[R.id] || {})}><i className="ti ti-file-type-pdf" aria-hidden="true"></i>Ata em PDF</button>}
+              {!ed && podeEditar && <button className="btn-primaria" onClick={() => abrirEditor(R)}><i className="ti ti-edit" aria-hidden="true"></i>Editar</button>}
+              {ed && <button className="btn-primaria" disabled={salvando} onClick={salvarEd}><i className="ti ti-check" aria-hidden="true"></i>{salvando ? "Salvando…" : "Salvar no banco"}</button>}
+              {ed && <button className="btn-contorno" onClick={() => setEd(null)}>Cancelar</button>}
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
 function BlocoCP({ tit, ico, cls, icoItem, lista }) {
   if (!lista || !lista.length) return null;
   return (
@@ -7457,6 +7776,8 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaPee ctx={ctx} />;
   } else if (pagina === "projetos") {
         conteudo = <PaginaProjetos ctx={ctx} />;
+      } else if (pagina === "reunioes") {
+        conteudo = <PaginaReunioes ctx={ctx} />;
       } else if (pagina === "callcenter") {
     conteudo = <PaginaCallCenter ctx={ctx} />;
   } else if (pagina === "demandas") {

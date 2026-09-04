@@ -1,7 +1,7 @@
  // CORTEX Gestao - service worker (sprint 34)
 // Estrategia: SEMPRE rede primeiro (nunca serve versao velha com
 // internet); o cache so entra quando estiver sem conexao.
-const CACHE = "cortex-v66";
+const CACHE = "cortex-v67";
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (e) {
   e.waitUntil(
