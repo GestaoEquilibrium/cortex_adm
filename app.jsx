@@ -373,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v70</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v71</div>
       </aside>
     </React.Fragment>
   );
@@ -1543,10 +1543,16 @@ function AbaPonto({ ctx }) {
     return h + "h" + String(mi).padStart(2, "0");
   }
 
+  function nomeColabPonto(id) {
+    return (((colabs || []).find((c) => c.id === id) || {}).nome) || "colaborador";
+  }
+
   async function excluirBatida(r) {
     if (!window.confirm("Excluir esta batida de " + horaLocal(r.batida) + "? A exclusão fica na auditoria.")) return;
     const { error } = await sb.from("ponto_registros").delete().eq("id", r.id);
     if (error) { setMsg("Erro: " + error.message); return; }
+    const dt = new Date(r.batida);
+    registrarEvento("excluir", "rh", "Batida excluída: " + nomeColabPonto(r.colaborador_id || colabSel) + " · " + r.tipo + " " + dt.toLocaleDateString("pt-BR") + " " + horaLocal(r.batida));
     carregarHoje(); carregarEspelho();
   }
 
@@ -1559,6 +1565,7 @@ function AbaPonto({ ctx }) {
       obs: "Adicionado por " + ((ctx.profile && ctx.profile.nome) || "gestão"),
     });
     if (error) { setMsg("Erro: " + error.message); return; }
+    registrarEvento("criar", "rh", "Batida manual: " + nomeColabPonto(colabSel) + " · " + addTipo + " " + addDia.split("-").reverse().join("/") + " " + addHora);
     setMsg(""); setAddDia(""); setAddHora("");
     carregarHoje(); carregarEspelho();
   }
