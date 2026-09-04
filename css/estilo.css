@@ -602,8 +602,8 @@ html, button, [role="button"], .clicavel, .item-menu, .chip, a, .campo {
 .cp-fundo{position:fixed;inset:0;background:rgba(28,37,48,.38);z-index:80;display:flex;align-items:center;
   justify-content:center;padding:20px;backdrop-filter:blur(1.5px)}
 .cp-pop{width:100%;max-width:760px;background:#fff;border:1px solid var(--linha);border-radius:16px;
-  box-shadow:0 24px 70px rgba(28,37,48,.24);max-height:90vh;display:flex;flex-direction:column}
-.cp-pop-cab{padding:16px 18px 0;flex:none}
+  box-shadow:0 24px 70px rgba(28,37,48,.24);max-height:90vh;display:flex;flex-direction:column;overflow:hidden}
+.cp-pop-cab{padding:16px 18px 0;flex:none;background:#fff}
 .cp-pop-cab-top{display:flex;align-items:flex-start;gap:12px;padding-bottom:13px}
 .cp-pop-cab .cp-proj-ico{width:42px;height:42px;border-radius:12px;font-size:22px}
 .cp-pop-cab h2{font-size:17px;font-weight:700;line-height:1.2;margin:0}
@@ -614,7 +614,7 @@ html, button, [role="button"], .clicavel, .item-menu, .chip, a, .campo {
   cursor:pointer;font-family:inherit;transition:color .15s,border-color .15s}
 .cp-aba:hover{color:var(--marca-texto)}
 .cp-aba.on{color:var(--marca);border-bottom-color:var(--marca)}
-.cp-pop-corpo{padding:18px;overflow-y:auto}
+.cp-pop-corpo{padding:18px;overflow-y:auto;min-height:0;overscroll-behavior:contain}
 .cp-pop-pe{padding:12px 18px;border-top:1px solid var(--linha);display:flex;gap:8px;flex:none;
   background:var(--fundo);border-radius:0 0 16px 16px;flex-wrap:wrap;align-items:center}
 .cp-passo{background:var(--grad);color:#fff;border-radius:12px;padding:14px 16px;margin-bottom:18px;
