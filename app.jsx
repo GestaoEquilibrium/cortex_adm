@@ -24,6 +24,7 @@ const MODULOS = [
   { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
   { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
+  { id: "organograma",   rotulo: "Organograma",    icone: "ti-sitemap",          cor: "#0E7490",              fundo: "#E6F4F8",            status: "ativo" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo" },
@@ -379,7 +380,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v74</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v75</div>
       </aside>
     </React.Fragment>
   );
@@ -2050,7 +2051,7 @@ function OrganogramaTelaCheia({ ctx, aoFechar }) {
 }
 
 function AbaOrganograma({ ctx, telaCheia }) {
-  const podeEditar = nivelAba(ctx, "rh", "organograma") === "editar";
+  const podeEditar = nivelModulo(ctx, "organograma") === "editar";
 
   // ---- mapa navegavel (sprint 41): zoom + arrastar + setas ----
   const [zoom, setZoom] = useState(1);
@@ -3791,7 +3792,6 @@ function PaginaRH({ ctx }) {
   const abas = [
     { id: "colaboradores", r: "Colaboradores" },
     { id: "ponto", r: "Ponto" },
-    { id: "organograma", r: "Organograma" },
     { id: "faltas", r: "Faltas e atestados" },
     { id: "alertas", r: "Alertas e pendências" },
     { id: "fichas", r: "Fichas" },
@@ -3818,7 +3818,6 @@ function PaginaRH({ ctx }) {
       </div>
       {aba === "colaboradores" && <AbaColaboradores ctx={ctx} />}
       {aba === "ponto" && <AbaPonto ctx={ctx} />}
-      {aba === "organograma" && <AbaOrganograma ctx={ctx} />}
       {aba === "fichas" && <AbaFichas ctx={ctx} podeEditar={nivelAba(ctx, "rh", "fichas") === "editar"} />}
       {aba === "documentos" && <AbaDocsEstagio ctx={ctx} />}
       {aba === "faltas" && <AbaFaltas ctx={ctx} />}
@@ -4054,7 +4053,7 @@ function PaginaModelos({ ctx }) {
 // Configuracoes: perfis e permissoes, pessoas, outros CORTEX
 // ------------------------------------------------------------
 const ABAS_CONFIG = {
-  rh: [["colaboradores", "Colaboradores"], ["ponto", "Ponto"], ["organograma", "Organograma"], ["faltas", "Faltas e atestados"], ["alertas", "Alertas e pendências"], ["fichas", "Fichas"], ["documentos", "Documentos"]],
+  rh: [["colaboradores", "Colaboradores"], ["ponto", "Ponto"], ["faltas", "Faltas e atestados"], ["alertas", "Alertas e pendências"], ["fichas", "Fichas"], ["documentos", "Documentos"]],
   pee: [["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]],
   salas: [["grade", "Grade da semana"], ["cadastro", "Salas"]],
   configuracoes: [["perfis", "Perfis e permissões"], ["pessoas", "Pessoas"], ["notificacoes", "Notificações"], ["integracoes", "Integrações"], ["links", "Outros CORTEX"]],
@@ -7966,7 +7965,9 @@ function Shell({ ctx, aoSair }) {
     conteudo = <PaginaModelos ctx={ctx} />;
   } else if (pagina === "rh") {
     conteudo = <PaginaRH ctx={ctx} />;
-  } else if (pagina === "conta") {
+  } else if (pagina === "organograma") {
+        conteudo = <AbaOrganograma ctx={ctx} />;
+      } else if (pagina === "conta") {
     conteudo = <PaginaMinhaConta ctx={ctx} />;
   } else if (pagina === "pee") {
     conteudo = <PaginaPee ctx={ctx} />;
