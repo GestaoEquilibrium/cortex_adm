@@ -373,7 +373,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard })
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v72</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v73</div>
       </aside>
     </React.Fragment>
   );
@@ -2964,6 +2964,10 @@ function PaginaPee({ ctx }) {
   const podeCad = nivelAba(ctx, "pee", "cadernos") === "editar";
   const podeVenc = nivelAba(ctx, "pee", "vencimentos") === "editar";
   const [visao, setVisao] = useState("cadernos");
+  useEffect(() => {
+    const vis = ["cadernos", "lista", "vencimentos"].filter((v) => nivelAba(ctx, "pee", v) !== "oculto");
+    if (vis.length && vis.indexOf(visao) === -1) setVisao(vis[0]);
+  }, []);
   const [pastas, setPastas] = useState(null);
   const [docs, setDocs] = useState([]);
   const [vencs, setVencs] = useState([]);
@@ -3166,7 +3170,7 @@ function PaginaPee({ ctx }) {
 
       {/* ---------- filtros ---------- */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {[["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]].map(([v, r]) => (
+        {[["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]].filter(([v]) => nivelAba(ctx, "pee", v) !== "oculto").map(([v, r]) => (
           <span key={v} className="chip" onClick={() => { setVisao(v); setDocAberto(null); }}
             style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
         ))}
@@ -3407,6 +3411,10 @@ function PaginaSalas({ ctx }) {
   const podeCad = nivelAba(ctx, "salas", "cadastro") === "editar";
   const podeGrade = nivelAba(ctx, "salas", "grade") === "editar";
   const [visao, setVisao] = useState("grade");
+  useEffect(() => {
+    const vis = ["grade", "cadastro"].filter((v) => nivelAba(ctx, "salas", v) !== "oculto");
+    if (vis.length && vis.indexOf(visao) === -1) setVisao(vis[0]);
+  }, []);
   const [salas, setSalas] = useState(null);
   const [ocupacoes, setOcupacoes] = useState([]);
   const [pessoas, setPessoas] = useState([]);
@@ -3646,7 +3654,7 @@ function PaginaSalas({ ctx }) {
 
       {/* ---------- filtros ---------- */}
       <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
-        {[["grade", "Grade da semana"], ["cadastro", "Salas"]].map(([v, r]) => (
+        {[["grade", "Grade da semana"], ["cadastro", "Salas"]].filter(([v]) => nivelAba(ctx, "salas", v) !== "oculto").map(([v, r]) => (
           <span key={v} className="chip" onClick={() => setVisao(v)}
             style={{ cursor: "pointer", background: visao === v ? "var(--tint)" : "var(--branco)", color: visao === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (visao === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
         ))}
@@ -4039,6 +4047,31 @@ function PaginaModelos({ ctx }) {
 // ------------------------------------------------------------
 // Configuracoes: perfis e permissoes, pessoas, outros CORTEX
 // ------------------------------------------------------------
+const ABAS_CONFIG = {
+  rh: [["colaboradores", "Colaboradores"], ["ponto", "Ponto"], ["organograma", "Organograma"], ["faltas", "Faltas e atestados"], ["alertas", "Alertas e pendências"], ["fichas", "Fichas"], ["documentos", "Documentos"]],
+  pee: [["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]],
+  salas: [["grade", "Grade da semana"], ["cadastro", "Salas"]],
+  configuracoes: [["perfis", "Perfis e permissões"], ["pessoas", "Pessoas"], ["notificacoes", "Notificações"], ["integracoes", "Integrações"], ["links", "Outros CORTEX"]],
+};
+
+function SegNivelAba({ valor, aoMudar, desabilitado }) {
+  const ops = [
+    { v: "herdar", r: "Herdar", cls: "on-d" },
+    { v: "oculto", r: "Oculto", cls: "on-h" },
+    { v: "ver", r: "Ver", cls: "on-v" },
+    { v: "editar", r: "Editar", cls: "on-e" },
+  ];
+  return (
+    <span className="seg">
+      {ops.map((o) => (
+        <button key={o.v} type="button" disabled={desabilitado}
+          className={"sg" + (valor === o.v ? " " + o.cls : "")}
+          onClick={() => aoMudar(o.v)}>{o.r}</button>
+      ))}
+    </span>
+  );
+}
+
 function SegNivel({ valor, aoMudar, desabilitado }) {
   const ops = [
     { v: "oculto", r: "Oculto", cls: "on-h" },
@@ -4066,6 +4099,9 @@ function AbaPerfis({ ctx, podeEditar }) {
   const [msg, setMsg] = useState("");
   const [novoNome, setNovoNome] = useState("");
   const [criando, setCriando] = useState(false);
+  const [mapaAbas, setMapaAbas] = useState({});
+  const [origAbas, setOrigAbas] = useState("{}");
+  const [expandido, setExpandido] = useState({});
 
   async function carregarPerfis(selecionarId) {
     const { data: ps } = await sb.from("perfis").select("*").order("acesso_total", { ascending: false }).order("nome");
@@ -4081,7 +4117,7 @@ function AbaPerfis({ ctx, podeEditar }) {
   useEffect(() => { carregarPerfis(); }, []);
 
   useEffect(() => {
-    if (!sel || sel.acesso_total) { setMapa({}); setOrig("{}"); return; }
+    if (!sel || sel.acesso_total) { setMapa({}); setOrig("{}"); setMapaAbas({}); setOrigAbas("{}"); return; }
     let vivo = true;
     sb.from("permissoes").select("modulo, nivel").eq("perfil_id", sel.id).is("aba", null)
       .then(({ data }) => {
@@ -4092,10 +4128,18 @@ function AbaPerfis({ ctx, podeEditar }) {
         setMapa(m);
         setOrig(JSON.stringify(m));
       });
+    sb.from("permissoes").select("modulo, aba, nivel").eq("perfil_id", sel.id).not("aba", "is", null)
+      .then(({ data }) => {
+        if (!vivo) return;
+        const a = {};
+        (data || []).forEach((r) => { a[r.modulo + "." + r.aba] = r.nivel; });
+        setMapaAbas(a);
+        setOrigAbas(JSON.stringify(a));
+      });
     return () => { vivo = false; };
   }, [sel && sel.id]);
 
-  const temMudanca = sel && !sel.acesso_total && JSON.stringify(mapa) !== orig;
+  const temMudanca = sel && !sel.acesso_total && (JSON.stringify(mapa) !== orig || JSON.stringify(mapaAbas) !== origAbas);
 
   async function salvar() {
     if (!sel || salvando) return;
@@ -4108,6 +4152,17 @@ function AbaPerfis({ ctx, podeEditar }) {
       const ins = await sb.from("permissoes").insert(linhas);
       if (ins.error) { setMsg("Erro ao salvar: " + ins.error.message); setSalvando(false); return; }
     }
+    const delA = await sb.from("permissoes").delete().eq("perfil_id", sel.id).not("aba", "is", null);
+    if (delA.error) { setMsg("Erro ao salvar: " + delA.error.message); setSalvando(false); return; }
+    const linhasA = Object.keys(mapaAbas).filter((k) => mapaAbas[k] && mapaAbas[k] !== "herdar").map((k) => {
+      const pos = k.indexOf(".");
+      return { perfil_id: sel.id, modulo: k.slice(0, pos), aba: k.slice(pos + 1), nivel: mapaAbas[k] };
+    });
+    if (linhasA.length) {
+      const insA = await sb.from("permissoes").insert(linhasA);
+      if (insA.error) { setMsg("Erro ao salvar: " + insA.error.message); setSalvando(false); return; }
+    }
+    setOrigAbas(JSON.stringify(mapaAbas));
     setOrig(JSON.stringify(mapa));
     setMsg("Permissões salvas.");
     setSalvando(false);
@@ -4184,17 +4239,34 @@ function AbaPerfis({ ctx, podeEditar }) {
               )}
             </div>
             {MODULOS.map((m) => (
-              <div key={m.id} className="linha-hover" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 6px", borderRadius: 9 }}>
-                <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
-                  <i className={"ti " + m.icone} style={{ fontSize: 15, color: "var(--muted)", flex: "none" }} aria-hidden="true"></i>
-                  <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.rotulo}</span>
-                </span>
-                <SegNivel valor={mapa[m.id] || "oculto"} desabilitado={!podeEditar}
-                  aoMudar={(v) => setMapa({ ...mapa, [m.id]: v })} />
-              </div>
+              <React.Fragment key={m.id}>
+                <div className="linha-hover" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 6px", borderRadius: 9 }}>
+                  <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
+                    {ABAS_CONFIG[m.id] ? (
+                      <i className={"ti " + (expandido[m.id] ? "ti-chevron-down" : "ti-chevron-right")}
+                        style={{ fontSize: 14, color: "var(--muted)", flex: "none", cursor: "pointer" }}
+                        title="Configurar as abas deste módulo"
+                        onClick={() => setExpandido({ ...expandido, [m.id]: !expandido[m.id] })} aria-hidden="true"></i>
+                    ) : (
+                      <i style={{ width: 14, flex: "none" }} aria-hidden="true"></i>
+                    )}
+                    <i className={"ti " + m.icone} style={{ fontSize: 15, color: "var(--muted)", flex: "none" }} aria-hidden="true"></i>
+                    <span style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{m.rotulo}</span>
+                  </span>
+                  <SegNivel valor={mapa[m.id] || "oculto"} desabilitado={!podeEditar}
+                    aoMudar={(v) => setMapa({ ...mapa, [m.id]: v })} />
+                </div>
+                {ABAS_CONFIG[m.id] && expandido[m.id] && ABAS_CONFIG[m.id].map(([ab, rot]) => (
+                  <div key={m.id + "." + ab} className="linha-hover" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "4px 6px 4px 40px", borderRadius: 9 }}>
+                    <span style={{ fontSize: 12, color: "var(--sec)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{rot}</span>
+                    <SegNivelAba valor={mapaAbas[m.id + "." + ab] || "herdar"} desabilitado={!podeEditar}
+                      aoMudar={(v) => setMapaAbas({ ...mapaAbas, [m.id + "." + ab]: v })} />
+                  </div>
+                ))}
+              </React.Fragment>
             ))}
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", paddingTop: 10, marginTop: 6, borderTop: "1px solid var(--linha-suave)", gap: 10, flexWrap: "wrap" }}>
-              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Permissão por aba entra junto com os módulos da fase 2.</span>
+              <span style={{ fontSize: 11.5, color: "var(--muted)" }}>Abas: a seta abre o detalhe. Herdar segue o nível do módulo; regra própria vale quando o módulo está visível.</span>
               {podeEditar && (
                 <button className="btn-primaria" style={{ padding: "8px 16px", fontSize: 12.5 }} disabled={!temMudanca || salvando} onClick={salvar}>
                   {salvando ? "Salvando…" : "Salvar permissões"}
@@ -6799,15 +6871,16 @@ function AbaDocsEstagio({ ctx }) {
 function PaginaConfiguracoes({ ctx }) {
   const [aba, setAba] = useState("perfis");
   const podeEditar = nivelModulo(ctx, "configuracoes") === "editar";
+  useEffect(() => {
+    const vis = ABAS_CONFIG.configuracoes.map((x) => x[0]).filter((v) => nivelAba(ctx, "configuracoes", v) !== "oculto");
+    if (vis.length && vis.indexOf(aba) === -1) setAba(vis[0]);
+  }, []);
   return (
     <div>
       <div className="aba-linha">
-        <div className={"aba" + (aba === "perfis" ? " on" : "")} onClick={() => setAba("perfis")}>Perfis e permissões</div>
-        <div className={"aba" + (aba === "pessoas" ? " on" : "")} onClick={() => setAba("pessoas")}>Pessoas</div>
-        
-        <div className={"aba" + (aba === "notificacoes" ? " on" : "")} onClick={() => setAba("notificacoes")}>Notificações</div>
-        <div className={"aba" + (aba === "integracoes" ? " on" : "")} onClick={() => setAba("integracoes")}>Integrações</div>
-        <div className={"aba" + (aba === "links" ? " on" : "")} onClick={() => setAba("links")}>Outros CORTEX</div>
+        {ABAS_CONFIG.configuracoes.filter(([v]) => nivelAba(ctx, "configuracoes", v) !== "oculto").map(([v, r]) => (
+          <div key={v} className={"aba" + (aba === v ? " on" : "")} onClick={() => setAba(v)}>{r}</div>
+        ))}
       </div>
       {aba === "perfis" && <AbaPerfis ctx={ctx} podeEditar={podeEditar} />}
       {aba === "pessoas" && <AbaPessoas ctx={ctx} podeEditar={podeEditar} />}
