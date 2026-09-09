@@ -316,7 +316,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
         onKeyDown={(e) => { if (e.key === "Enter") setPagina(m.id); }}
       >
         <span className="sb-ico" style={ativo ? undefined : { background: m.fundo, color: m.cor }}>
-          <i className={"ti " + m.icone} style={{ fontSize: 15 }} aria-hidden="true"></i>
+          <i className={"ti " + m.icone} style={{ fontSize: 13.5 }} aria-hidden="true"></i>
         </span>
         <span className="rotulo">{m.rotulo}</span>
       </div>
@@ -399,7 +399,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v77</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v78</div>
       </aside>
     </React.Fragment>
   );

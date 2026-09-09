@@ -204,8 +204,9 @@ body {
 .item-menu {
   display: flex;
   align-items: center;
-  gap: 10px;
-  padding: 9px 11px;
+  gap: 9px;
+  padding: 5px 10px;
+  flex: none;
   border-radius: 10px;
   color: var(--sec);
   cursor: pointer;
@@ -259,6 +260,7 @@ body {
   align-items: center;
   gap: 9px;
   padding: 8px 9px;
+  flex: none;
   margin-top: 8px;
   border-radius: 12px;
   background: var(--fundo);
@@ -720,11 +722,16 @@ table.w5-tab tbody tr:hover td{background:var(--tint-hover)}
 /* ============================================================
    SIDEBAR AGRUPADA (sprint 77) — opção D: rótulos + cor
    ============================================================ */
-.sb-grupo{display:flex;align-items:center;gap:8px;font-size:10px;font-weight:700;letter-spacing:.6px;
-  text-transform:uppercase;color:var(--muted);margin:13px 8px 3px;user-select:none}
+.sb-grupo{display:flex;align-items:center;gap:8px;font-size:9.5px;font-weight:700;letter-spacing:.6px;
+  text-transform:uppercase;color:var(--muted);margin:8px 8px 2px;user-select:none;flex:none}
 .sb-grupo s{flex:1;height:1px;background:var(--linha);text-decoration:none}
-.sb-grupo-sep{height:1px;background:var(--linha);margin:10px 8px}
-.sb-ico{width:26px;height:26px;border-radius:8px;display:flex;align-items:center;justify-content:center;
+.sb-grupo-sep{height:1px;background:var(--linha);margin:7px 8px;flex:none}
+.sb-ico{width:22px;height:22px;border-radius:7px;display:flex;align-items:center;justify-content:center;
   flex:none;transition:transform .15s var(--mola)}
 .item-menu:hover .sb-ico{transform:scale(1.06)}
 .item-menu.on .sb-ico{background:rgba(255,255,255,.18) !important;color:#fff !important}
+
+/* sidebar: rolagem discreta só quando a tela for muito baixa (sprint 78) */
+.sb::-webkit-scrollbar{width:4px}
+.sb::-webkit-scrollbar-thumb{background:var(--linha);border-radius:99px}
+.sb::-webkit-scrollbar-track{background:transparent}
