@@ -29,6 +29,7 @@ const MODULOS = [
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
   { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo" },
   { id: "reunioes",      rotulo: "Reuniões",       icone: "ti-notebook",         cor: "#B45309",              fundo: "#FCF0E4",            status: "ativo" },
+  { id: "planos",        rotulo: "Planos 5W2H",    icone: "ti-checklist",        cor: "#6D28D9",              fundo: "#F1EBFD",            status: "ativo" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
   { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
@@ -380,7 +381,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v75</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v76</div>
       </aside>
     </React.Fragment>
   );
@@ -7104,6 +7105,394 @@ function icoLinkCP(url) {
   return "ti-external-link";
 }
 
+const STATUS_W5 = {
+  pendente:  { r: "Pendente",     cor: "var(--sec)",      bg: "var(--fundo)" },
+  andamento: { r: "Em andamento", cor: "var(--marca)",    bg: "var(--tint)" },
+  concluida: { r: "Concluída",    cor: "var(--verde)",    bg: "var(--verde-bg)" },
+  cancelada: { r: "Cancelada",    cor: "var(--vermelho)", bg: "var(--vermelho-bg)" },
+};
+const CICLO_W5 = { pendente: "andamento", andamento: "concluida", concluida: "pendente" };
+const SIT_W5 = { ativo: ["Em execução", "var(--marca)", "var(--tint)"], pausado: ["Aguardando", "var(--ambar)", "var(--ambar-bg)"], concluido: ["Encerrado", "var(--verde)", "var(--verde-bg)"] };
+const fmtQuanto = (n) => (n === null || n === undefined || n === "" ? "—" : "R$ " + Number(n).toLocaleString("pt-BR", { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
+
+function gerarPlano5W2HPDF(p, acoes) {
+  const E = EQ_PDF;
+  const doc = new window.jspdf.jsPDF({ unit: "mm", format: "a4", orientation: "landscape" });
+  const W = 297, ML = 14, MR = 14;
+  const cx0 = ML + 4, cy0 = 12, r0 = 3.2;
+  doc.setDrawColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setLineWidth(0.6); doc.setLineCap("round");
+  [90, 0, 45, 135].forEach(function (ang) {
+    const a = ang * Math.PI / 180, dx = r0 * Math.cos(a), dy = r0 * Math.sin(a);
+    doc.line(cx0 - dx, cy0 - dy, cx0 + dx, cy0 + dy);
+  });
+  doc.setTextColor(E.MARCA[0], E.MARCA[1], E.MARCA[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(11.5);
+  doc.text("GRUPO EQUILIBRIUM", ML + 10, 11);
+  doc.setTextColor(E.SEC[0], E.SEC[1], E.SEC[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(7.6);
+  doc.text("Plano de ação 5W2H", ML + 10, 15.4);
+  doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+  doc.setFillColor(E.CAMPO[0], E.CAMPO[1], E.CAMPO[2]);
+  doc.roundedRect(ML, 19, W - ML - MR, 16, 2.4, 2.4, "FD");
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.2);
+  doc.text("PLANO", ML + 5, 23); doc.text("ÁREA / SETOR", ML + 128, 23); doc.text("ORIGEM", ML + 188, 23);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFontSize(9);
+  doc.text(String(p.titulo || "").slice(0, 70), ML + 5, 27.6);
+  doc.setFont("helvetica", "normal"); doc.setFontSize(8);
+  doc.text(String(p.area || "—").slice(0, 32), ML + 128, 27.6);
+  doc.text(String(p.origem || "—").slice(0, 50), ML + 188, 27.6);
+  doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "bold"); doc.setFontSize(6.2);
+  doc.text("OBJETIVO", ML + 5, 31.6);
+  doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(7.6);
+  doc.text(String(p.objetivo || "—").slice(0, 190), ML + 22, 31.6);
+  const hoje = new Date().toISOString().slice(0, 10);
+  const corpo = acoes.map(function (a) {
+    const atrasada = a.quando && a.quando < hoje && (a.status === "pendente" || a.status === "andamento");
+    return [a.o_que || "", a.por_que || "", a.onde || "", (a.quando ? dBRreu(a.quando) : "—") + (atrasada ? " !" : ""), a.quem || "", a.como || "", fmtQuanto(a.quanto), (STATUS_W5[a.status] || {}).r || a.status];
+  });
+  doc.autoTable({
+    startY: 39, margin: { left: ML, right: MR },
+    head: [["O que fazer", "Por quê", "Onde", "Quando", "Quem", "Como", "Quanto", "Status"]],
+    body: corpo,
+    styles: { font: "helvetica", fontSize: 7.2, cellPadding: 1.8, lineColor: E.LINHA, lineWidth: 0.2, textColor: E.INK, valign: "top" },
+    headStyles: { fillColor: E.MARCA, textColor: [255, 255, 255], fontSize: 7, fontStyle: "bold" },
+    alternateRowStyles: { fillColor: [250, 251, 253] },
+    columnStyles: { 0: { cellWidth: 52 }, 1: { cellWidth: 40 }, 2: { cellWidth: 26 }, 3: { cellWidth: 20 }, 4: { cellWidth: 28 }, 5: { cellWidth: 52 }, 6: { cellWidth: 24, halign: "right" }, 7: { cellWidth: 24 } },
+  });
+  const fimY = doc.lastAutoTable.finalY || 40;
+  const naoCanc = acoes.filter((a) => a.status !== "cancelada");
+  const custo = naoCanc.reduce((s, a) => s + (a.quanto ? Number(a.quanto) : 0), 0);
+  const feitas = naoCanc.filter((a) => a.status === "concluida").length;
+  doc.setFont("helvetica", "bold"); doc.setFontSize(8); doc.setTextColor(E.INK[0], E.INK[1], E.INK[2]);
+  doc.text("Ações: " + feitas + " de " + naoCanc.length + " concluídas    ·    Custo previsto: " + fmtQuanto(custo), ML, Math.min(fimY + 7, 200));
+  const nP = doc.getNumberOfPages();
+  for (let i = 1; i <= nP; i++) {
+    doc.setPage(i);
+    doc.setDrawColor(E.LINHA[0], E.LINHA[1], E.LINHA[2]); doc.setLineWidth(0.3);
+    doc.line(ML, 200, W - MR, 200);
+    doc.setTextColor(E.MUTED[0], E.MUTED[1], E.MUTED[2]); doc.setFont("helvetica", "normal"); doc.setFontSize(6.4);
+    doc.text("Grupo Equilibrium · CORTEX Gestão · Plano registrado no módulo Planos 5W2H", ML, 204);
+    doc.text(i + " / " + nP, W - MR, 204, { align: "right" });
+  }
+  doc.save("Plano_5W2H_" + String(p.titulo || "plano").replace(/[^a-z0-9]+/gi, "_").slice(0, 40) + ".pdf");
+}
+
+function PaginaPlanos({ ctx }) {
+  const [lista, setLista] = useState(null);
+  const [acoes, setAcoes] = useState({});
+  const [busca, setBusca] = useState("");
+  const [fArea, setFArea] = useState("todas");
+  const [fSit, setFSit] = useState("ativo");
+  const [aberto, setAberto] = useState(null);
+  const [ed, setEd] = useState(null);
+  const [edA, setEdA] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const podeEditar = nivelModulo(ctx, "planos") === "editar";
+  const hoje = new Date().toISOString().slice(0, 10);
+  const hintW5 = (e) => "Erro: " + e.message + (e.message.indexOf("planos_5w2h") !== -1 ? " — rode o 40_planos_5w2h.sql." : "");
+  const atrasada = (a) => a.quando && a.quando < hoje && (a.status === "pendente" || a.status === "andamento");
+
+  async function carregar() {
+    const rp = await sb.from("planos_5w2h").select("*").order("area").order("titulo").limit(600);
+    if (rp.error) { setMsg(hintW5(rp.error)); return; }
+    const ra = await sb.from("planos_5w2h_acoes").select("*").order("ordem").order("quando", { ascending: true, nullsFirst: false }).limit(8000);
+    if (ra.error) { setMsg(hintW5(ra.error)); return; }
+    const mapa = {};
+    (ra.data || []).forEach(function (a) { if (!mapa[a.plano_id]) mapa[a.plano_id] = []; mapa[a.plano_id].push(a); });
+    setMsg(""); setLista(rp.data || []); setAcoes(mapa);
+  }
+  useEffect(() => { carregar(); }, []);
+
+  const de = (p) => acoes[p.id] || [];
+  const visiveis = useMemo(() => {
+    const t = busca.trim().toLowerCase();
+    return (lista || []).filter(function (p) {
+      if (fSit !== "todos" && p.situacao !== fSit) return false;
+      if (fArea !== "todas" && p.area !== fArea) return false;
+      if (!t) return true;
+      const blob = [p.titulo, p.area, p.origem, p.objetivo].join(" ").toLowerCase();
+      if (blob.indexOf(t) !== -1) return true;
+      return de(p).some((a) => [a.o_que, a.por_que, a.onde, a.quem, a.como].join(" ").toLowerCase().indexOf(t) !== -1);
+    });
+  }, [lista, acoes, busca, fArea, fSit]);
+
+  const kAtivos = (lista || []).filter((p) => p.situacao === "ativo");
+  const kAcoes = kAtivos.reduce((s, p) => s + de(p).filter((a) => a.status === "pendente" || a.status === "andamento").length, 0);
+  const kAtraso = kAtivos.reduce((s, p) => s + de(p).filter(atrasada).length, 0);
+  const kCusto = kAtivos.reduce((s, p) => s + de(p).filter((a) => a.status !== "cancelada").reduce((x, a) => x + (a.quanto ? Number(a.quanto) : 0), 0), 0);
+
+  async function novoPlano() {
+    const r = await sb.from("planos_5w2h").insert({
+      titulo: "Plano novo", area: "Geral / Direção",
+      criado_por: ctx.profile.nome || ctx.profile.email, atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).select("*").single();
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento("criar", "planos", "Plano 5W2H criado");
+    await carregar(); setAberto(r.data.id);
+    setEd({ id: r.data.id, titulo: r.data.titulo, area: r.data.area, origem: "", objetivo: "", situacao: "ativo" });
+  }
+
+  async function salvarEd() {
+    setSalvando(true); setMsg("");
+    const r = await sb.from("planos_5w2h").update({
+      titulo: ed.titulo.trim() || "Plano", area: ed.area.trim() || "Geral / Direção",
+      origem: ed.origem.trim() || null, objetivo: ed.objetivo.trim() || null, situacao: ed.situacao,
+      atualizado_em: new Date().toISOString(), atualizado_por: ctx.profile.nome || ctx.profile.email,
+    }).eq("id", ed.id);
+    setSalvando(false);
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento("editar", "planos", "Plano atualizado: " + ed.titulo);
+    setEd(null); carregar();
+  }
+
+  async function excluirPlano(p) {
+    if (!window.confirm('Excluir o plano "' + p.titulo + '" e todas as ações? A exclusão fica na auditoria.')) return;
+    const r = await sb.from("planos_5w2h").delete().eq("id", p.id);
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento("excluir", "planos", "Plano excluído: " + p.titulo);
+    setEd(null); setAberto(null); carregar();
+  }
+
+  function abrirAcao(p, a) {
+    setEdA(a ? { id: a.id, plano_id: p.id, o_que: a.o_que || "", por_que: a.por_que || "", onde: a.onde || "", quando: a.quando || "", quem: a.quem || "", como: a.como || "", quanto: a.quanto === null || a.quanto === undefined ? "" : String(a.quanto), status: a.status }
+             : { id: null, plano_id: p.id, o_que: "", por_que: "", onde: "", quando: "", quem: "", como: "", quanto: "", status: "pendente" });
+  }
+
+  async function salvarAcao() {
+    if (!edA.o_que.trim()) { setMsg("A ação precisa dizer o que fazer."); return; }
+    setSalvando(true); setMsg("");
+    const corpo = {
+      plano_id: edA.plano_id, o_que: edA.o_que.trim(), por_que: edA.por_que.trim() || null,
+      onde: edA.onde.trim() || null, quando: edA.quando || null, quem: edA.quem.trim() || null,
+      como: edA.como.trim() || null, quanto: edA.quanto === "" ? null : Number(String(edA.quanto).replace(",", ".")),
+      status: edA.status, concluida_em: edA.status === "concluida" ? new Date().toISOString() : null,
+    };
+    const r = edA.id
+      ? await sb.from("planos_5w2h_acoes").update(corpo).eq("id", edA.id)
+      : await sb.from("planos_5w2h_acoes").insert({ ...corpo, ordem: de({ id: edA.plano_id }).length });
+    setSalvando(false);
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento(edA.id ? "editar" : "criar", "planos", "Ação 5W2H: " + edA.o_que.slice(0, 60));
+    setEdA(null); carregar();
+  }
+
+  async function excluirAcao() {
+    if (!edA.id) { setEdA(null); return; }
+    if (!window.confirm("Excluir esta ação do plano?")) return;
+    const r = await sb.from("planos_5w2h_acoes").delete().eq("id", edA.id);
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento("excluir", "planos", "Ação 5W2H excluída: " + edA.o_que.slice(0, 60));
+    setEdA(null); carregar();
+  }
+
+  async function ciclarStatus(a) {
+    if (!podeEditar || a.status === "cancelada") return;
+    const prox = CICLO_W5[a.status] || "pendente";
+    const r = await sb.from("planos_5w2h_acoes").update({ status: prox, concluida_em: prox === "concluida" ? new Date().toISOString() : null }).eq("id", a.id);
+    if (r.error) { setMsg(hintW5(r.error)); return; }
+    registrarEvento("editar", "planos", "Ação " + (STATUS_W5[prox].r.toLowerCase()) + ": " + (a.o_que || "").slice(0, 60));
+    carregar();
+  }
+
+  const P = (lista || []).find((x) => x.id === aberto) || null;
+  const sit = P ? (SIT_W5[P.situacao] || SIT_W5.ativo) : null;
+  const acs = P ? de(P) : [];
+  const naoCanc = acs.filter((a) => a.status !== "cancelada");
+  const feitas = naoCanc.filter((a) => a.status === "concluida").length;
+  const custoP = naoCanc.reduce((s, a) => s + (a.quanto ? Number(a.quanto) : 0), 0);
+
+  return (
+    <div className="anim-pop">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 16 }}>
+        <div style={{ flex: 1, minWidth: 200 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>Planos 5W2H</div>
+          <div style={{ fontSize: 12.5, color: "var(--sec)" }}>O quê, por quê, onde, quando, quem, como e quanto — planos de ação executáveis</div>
+        </div>
+        {podeEditar && <button className="btn-primaria" onClick={novoPlano}><i className="ti ti-plus" aria-hidden="true"></i>Novo plano</button>}
+      </div>
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)", fontWeight: 600 }}>{msg}</div>}
+      {!lista && <div style={{ padding: 30, color: "var(--muted)", fontSize: 13 }}>Carregando…</div>}
+      {lista && (
+        <React.Fragment>
+          <div className="cp-kpis">
+            <div className="card-fl cp-kpi"><div className="n" style={{ color: "var(--marca)" }}>{kAtivos.length}</div><div className="r">Planos em execução</div></div>
+            <div className="card-fl cp-kpi"><div className="n" style={{ color: "var(--sec)" }}>{kAcoes}</div><div className="r">Ações abertas</div></div>
+            <div className="card-fl cp-kpi"><div className="n" style={{ color: kAtraso ? "var(--vermelho)" : "var(--verde)" }}>{kAtraso}</div><div className="r">Atrasadas</div></div>
+            <div className="card-fl cp-kpi"><div className="n" style={{ color: "var(--ink)", fontSize: 19 }}>{fmtQuanto(kCusto)}</div><div className="r">Custo previsto</div></div>
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 6 }}>
+            <input className="campo" type="search" placeholder="Buscar em planos e ações" style={{ flex: 1, minWidth: 190 }} value={busca} onChange={(e) => setBusca(e.target.value)} />
+            <div className="cp-filtros">
+              {[["ativo", "Em execução"], ["pausado", "Aguardando"], ["concluido", "Encerrados"], ["todos", "Todos"]].map(([v, r]) => (
+                <button key={v} className={"cp-filtro" + (fSit === v ? " on" : "")} onClick={() => setFSit(v)}>{r}</button>
+              ))}
+            </div>
+            <div className="cp-filtros">
+              {[["todas", "Todas as áreas"]].concat(AREAS_REU.filter((a) => lista.some((p) => p.area === a)).map((a) => [a, a])).map(([v, r]) => (
+                <button key={v} className={"cp-filtro" + (fArea === v ? " on" : "")} onClick={() => setFArea(v)}>{r}</button>
+              ))}
+            </div>
+          </div>
+          {visiveis.length === 0 && (
+            <div className="cp-vazio"><i className="ti ti-checklist" aria-hidden="true"></i>{busca || fArea !== "todas" || fSit !== "ativo" ? "Nenhum plano com esse filtro." : "Nenhum plano ainda. Clique em Novo plano e monte o primeiro 5W2H."}</div>
+          )}
+          {Object.keys(visiveis.reduce((a, p) => { a[p.area] = 1; return a; }, {})).map(function (ar) {
+            return (
+              <React.Fragment key={ar}>
+                <div className="cp-frente"><i className={"ti " + (FRENTES_CP[ar] || "ti-checklist")} aria-hidden="true"></i>{ar}<s></s></div>
+                <div className="cp-grade">
+                  {visiveis.filter((p) => p.area === ar).map(function (p) {
+                    const aa = de(p); const nc = aa.filter((x) => x.status !== "cancelada");
+                    const ok = nc.filter((x) => x.status === "concluida").length;
+                    const atr = aa.filter(atrasada).length;
+                    const cst = nc.reduce((s, x) => s + (x.quanto ? Number(x.quanto) : 0), 0);
+                    const st = SIT_W5[p.situacao] || SIT_W5.ativo;
+                    return (
+                      <button key={p.id} className="card-fl clicavel cp-proj" onClick={() => { setAberto(p.id); setEd(null); setEdA(null); }}>
+                        <div className="cp-proj-topo">
+                          <span className="cp-proj-ico" style={{ background: "#F1EBFD", color: "#6D28D9" }}><i className="ti ti-checklist" aria-hidden="true"></i></span>
+                          <span style={{ flex: 1, minWidth: 0 }}>
+                            <span className="cp-proj-nome">{p.titulo}</span>
+                            <span className="cp-proj-res">{p.origem || p.area}</span>
+                          </span>
+                          <span className="chip" style={{ background: st[2], color: st[1] }}>{st[0]}</span>
+                        </div>
+                        {p.objetivo && <div className="cp-proj-passo">{p.objetivo}</div>}
+                        <div className="cp-proj-pe">
+                          <span className="cp-trilha"><i style={{ width: (nc.length ? Math.round(ok / nc.length * 100) : 0) + "%", background: "#6D28D9" }}></i></span>
+                          <span>{ok}/{nc.length}{cst ? " · " + fmtQuanto(cst) : ""}{atr ? " · " : ""}{atr ? <b style={{ color: "var(--vermelho)" }}>{atr} atrasada(s)</b> : null}</span>
+                        </div>
+                      </button>
+                    );
+                  })}
+                </div>
+              </React.Fragment>
+            );
+          })}
+        </React.Fragment>
+      )}
+
+      {P && (<PortalCP>
+        <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) { setAberto(null); setEd(null); setEdA(null); } }}>
+          <div className="cp-pop w5-larga anim-pop">
+            <div className="cp-pop-cab">
+              <div className="cp-pop-cab-top">
+                <span className="cp-proj-ico" style={{ background: "#F1EBFD", color: "#6D28D9" }}><i className="ti ti-checklist" aria-hidden="true"></i></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2>{P.titulo}</h2>
+                  <div className="cp-pop-meta">{P.area}{P.origem ? " · " + P.origem : ""}</div>
+                </div>
+                <span className="chip" style={{ background: sit[2], color: sit[1] }}>{sit[0]}</span>
+                <button className="btn-fantasma" aria-label="Fechar" onClick={() => { setAberto(null); setEd(null); setEdA(null); }}><i className="ti ti-x" aria-hidden="true"></i></button>
+              </div>
+              <div style={{ paddingBottom: 12 }}></div>
+            </div>
+            <div className="cp-pop-corpo">
+              {!ed && !edA && (
+                <React.Fragment>
+                  {P.objetivo && <div className="cp-sec"><div className="cp-sec-tit"><i className="ti ti-flag" aria-hidden="true"></i>Objetivo</div><p>{P.objetivo}</p></div>}
+                  {acs.length === 0 && <div className="cp-aviso"><i className="ti ti-list-search" aria-hidden="true"></i>Plano sem ações ainda.{podeEditar ? " Use o botão Adicionar ação." : ""}</div>}
+                  {acs.length > 0 && (
+                    <div className="w5-rolagem">
+                      <table className="w5-tab">
+                        <thead><tr><th>O que fazer</th><th>Por quê</th><th>Onde</th><th>Quando</th><th>Quem</th><th>Como</th><th style={{ textAlign: "right" }}>Quanto</th><th>Status</th>{podeEditar && <th></th>}</tr></thead>
+                        <tbody>
+                          {acs.map(function (a) {
+                            const st = STATUS_W5[a.status] || STATUS_W5.pendente;
+                            const atr = atrasada(a);
+                            return (
+                              <tr key={a.id}>
+                                <td style={{ fontWeight: 600, textDecoration: a.status === "cancelada" ? "line-through" : "none" }}>{a.o_que}</td>
+                                <td>{a.por_que || "—"}</td>
+                                <td>{a.onde || "—"}</td>
+                                <td className={atr ? "w5-atraso" : ""} title={atr ? "Prazo vencido" : ""}>{a.quando ? dBRreu(a.quando) : "—"}{atr ? " !" : ""}</td>
+                                <td>{a.quem || "—"}</td>
+                                <td>{a.como || "—"}</td>
+                                <td style={{ textAlign: "right", fontFamily: "'JetBrains Mono',monospace", fontSize: 11.5 }}>{fmtQuanto(a.quanto)}</td>
+                                <td>
+                                  <button className="w5-chip" style={{ background: st.bg, color: st.cor }} title={podeEditar && a.status !== "cancelada" ? "Clique para avançar o status" : st.r}
+                                    onClick={() => ciclarStatus(a)}>{st.r}</button>
+                                </td>
+                                {podeEditar && <td><button className="btn-fantasma" title="Editar ação" onClick={() => abrirAcao(P, a)}><i className="ti ti-pencil" aria-hidden="true"></i></button></td>}
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
+                  <div className="w5-tot">
+                    <span>{feitas} de {naoCanc.length} concluída(s)</span>
+                    <span>Custo previsto: {fmtQuanto(custoP)}</span>
+                  </div>
+                </React.Fragment>
+              )}
+              {ed && (
+                <React.Fragment>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Título do plano</label><input className="campo" style={{ width: "100%" }} value={ed.titulo} onChange={(e) => setEd({ ...ed, titulo: e.target.value })} /></div>
+                    <div className="cp-ed-lin"><label>Situação</label>
+                      <select className="campo" style={{ width: "100%" }} value={ed.situacao} onChange={(e) => setEd({ ...ed, situacao: e.target.value })}>
+                        {Object.keys(SIT_W5).map((k) => <option key={k} value={k}>{SIT_W5[k][0]}</option>)}
+                      </select>
+                    </div>
+                  </div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Área / setor</label>
+                      <input className="campo" style={{ width: "100%" }} list="w5Areas" value={ed.area} onChange={(e) => setEd({ ...ed, area: e.target.value })} />
+                      <datalist id="w5Areas">{AREAS_REU.concat((lista || []).map((x) => x.area)).filter((v, i, a) => v && a.indexOf(v) === i).map((a) => <option key={a} value={a} />)}</datalist>
+                    </div>
+                    <div className="cp-ed-lin"><label>Origem · de onde nasceu (reunião, PDGE, PEE…)</label><input className="campo" style={{ width: "100%" }} value={ed.origem} onChange={(e) => setEd({ ...ed, origem: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-lin"><label>Objetivo do plano</label><textarea className="campo" style={{ width: "100%", minHeight: 62, resize: "vertical" }} value={ed.objetivo} onChange={(e) => setEd({ ...ed, objetivo: e.target.value })} /></div>
+                  <div className="cp-ed-sep" style={{ color: "var(--vermelho)" }}><i className="ti ti-trash" aria-hidden="true"></i>Zona de risco</div>
+                  <button className="cp-perigo" onClick={() => excluirPlano(P)}><i className="ti ti-trash" aria-hidden="true"></i>Excluir este plano</button>
+                </React.Fragment>
+              )}
+              {edA && (
+                <React.Fragment>
+                  <div className="cp-ed-lin"><label>O que fazer</label><input className="campo" style={{ width: "100%" }} value={edA.o_que} onChange={(e) => setEdA({ ...edA, o_que: e.target.value })} /></div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Por quê</label><textarea className="campo" style={{ width: "100%", minHeight: 54, resize: "vertical" }} value={edA.por_que} onChange={(e) => setEdA({ ...edA, por_que: e.target.value })} /></div>
+                    <div className="cp-ed-lin"><label>Como</label><textarea className="campo" style={{ width: "100%", minHeight: 54, resize: "vertical" }} value={edA.como} onChange={(e) => setEdA({ ...edA, como: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Onde</label><input className="campo" style={{ width: "100%" }} value={edA.onde} onChange={(e) => setEdA({ ...edA, onde: e.target.value })} /></div>
+                    <div className="cp-ed-lin"><label>Quem</label><input className="campo" style={{ width: "100%" }} value={edA.quem} onChange={(e) => setEdA({ ...edA, quem: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-gr">
+                    <div className="cp-ed-lin"><label>Quando</label><input className="campo" type="date" style={{ width: "100%" }} value={edA.quando} onChange={(e) => setEdA({ ...edA, quando: e.target.value })} /></div>
+                    <div className="cp-ed-lin"><label>Quanto · R$</label><input className="campo" type="number" step="0.01" min="0" placeholder="0,00" style={{ width: "100%" }} value={edA.quanto} onChange={(e) => setEdA({ ...edA, quanto: e.target.value })} /></div>
+                  </div>
+                  <div className="cp-ed-lin"><label>Status</label>
+                    <select className="campo" style={{ width: "100%" }} value={edA.status} onChange={(e) => setEdA({ ...edA, status: e.target.value })}>
+                      {Object.keys(STATUS_W5).map((k) => <option key={k} value={k}>{STATUS_W5[k].r}</option>)}
+                    </select>
+                  </div>
+                  {edA.id && (
+                    <React.Fragment>
+                      <div className="cp-ed-sep" style={{ color: "var(--vermelho)" }}><i className="ti ti-trash" aria-hidden="true"></i>Zona de risco</div>
+                      <button className="cp-perigo" onClick={excluirAcao}><i className="ti ti-trash" aria-hidden="true"></i>Excluir esta ação</button>
+                    </React.Fragment>
+                  )}
+                </React.Fragment>
+              )}
+            </div>
+            <div className="cp-pop-pe">
+              {!ed && !edA && <button className="btn-contorno" onClick={() => gerarPlano5W2HPDF(P, acs)}><i className="ti ti-file-type-pdf" aria-hidden="true"></i>Plano em PDF</button>}
+              {!ed && !edA && podeEditar && <button className="btn-contorno" onClick={() => abrirAcao(P, null)}><i className="ti ti-plus" aria-hidden="true"></i>Adicionar ação</button>}
+              {!ed && !edA && podeEditar && <button className="btn-primaria" onClick={() => setEd({ id: P.id, titulo: P.titulo || "", area: P.area || "", origem: P.origem || "", objetivo: P.objetivo || "", situacao: P.situacao })}><i className="ti ti-edit" aria-hidden="true"></i>Editar plano</button>}
+              {ed && <button className="btn-primaria" disabled={salvando} onClick={salvarEd}><i className="ti ti-check" aria-hidden="true"></i>{salvando ? "Salvando…" : "Salvar no banco"}</button>}
+              {ed && <button className="btn-contorno" onClick={() => setEd(null)}>Cancelar</button>}
+              {edA && <button className="btn-primaria" disabled={salvando} onClick={salvarAcao}><i className="ti ti-check" aria-hidden="true"></i>{salvando ? "Salvando…" : (edA.id ? "Salvar ação" : "Adicionar ação")}</button>}
+              {edA && <button className="btn-contorno" onClick={() => setEdA(null)}>Cancelar</button>}
+            </div>
+          </div>
+        </div>
+      </PortalCP>)}
+    </div>
+  );
+}
+
 function PortalCP({ children }) {
   return ReactDOM.createPortal(children, document.body);
 }
@@ -7975,6 +8364,8 @@ function Shell({ ctx, aoSair }) {
         conteudo = <PaginaProjetos ctx={ctx} />;
       } else if (pagina === "reunioes") {
         conteudo = <PaginaReunioes ctx={ctx} />;
+      } else if (pagina === "planos") {
+        conteudo = <PaginaPlanos ctx={ctx} />;
       } else if (pagina === "callcenter") {
     conteudo = <PaginaCallCenter ctx={ctx} />;
   } else if (pagina === "demandas") {
