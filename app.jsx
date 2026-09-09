@@ -20,25 +20,25 @@ const sbCadastro = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CF
 // Registro dos modulos (id = chave usada na tabela permissoes)
 // ------------------------------------------------------------
 const MODULOS = [
-  { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
-  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo" },
-  { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo" },
-  { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo" },
-  { id: "organograma",   rotulo: "Organograma",    icone: "ti-sitemap",          cor: "#0E7490",              fundo: "#E6F4F8",            status: "ativo" },
-  { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo" },
-  { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo" },
-  { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo" },
-  { id: "reunioes",      rotulo: "Reuniões",       icone: "ti-notebook",         cor: "#B45309",              fundo: "#FCF0E4",            status: "ativo" },
-  { id: "planos",        rotulo: "Planos 5W2H",    icone: "ti-checklist",        cor: "#6D28D9",              fundo: "#F1EBFD",            status: "ativo" },
-  { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)" },
-  { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6" },
-  { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF" },
-  { id: "callcenter",    rotulo: "Call Center",    icone: "ti-headset",          cor: "#0E7490",              fundo: "#E0F7FA" },
-  { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo" },
-  { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo" },
-  { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo" },
-  { id: "conta",          rotulo: "Minha conta",    icone: "ti-user-circle",      cor: "var(--marca-texto)",   fundo: "var(--tint)",        status: "ativo" },
-  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#ECF1F6",            status: "ativo" },
+  { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo", grupo: "" },
+  { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo", grupo: "diaadia" },
+  { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo", grupo: "diaadia" },
+  { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo", grupo: "diaadia" },
+  { id: "callcenter",    rotulo: "Call Center",    icone: "ti-headset",          cor: "#0E7490",              fundo: "#E0F7FA", grupo: "diaadia" },
+  { id: "demandas",      rotulo: "Demandas",       icone: "ti-checklist",        cor: "#7C3AED",              fundo: "#F3E8FF", grupo: "diaadia" },
+  { id: "rh",            rotulo: "RH e equipe",    icone: "ti-users",            cor: "var(--roxo)",          fundo: "var(--roxo-bg)",     status: "ativo", grupo: "pessoas" },
+  { id: "organograma",   rotulo: "Organograma",    icone: "ti-sitemap",          cor: "#0E7490",              fundo: "#E6F4F8",            status: "ativo", grupo: "pessoas" },
+  { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo", grupo: "gestao" },
+  { id: "reunioes",      rotulo: "Reuniões",       icone: "ti-notebook",         cor: "#B45309",              fundo: "#FCF0E4",            status: "ativo", grupo: "gestao" },
+  { id: "planos",        rotulo: "Planos 5W2H",    icone: "ti-checklist",        cor: "#6D28D9",              fundo: "#F1EBFD",            status: "ativo", grupo: "gestao" },
+  { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo", grupo: "gestao" },
+  { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)", grupo: "gestao" },
+  { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6", grupo: "sistemas" },
+  { id: "outros_cortex", rotulo: "Outros CORTEX",  icone: "ti-external-link",    cor: "var(--azul)",          fundo: "var(--azul-bg)",     status: "ativo", grupo: "sistemas" },
+  { id: "auditoria",     rotulo: "Auditoria",      icone: "ti-history",          cor: "var(--sec)",           fundo: "#E6EBF1",            status: "ativo", grupo: "controle" },
+  { id: "instrucoes",    rotulo: "Instruções",     icone: "ti-info-circle",      cor: "#0369A1",              fundo: "#E0F2FE",            status: "ativo", grupo: "controle" },
+  { id: "conta",          rotulo: "Minha conta",    icone: "ti-user-circle",      cor: "var(--marca-texto)",   fundo: "var(--tint)",        status: "ativo", grupo: "" },
+  { id: "configuracoes", rotulo: "Configurações",  icone: "ti-settings",         cor: "var(--sec)",           fundo: "#ECF1F6",            status: "ativo", grupo: "" },
 ];
 
 const STATUS_CHIP = {
@@ -315,7 +315,9 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === "Enter") setPagina(m.id); }}
       >
-        <i className={"ti " + m.icone} style={{ fontSize: 18, flex: "none" }} aria-hidden="true"></i>
+        <span className="sb-ico" style={ativo ? undefined : { background: m.fundo, color: m.cor }}>
+          <i className={"ti " + m.icone} style={{ fontSize: 15 }} aria-hidden="true"></i>
+        </span>
         <span className="rotulo">{m.rotulo}</span>
       </div>
     );
@@ -352,7 +354,23 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
           </button>
         </div>
 
-        {principais.map((m) => <Item key={m.id} m={m} />)}
+        {(() => {
+          const ROT = { diaadia: "Dia a dia", pessoas: "Pessoas", gestao: "Gestão", sistemas: "Sistemas", controle: "Controle" };
+          const saida = [];
+          let ga = null;
+          principais.forEach((m) => {
+            if (m.grupo !== ga) {
+              ga = m.grupo;
+              if (ROT[m.grupo]) saida.push(
+                estado === "rail"
+                  ? <div key={"g" + m.grupo} className="sb-grupo-sep"></div>
+                  : <div key={"g" + m.grupo} className="sb-grupo">{ROT[m.grupo]}<s></s></div>
+              );
+            }
+            saida.push(<Item key={m.id} m={m} />);
+          });
+          return saida;
+        })()}
 
         <div style={{ flex: 1, minHeight: 12 }}></div>
 
@@ -381,7 +399,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v76</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v77</div>
       </aside>
     </React.Fragment>
   );
