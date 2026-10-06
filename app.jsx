@@ -31,6 +31,7 @@ const MODULOS = [
   { id: "projetos",      rotulo: "Projetos",       icone: "ti-layout-grid",      cor: "#0F766E",              fundo: "#E0F5F1",            status: "ativo", grupo: "gestao" },
   { id: "reunioes",      rotulo: "Reuniões",       icone: "ti-notebook",         cor: "#B45309",              fundo: "#FCF0E4",            status: "ativo", grupo: "gestao" },
   { id: "planos",        rotulo: "Planos 5W2H",    icone: "ti-checklist",        cor: "#6D28D9",              fundo: "#F1EBFD",            status: "ativo", grupo: "gestao" },
+  { id: "calendario",    rotulo: "Calendário",     icone: "ti-calendar-event",   cor: "#E11D48",              fundo: "#FCE8EC",            status: "ativo", grupo: "gestao" },
   { id: "pee",           rotulo: "PEE",            icone: "ti-book",             cor: "var(--rosa)",          fundo: "var(--rosa-bg)",     status: "ativo", grupo: "gestao" },
   { id: "relatorios",    rotulo: "Relatórios",     icone: "ti-chart-bar",        cor: "var(--verde)",         fundo: "var(--verde-bg)", grupo: "gestao" },
   { id: "infinity",      rotulo: "Infinity",       icone: "ti-coin",             cor: "var(--ambar)",         fundo: "#FFF7E6", grupo: "sistemas" },
@@ -399,7 +400,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v78</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v79</div>
       </aside>
     </React.Fragment>
   );
@@ -4073,6 +4074,7 @@ function PaginaModelos({ ctx }) {
 // ------------------------------------------------------------
 const ABAS_CONFIG = {
   rh: [["colaboradores", "Colaboradores"], ["ponto", "Ponto"], ["faltas", "Faltas e atestados"], ["alertas", "Alertas e pendências"], ["fichas", "Fichas"], ["documentos", "Documentos"]],
+  calendario: [["anual", "Calendário anual"], ["aniversarios", "Aniversários"]],
   pee: [["cadernos", "Cadernos"], ["lista", "Lista mestra"], ["vencimentos", "Vencimentos"]],
   salas: [["grade", "Grade da semana"], ["cadastro", "Salas"]],
   configuracoes: [["perfis", "Perfis e permissões"], ["pessoas", "Pessoas"], ["notificacoes", "Notificações"], ["integracoes", "Integrações"], ["links", "Outros CORTEX"]],
@@ -7123,6 +7125,379 @@ function icoLinkCP(url) {
   return "ti-external-link";
 }
 
+const TIPOS_EV = {
+  evento:     { r: "Evento",          ico: "ti-confetti",      cor: "#1068B0", bg: "#E7F2FB" },
+  campanha:   { r: "Campanha",        ico: "ti-speakerphone",  cor: "#B45309", bg: "#FCF0E4" },
+  semana:     { r: "Semana temática", ico: "ti-calendar-week", cor: "#6D28D9", bg: "#F1EBFD" },
+  publicacao: { r: "Publicação",      ico: "ti-photo",         cor: "#0E7490", bg: "#E6F4F8" },
+};
+const DOW_CAL = ["DOM", "SEG", "TER", "QUA", "QUI", "SEX", "SÁB"];
+const DIA_SEMANA_CAL = ["Domingo", "Segunda-feira", "Terça-feira", "Quarta-feira", "Quinta-feira", "Sexta-feira", "Sábado"];
+function dowCal(iso) { return new Date(iso + "T12:00:00Z").getUTCDay(); }
+function diasNoMesCal(ano, mes) { return new Date(ano, mes, 0).getDate(); }
+function isoDeCal(ano, mes, d) { return ano + "-" + String(mes).padStart(2, "0") + "-" + String(d).padStart(2, "0"); }
+
+function PaginaCalendario({ ctx }) {
+  const abasCal = ABAS_CONFIG.calendario.filter(([v]) => nivelAba(ctx, "calendario", v) !== "oculto");
+  const [aba, setAba] = useState(abasCal.length ? abasCal[0][0] : "anual");
+  useEffect(() => {
+    const vis = ABAS_CONFIG.calendario.map((x) => x[0]).filter((v) => nivelAba(ctx, "calendario", v) !== "oculto");
+    if (vis.length && vis.indexOf(aba) === -1) setAba(vis[0]);
+  }, []);
+  const hojeISO = new Date().toISOString().slice(0, 10);
+  const [ano, setAno] = useState(Number(hojeISO.slice(0, 4)));
+  const [mesSel, setMesSel] = useState(null);
+  const [mesAniv, setMesAniv] = useState(Number(hojeISO.slice(5, 7)));
+  const [eventos, setEventos] = useState(null);
+  const [fers, setFers] = useState({});
+  const [aniv, setAniv] = useState([]);
+  const [diaAberto, setDiaAberto] = useState(null);
+  const [edEv, setEdEv] = useState(null);
+  const [salvando, setSalvando] = useState(false);
+  const [msg, setMsg] = useState("");
+  const podeEv = nivelAba(ctx, "calendario", "anual") === "editar";
+  const hintCal = (e) => "Erro: " + e.message + (e.message.indexOf("eventos_calendario") !== -1 || e.message.indexOf("aniversariantes") !== -1 ? " — rode o 41_calendario.sql." : "");
+
+  async function carregar() {
+    const re = await sb.from("eventos_calendario").select("*").lte("data_inicio", ano + "-12-31").gte("data_fim", ano + "-01-01").order("data_inicio").limit(3000);
+    if (re.error) { setMsg(hintCal(re.error)); setEventos([]); } else { setMsg(""); setEventos(re.data || []); }
+    const rf = await sb.from("feriados").select("data, nome").gte("data", ano + "-01-01").lte("data", ano + "-12-31");
+    const m = {};
+    (rf.data || []).forEach(function (f) { m[f.data] = f.nome; });
+    setFers(m);
+  }
+  useEffect(() => { carregar(); }, [ano]);
+  useEffect(() => {
+    let vivo = true;
+    sb.rpc("aniversariantes").then(({ data, error }) => {
+      if (!vivo) return;
+      if (error) { setMsg(hintCal(error)); return; }
+      setAniv(data || []);
+    });
+    return () => { vivo = false; };
+  }, []);
+
+  const evDoDia = (iso) => (eventos || []).filter((e) => e.data_inicio <= iso && e.data_fim >= iso);
+  const anivDoDia = (iso) => aniv.filter((a) => String(a.nascimento || "").slice(5, 10) === iso.slice(5, 10));
+  const idadeQueFaz = (a) => {
+    const an = Number(String(a.nascimento || "").slice(0, 4));
+    return an > 1900 ? ano - an : null;
+  };
+
+  function abrirNovoEv(dataIni) {
+    setDiaAberto(null);
+    setEdEv({ id: null, titulo: "", tipo: "evento", area: "", local: "", descricao: "", data_inicio: dataIni || hojeISO, data_fim: dataIni || hojeISO });
+  }
+  function abrirEditarEv(e) {
+    setDiaAberto(null);
+    setEdEv({ id: e.id, titulo: e.titulo || "", tipo: e.tipo || "evento", area: e.area || "", local: e.local || "", descricao: e.descricao || "", data_inicio: e.data_inicio, data_fim: e.data_fim });
+  }
+  function planejarAniv(a, tipo) {
+    const mm = String(a.nascimento).slice(5, 7), dd = String(a.nascimento).slice(8, 10);
+    const dataEv = ano + "-" + mm + "-" + dd;
+    setEdEv({ id: null, titulo: (tipo === "publicacao" ? "Publicação · aniversário de " : "Aniversário de ") + a.nome, tipo: tipo, area: a.setor || "", local: "", descricao: "", data_inicio: dataEv, data_fim: dataEv });
+  }
+
+  async function salvarEv() {
+    if (!edEv.titulo.trim()) { setMsg("Dê um título ao evento."); return; }
+    setSalvando(true); setMsg("");
+    const ini = edEv.data_inicio || hojeISO;
+    const fim = (edEv.data_fim && edEv.data_fim >= ini) ? edEv.data_fim : ini;
+    const corpo = {
+      titulo: edEv.titulo.trim(), tipo: edEv.tipo, area: edEv.area.trim() || null,
+      local: edEv.local.trim() || null, descricao: edEv.descricao.trim() || null,
+      data_inicio: ini, data_fim: fim,
+      atualizado_em: new Date().toISOString(), atualizado_por: ctx.profile.nome || ctx.profile.email,
+    };
+    const r = edEv.id
+      ? await sb.from("eventos_calendario").update(corpo).eq("id", edEv.id)
+      : await sb.from("eventos_calendario").insert({ ...corpo, criado_por: ctx.profile.nome || ctx.profile.email });
+    setSalvando(false);
+    if (r.error) { setMsg(hintCal(r.error)); return; }
+    registrarEvento(edEv.id ? "editar" : "criar", "calendario", (TIPOS_EV[edEv.tipo] || TIPOS_EV.evento).r + ": " + edEv.titulo.trim() + " (" + dBRreu(ini) + (fim !== ini ? " a " + dBRreu(fim) : "") + ")");
+    setEdEv(null); carregar();
+  }
+  async function excluirEv() {
+    if (!edEv || !edEv.id) { setEdEv(null); return; }
+    if (!window.confirm('Excluir "' + edEv.titulo + '" do calendário? A exclusão fica na auditoria.')) return;
+    const r = await sb.from("eventos_calendario").delete().eq("id", edEv.id);
+    if (r.error) { setMsg(hintCal(r.error)); return; }
+    registrarEvento("excluir", "calendario", "Evento excluído: " + edEv.titulo);
+    setEdEv(null); carregar();
+  }
+
+  function celaDia(ano2, mes2, d, soAniv) {
+    const iso = isoDeCal(ano2, mes2, d);
+    const evs = soAniv ? [] : evDoDia(iso);
+    const ans = anivDoDia(iso);
+    const fer = fers[iso];
+    return (
+      <button key={iso} className={"cal-dia" + (iso === hojeISO ? " hoje" : "") + ((dowCal(iso) === 0 || fer) ? " fds" : "")} onClick={() => setDiaAberto(iso)}>
+        <span className="cal-dia-n">{d}{fer ? <span className="cal-fer" title={fer}>{fer}</span> : null}</span>
+        {evs.slice(0, 3).map(function (e) {
+          const t = TIPOS_EV[e.tipo] || TIPOS_EV.evento;
+          return <span key={e.id} className="cal-chip" style={{ background: t.bg, color: t.cor }} title={t.r + ": " + e.titulo}><i className={"ti " + t.ico} aria-hidden="true"></i><span className="cal-chip-t">{e.titulo}</span></span>;
+        })}
+        {evs.length > 3 ? <span className="cal-mais">+{evs.length - 3} evento(s)</span> : null}
+        {ans.length > 0 && (
+          <span className="cal-chip cal-aniv" title={ans.map((a) => a.nome).join(", ")}>
+            <i className="ti ti-cake" aria-hidden="true"></i>
+            <span className="cal-chip-t">{ans.length === 1 ? primeiroNome(ans[0].nome) : ans.length + " aniversariantes"}</span>
+          </span>
+        )}
+      </button>
+    );
+  }
+
+  function GradeMes({ ano2, mes2, soAniv }) {
+    const n = diasNoMesCal(ano2, mes2);
+    const off = dowCal(isoDeCal(ano2, mes2, 1));
+    const celas = [];
+    for (let i = 0; i < off; i++) celas.push(<div key={"v" + i} className="cal-dia vazio"></div>);
+    for (let d = 1; d <= n; d++) celas.push(celaDia(ano2, mes2, d, soAniv));
+    return (
+      <div>
+        <div className="cal-grid" style={{ marginBottom: 4 }}>
+          {DOW_CAL.map((r) => <div key={r} className="cal-dow">{r}</div>)}
+        </div>
+        <div className="cal-grid">{celas}</div>
+      </div>
+    );
+  }
+
+  const nMesAniv = useMemo(() => {
+    const porMes = {};
+    aniv.forEach(function (a) {
+      const mm = Number(String(a.nascimento || "").slice(5, 7));
+      if (mm) porMes[mm] = (porMes[mm] || 0) + 1;
+    });
+    return porMes;
+  }, [aniv]);
+
+  const listaMesAniv = useMemo(() => {
+    return aniv
+      .filter((a) => Number(String(a.nascimento || "").slice(5, 7)) === mesAniv)
+      .sort((x, y) => (String(x.nascimento).slice(8, 10) + x.nome).localeCompare(String(y.nascimento).slice(8, 10) + y.nome));
+  }, [aniv, mesAniv]);
+
+  const D = diaAberto;
+  const evsD = D ? evDoDia(D) : [];
+  const ansD = D ? anivDoDia(D) : [];
+
+  return (
+    <div className="anim-pop">
+      <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap", marginBottom: 14 }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 19, fontWeight: 700 }}>Calendário</div>
+          <div style={{ fontSize: 12.5, color: "var(--sec)" }}>Agenda do ano — eventos, campanhas, semanas temáticas e aniversários</div>
+        </div>
+        {podeEv && <button className="btn-primaria" onClick={() => abrirNovoEv(null)}><i className="ti ti-plus" aria-hidden="true"></i>Novo evento</button>}
+      </div>
+      {msg && <div style={{ marginBottom: 12, fontSize: 13, color: msg.indexOf("✓") === 0 ? "var(--verde)" : "var(--vermelho)", fontWeight: 600 }}>{msg}</div>}
+
+      <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
+        {abasCal.map(([v, r]) => (
+          <span key={v} className="chip" onClick={() => setAba(v)}
+            style={{ cursor: "pointer", background: aba === v ? "var(--tint)" : "var(--branco)", color: aba === v ? "var(--marca-texto)" : "var(--sec)", border: "1px solid " + (aba === v ? "var(--tint-borda)" : "var(--linha)") }}>{r}</span>
+        ))}
+        <span style={{ flex: 1 }}></span>
+        {aba === "anual" && (
+          <span className="cal-nav">
+            {mesSel && <button className="btn-contorno" style={{ padding: "6px 11px", fontSize: 12 }} onClick={() => setMesSel(null)}><i className="ti ti-layout-grid" style={{ marginRight: 4 }} aria-hidden="true"></i>Ver o ano</button>}
+            <button className="btn-fantasma" aria-label="Anterior" onClick={() => { if (mesSel) { if (mesSel === 1) { setMesSel(12); setAno(ano - 1); } else setMesSel(mesSel - 1); } else setAno(ano - 1); }}><i className="ti ti-chevron-left" aria-hidden="true"></i></button>
+            <b>{mesSel ? EQ_MESES[mesSel - 1] + " de " + ano : ano}</b>
+            <button className="btn-fantasma" aria-label="Próximo" onClick={() => { if (mesSel) { if (mesSel === 12) { setMesSel(1); setAno(ano + 1); } else setMesSel(mesSel + 1); } else setAno(ano + 1); }}><i className="ti ti-chevron-right" aria-hidden="true"></i></button>
+          </span>
+        )}
+        {aba === "aniversarios" && (
+          <span className="cal-nav">
+            <button className="btn-fantasma" aria-label="Mês anterior" onClick={() => { if (mesAniv === 1) { setMesAniv(12); setAno(ano - 1); } else setMesAniv(mesAniv - 1); }}><i className="ti ti-chevron-left" aria-hidden="true"></i></button>
+            <b>{EQ_MESES[mesAniv - 1] + " de " + ano}</b>
+            <button className="btn-fantasma" aria-label="Próximo mês" onClick={() => { if (mesAniv === 12) { setMesAniv(1); setAno(ano + 1); } else setMesAniv(mesAniv + 1); }}><i className="ti ti-chevron-right" aria-hidden="true"></i></button>
+          </span>
+        )}
+      </div>
+
+      {!eventos && <div style={{ padding: 30, color: "var(--muted)", fontSize: 13 }}>Carregando…</div>}
+
+      {eventos && aba === "anual" && !mesSel && (
+        <React.Fragment>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginBottom: 12 }}>
+            {Object.keys(TIPOS_EV).map(function (k) {
+              const t = TIPOS_EV[k];
+              const n = eventos.filter((e) => e.tipo === k).length;
+              return <span key={k} className="chip" style={{ background: t.bg, color: t.cor }}><i className={"ti " + t.ico} style={{ fontSize: 12 }} aria-hidden="true"></i>{t.r}{n ? " · " + n : ""}</span>;
+            })}
+            <span className="chip" style={{ background: "#FCE8EC", color: "#E11D48" }}><i className="ti ti-cake" style={{ fontSize: 12 }} aria-hidden="true"></i>Aniversários · {aniv.length}</span>
+          </div>
+          <div className="cal-ano">
+            {EQ_MESES.map(function (nomeM, i) {
+              const m = i + 1;
+              const n = diasNoMesCal(ano, m);
+              const off = dowCal(isoDeCal(ano, m, 1));
+              const iniM = isoDeCal(ano, m, 1), fimM = isoDeCal(ano, m, n);
+              const nEv = eventos.filter((e) => e.data_inicio <= fimM && e.data_fim >= iniM).length;
+              const minis = [];
+              for (let j = 0; j < off; j++) minis.push(<i key={"v" + j}></i>);
+              for (let d = 1; d <= n; d++) {
+                const iso = isoDeCal(ano, m, d);
+                const cls = (evDoDia(iso).length ? "ev " : "") + (anivDoDia(iso).length ? "aniv " : "") + (fers[iso] ? "fer " : "") + (iso === hojeISO ? "hoje" : "");
+                minis.push(<i key={d} className={cls.trim() || undefined}>{d}</i>);
+              }
+              return (
+                <button key={m} className="card-fl clicavel cal-mini" onClick={() => setMesSel(m)}>
+                  <div className="cal-mini-tit">{nomeM}</div>
+                  <div className="cal-mini-grade">{minis}</div>
+                  <div className="cal-mini-pe">
+                    <span>{nEv ? nEv + " evento(s)" : "—"}</span>
+                    {nMesAniv[m] ? <span style={{ color: "#E11D48" }}><i className="ti ti-cake" style={{ fontSize: 11 }} aria-hidden="true"></i> {nMesAniv[m]}</span> : null}
+                  </div>
+                </button>
+              );
+            })}
+          </div>
+        </React.Fragment>
+      )}
+
+      {eventos && aba === "anual" && mesSel && <GradeMes ano2={ano} mes2={mesSel} soAniv={false} />}
+
+      {eventos && aba === "aniversarios" && (
+        <React.Fragment>
+          <GradeMes ano2={ano} mes2={mesAniv} soAniv={true} />
+          <div className="cp-sec" style={{ marginTop: 18 }}>
+            <div className="cp-sec-tit"><i className="ti ti-cake" aria-hidden="true"></i>Aniversariantes de {EQ_MESES[mesAniv - 1]} ({listaMesAniv.length})</div>
+            {listaMesAniv.length === 0 && <div className="cp-vazio" style={{ marginTop: 8 }}><i className="ti ti-cake" aria-hidden="true"></i>Ninguém faz aniversário neste mês — ou as fichas estão sem a data de nascimento.</div>}
+            {listaMesAniv.map(function (a) {
+              const idade = idadeQueFaz(a);
+              const mini = { width: 30, height: 30, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontWeight: 700, fontSize: 11, display: "flex", alignItems: "center", justifyContent: "center", flex: "none", overflow: "hidden" };
+              return (
+                <div key={a.id} className="linha-hover" style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 10 }}>
+                  <span style={{ fontSize: 12.5, fontWeight: 800, color: "#E11D48", width: 34, flex: "none" }}>{String(a.nascimento).slice(8, 10)}/{String(a.nascimento).slice(5, 7)}</span>
+                  {a.foto_url ? <img src={a.foto_url} alt="" style={{ ...mini, objectFit: "cover" }} /> : <span style={mini}>{iniciais(a.nome)}</span>}
+                  <span style={{ flex: 1, minWidth: 0 }}>
+                    <span style={{ display: "block", fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{a.nome}{idade ? <span style={{ color: "var(--sec)", fontWeight: 500 }}> · faz {idade} anos</span> : null}</span>
+                    <span style={{ display: "block", fontSize: 11, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[a.setor, a.unidade].filter(Boolean).join(" · ") || "—"}</span>
+                  </span>
+                  {a.regime && <span className="chip" style={{ background: "var(--roxo-bg)", color: "var(--roxo)", flex: "none" }}>{a.regime}</span>}
+                  {podeEv && (
+                    <span style={{ display: "flex", gap: 6, flex: "none" }}>
+                      <button className="btn-contorno" style={{ padding: "5px 10px", fontSize: 11.5 }} title="Planejar evento de aniversário" onClick={() => planejarAniv(a, "evento")}><i className="ti ti-confetti" style={{ marginRight: 4 }} aria-hidden="true"></i>Evento</button>
+                      <button className="btn-contorno" style={{ padding: "5px 10px", fontSize: 11.5 }} title="Planejar publicação de parabéns" onClick={() => planejarAniv(a, "publicacao")}><i className="ti ti-photo" style={{ marginRight: 4 }} aria-hidden="true"></i>Publicação</button>
+                    </span>
+                  )}
+                </div>
+              );
+            })}
+          </div>
+        </React.Fragment>
+      )}
+
+      {D && (<PortalCP>
+        <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) setDiaAberto(null); }}>
+          <div className="cp-pop anim-pop" style={{ maxWidth: 560 }}>
+            <div className="cp-pop-cab">
+              <div className="cp-pop-cab-top">
+                <span className="cp-proj-ico" style={{ background: "#FCE8EC", color: "#E11D48" }}><i className="ti ti-calendar-event" aria-hidden="true"></i></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2>{dBRreu(D)}</h2>
+                  <div className="cp-pop-meta">{DIA_SEMANA_CAL[dowCal(D)]}{fers[D] ? " · Feriado: " + fers[D] : ""}</div>
+                </div>
+                <button className="btn-fantasma" aria-label="Fechar" onClick={() => setDiaAberto(null)}><i className="ti ti-x" aria-hidden="true"></i></button>
+              </div>
+              <div style={{ paddingBottom: 12 }}></div>
+            </div>
+            <div className="cp-pop-corpo">
+              {ansD.length > 0 && (
+                <div className="cp-sec">
+                  <div className="cp-sec-tit"><i className="ti ti-cake" aria-hidden="true"></i>Aniversariantes</div>
+                  {ansD.map(function (a) {
+                    const idade = idadeQueFaz(a);
+                    return <div key={a.id} style={{ fontSize: 13, padding: "3px 0" }}><b>{a.nome}</b>{idade ? " · faz " + idade + " anos" : ""}{a.setor ? <span style={{ color: "var(--muted)" }}> · {a.setor}</span> : null}</div>;
+                  })}
+                </div>
+              )}
+              <div className="cp-sec">
+                <div className="cp-sec-tit"><i className="ti ti-calendar-event" aria-hidden="true"></i>Agenda do dia</div>
+                {evsD.length === 0 && <div style={{ fontSize: 12.5, color: "var(--muted)" }}>Nada agendado neste dia.</div>}
+                {evsD.map(function (e) {
+                  const t = TIPOS_EV[e.tipo] || TIPOS_EV.evento;
+                  return (
+                    <div key={e.id} className="card-fl" style={{ padding: "10px 12px", marginBottom: 8 }}>
+                      <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                        <span className="chip" style={{ background: t.bg, color: t.cor, flex: "none" }}><i className={"ti " + t.ico} style={{ fontSize: 12 }} aria-hidden="true"></i>{t.r}</span>
+                        <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, minWidth: 0 }}>{e.titulo}</span>
+                        {podeEv && <button className="btn-fantasma" title="Editar" onClick={() => abrirEditarEv(e)}><i className="ti ti-pencil" aria-hidden="true"></i></button>}
+                      </div>
+                      <div style={{ fontSize: 11.5, color: "var(--sec)", marginTop: 4 }}>
+                        {e.data_inicio !== e.data_fim ? dBRreu(e.data_inicio) + " a " + dBRreu(e.data_fim) : null}
+                        {e.data_inicio !== e.data_fim && (e.area || e.local) ? " · " : ""}
+                        {[e.area, e.local].filter(Boolean).join(" · ")}
+                      </div>
+                      {e.descricao && <div style={{ fontSize: 12.5, color: "var(--ink)", marginTop: 6, lineHeight: 1.5 }}>{e.descricao}</div>}
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+            <div className="cp-pop-pe">
+              {podeEv && <button className="btn-primaria" onClick={() => abrirNovoEv(D)}><i className="ti ti-plus" aria-hidden="true"></i>Novo evento neste dia</button>}
+              <button className="btn-contorno" onClick={() => setDiaAberto(null)}>Fechar</button>
+            </div>
+          </div>
+        </div>
+      </PortalCP>)}
+
+      {edEv && (<PortalCP>
+        <div className="cp-fundo" onClick={(e) => { if (e.target.classList.contains("cp-fundo")) setEdEv(null); }}>
+          <div className="cp-pop anim-pop" style={{ maxWidth: 620 }}>
+            <div className="cp-pop-cab">
+              <div className="cp-pop-cab-top">
+                <span className="cp-proj-ico" style={{ background: (TIPOS_EV[edEv.tipo] || TIPOS_EV.evento).bg, color: (TIPOS_EV[edEv.tipo] || TIPOS_EV.evento).cor }}><i className={"ti " + (TIPOS_EV[edEv.tipo] || TIPOS_EV.evento).ico} aria-hidden="true"></i></span>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <h2>{edEv.id ? "Editar no calendário" : "Novo no calendário"}</h2>
+                  <div className="cp-pop-meta">Eventos, campanhas, semanas temáticas e publicações</div>
+                </div>
+                <button className="btn-fantasma" aria-label="Fechar" onClick={() => setEdEv(null)}><i className="ti ti-x" aria-hidden="true"></i></button>
+              </div>
+              <div style={{ paddingBottom: 12 }}></div>
+            </div>
+            <div className="cp-pop-corpo">
+              <div className="cp-ed-lin"><label>Título</label><input className="campo" style={{ width: "100%" }} value={edEv.titulo} onChange={(e) => setEdEv({ ...edEv, titulo: e.target.value })} /></div>
+              <div className="cp-ed-gr">
+                <div className="cp-ed-lin"><label>Tipo</label>
+                  <select className="campo" style={{ width: "100%" }} value={edEv.tipo} onChange={(e) => setEdEv({ ...edEv, tipo: e.target.value })}>
+                    {Object.keys(TIPOS_EV).map((k) => <option key={k} value={k}>{TIPOS_EV[k].r}</option>)}
+                  </select>
+                </div>
+                <div className="cp-ed-lin"><label>Área / setor</label>
+                  <input className="campo" style={{ width: "100%" }} list="calAreas" value={edEv.area} onChange={(e) => setEdEv({ ...edEv, area: e.target.value })} />
+                  <datalist id="calAreas">{AREAS_REU.map((a) => <option key={a} value={a} />)}</datalist>
+                </div>
+              </div>
+              <div className="cp-ed-gr">
+                <div className="cp-ed-lin"><label>Início</label><input className="campo" type="date" style={{ width: "100%" }} value={edEv.data_inicio} onChange={(e) => setEdEv({ ...edEv, data_inicio: e.target.value, data_fim: edEv.data_fim < e.target.value ? e.target.value : edEv.data_fim })} /></div>
+                <div className="cp-ed-lin"><label>Fim · igual ao início se for um dia só</label><input className="campo" type="date" min={edEv.data_inicio} style={{ width: "100%" }} value={edEv.data_fim} onChange={(e) => setEdEv({ ...edEv, data_fim: e.target.value })} /></div>
+              </div>
+              <div className="cp-ed-lin"><label>Local · opcional</label><input className="campo" style={{ width: "100%" }} value={edEv.local} onChange={(e) => setEdEv({ ...edEv, local: e.target.value })} /></div>
+              <div className="cp-ed-lin"><label>Descrição · o que acontece, quem organiza</label><textarea className="campo" style={{ width: "100%", minHeight: 74, resize: "vertical" }} value={edEv.descricao} onChange={(e) => setEdEv({ ...edEv, descricao: e.target.value })} /></div>
+              {edEv.id && (
+                <React.Fragment>
+                  <div className="cp-ed-sep" style={{ color: "var(--vermelho)" }}><i className="ti ti-trash" aria-hidden="true"></i>Zona de risco</div>
+                  <button className="cp-perigo" onClick={excluirEv}><i className="ti ti-trash" aria-hidden="true"></i>Excluir do calendário</button>
+                </React.Fragment>
+              )}
+            </div>
+            <div className="cp-pop-pe">
+              <button className="btn-primaria" disabled={salvando} onClick={salvarEv}><i className="ti ti-check" aria-hidden="true"></i>{salvando ? "Salvando…" : "Salvar no banco"}</button>
+              <button className="btn-contorno" onClick={() => setEdEv(null)}>Cancelar</button>
+            </div>
+          </div>
+        </div>
+      </PortalCP>)}
+    </div>
+  );
+}
+
 const STATUS_W5 = {
   pendente:  { r: "Pendente",     cor: "var(--sec)",      bg: "var(--fundo)" },
   andamento: { r: "Em andamento", cor: "var(--marca)",    bg: "var(--tint)" },
@@ -8384,6 +8759,8 @@ function Shell({ ctx, aoSair }) {
         conteudo = <PaginaReunioes ctx={ctx} />;
       } else if (pagina === "planos") {
         conteudo = <PaginaPlanos ctx={ctx} />;
+      } else if (pagina === "calendario") {
+        conteudo = <PaginaCalendario ctx={ctx} />;
       } else if (pagina === "callcenter") {
     conteudo = <PaginaCallCenter ctx={ctx} />;
   } else if (pagina === "demandas") {

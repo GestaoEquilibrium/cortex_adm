@@ -735,3 +735,41 @@ table.w5-tab tbody tr:hover td{background:var(--tint-hover)}
 .sb::-webkit-scrollbar{width:4px}
 .sb::-webkit-scrollbar-thumb{background:var(--linha);border-radius:99px}
 .sb::-webkit-scrollbar-track{background:transparent}
+
+/* ============================================================
+   CALENDÁRIO (sprint 79) — prefixo cal-
+   ============================================================ */
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px}
+.cal-dow{font-size:10px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-align:center;padding:2px 0}
+.cal-dia{min-height:92px;background:var(--branco);border:1px solid var(--linha);border-radius:10px;padding:5px 6px;
+  text-align:left;cursor:pointer;font-family:inherit;display:flex;flex-direction:column;align-items:stretch;gap:2px;
+  transition:border-color .15s,transform .15s var(--mola);overflow:hidden;min-width:0}
+.cal-dia:hover{border-color:var(--marca);transform:translateY(-1px)}
+.cal-dia.vazio{background:transparent;border:none;cursor:default;transform:none;min-height:0}
+.cal-dia.fds{background:var(--fundo)}
+.cal-dia.hoje{border-color:var(--marca);box-shadow:0 0 0 2px var(--tint)}
+.cal-dia-n{font-size:12px;font-weight:700;color:var(--sec);display:flex;align-items:baseline;gap:5px;min-height:15px}
+.cal-fer{font-size:9px;font-weight:600;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1;min-width:0}
+.cal-chip{display:flex;align-items:center;gap:4px;font-size:10.5px;font-weight:600;border-radius:6px;padding:1.5px 6px;min-width:0}
+.cal-chip i{font-size:11px;flex:none}
+.cal-chip-t{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0}
+.cal-chip.cal-aniv{background:#FCE8EC;color:#E11D48}
+.cal-mais{font-size:10px;font-weight:700;color:var(--muted)}
+.cal-nav{display:flex;align-items:center;gap:4px}
+.cal-nav b{font-size:14.5px;min-width:148px;text-align:center}
+.cal-ano{display:grid;grid-template-columns:repeat(auto-fill,minmax(205px,1fr));gap:12px}
+.cal-mini{padding:12px 12px 10px;display:flex;flex-direction:column;gap:8px;text-align:left;font-family:inherit}
+.cal-mini-tit{font-size:13px;font-weight:700}
+.cal-mini-grade{display:grid;grid-template-columns:repeat(7,1fr);gap:2px}
+.cal-mini-grade i{font-style:normal;font-size:9px;text-align:center;border-radius:4px;padding:2px 0;color:var(--sec)}
+.cal-mini-grade i.ev{background:var(--tint);color:var(--marca-texto);font-weight:700}
+.cal-mini-grade i.aniv{box-shadow:inset 0 -2px 0 #E11D48}
+.cal-mini-grade i.fer{color:var(--muted);opacity:.65}
+.cal-mini-grade i.hoje{outline:1.5px solid var(--marca);outline-offset:-1.5px}
+.cal-mini-pe{font-size:11px;color:var(--sec);font-weight:600;display:flex;align-items:center;gap:10px}
+@media(max-width:760px){
+  .cal-dia{min-height:62px;padding:3px 4px}
+  .cal-chip{font-size:9px;padding:1px 4px}
+  .cal-fer{display:none}
+  .cal-nav b{min-width:116px;font-size:13px}
+}
