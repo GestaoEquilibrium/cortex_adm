@@ -1,7 +1,7 @@
  // CORTEX Gestao - service worker (sprint 34)
 // Estrategia: SEMPRE rede primeiro (nunca serve versao velha com
 // internet); o cache so entra quando estiver sem conexao.
-const CACHE = "cortex-v80";
+const CACHE = "cortex-v81";
 self.addEventListener("install", function () { self.skipWaiting(); });
 self.addEventListener("activate", function (e) {
   e.waitUntil(
@@ -35,11 +35,19 @@ self.addEventListener("push", function (e) {
     vibrate: [80, 40, 80]
   }));
 });
+// sprint 81: o clique abre a conversa (ou Demandas) na janela do
+// CORTEX que ja estiver aberta; a tela do relogio (ponto.html) e ignorada.
 self.addEventListener("notificationclick", function (e) {
   e.notification.close();
-  var alvo = (e.notification.data && e.notification.data.url) || "./";
+  var d = e.notification.data || {};
+  var alvo = d.url || "./";
   e.waitUntil(clients.matchAll({ type: "window", includeUncontrolled: true }).then(function (lista) {
-    for (var i = 0; i < lista.length; i++) { if ("focus" in lista[i]) return lista[i].focus(); }
+    for (var i = 0; i < lista.length; i++) {
+      var c = lista[i];
+      if (c.url.indexOf("ponto.html") !== -1 || !("focus" in c)) continue;
+      if (d.conversa || d.pagina) c.postMessage({ cg: "abrir", conversa: d.conversa || null, pagina: d.pagina || null });
+      return c.focus();
+    }
     if (clients.openWindow) return clients.openWindow(alvo);
   }));
 });

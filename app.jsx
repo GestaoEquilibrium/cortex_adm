@@ -413,7 +413,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v80</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v81</div>
       </aside>
     </React.Fragment>
   );
@@ -5720,6 +5720,76 @@ function AbaIntegracoes({ ctx }) {
 }
 
 // ============================================================
+// AVISOS DE MENSAGEM (sprint 81): som + notificacao do navegador.
+// Preferencias por aparelho (localStorage): cg_som e cg_notif.
+// ============================================================
+const AVISO_MSG = { convAberta: null, titulo: "CORTEX Gestão" };
+let somCtxMsg = null;
+let piscaTituloT = null;
+function lerPrefMsg(k, padrao) { try { const v = localStorage.getItem(k); return v === null ? padrao : v === "1"; } catch (e) { return padrao; } }
+function gravarPrefMsg(k, v) { try { localStorage.setItem(k, v ? "1" : "0"); } catch (e) {} }
+function destravarSomMsg() {
+  try {
+    if (!somCtxMsg) { const AC = window.AudioContext || window.webkitAudioContext; if (AC) somCtxMsg = new AC(); }
+    if (somCtxMsg && somCtxMsg.state === "suspended") somCtxMsg.resume();
+  } catch (e) {}
+}
+// "Plim" sintetizado (sem arquivo de audio): duas notas para mensagem, tres para demanda
+function tocarSomMsg(tipo, forcar) {
+  if (!forcar && !lerPrefMsg("cg_som", true)) return;
+  try {
+    destravarSomMsg();
+    if (!somCtxMsg || somCtxMsg.state !== "running") return;
+    const t0 = somCtxMsg.currentTime + 0.02;
+    const notas = tipo === "demanda" ? [[659.25, 0], [880, 0.12], [1046.5, 0.24]] : [[880, 0], [1318.5, 0.11]];
+    notas.forEach(function (n) {
+      const o = somCtxMsg.createOscillator();
+      const g = somCtxMsg.createGain();
+      o.type = "sine"; o.frequency.value = n[0];
+      g.gain.setValueAtTime(0.0001, t0 + n[1]);
+      g.gain.exponentialRampToValueAtTime(0.25, t0 + n[1] + 0.015);
+      g.gain.exponentialRampToValueAtTime(0.0001, t0 + n[1] + 0.34);
+      o.connect(g); g.connect(somCtxMsg.destination);
+      o.start(t0 + n[1]); o.stop(t0 + n[1] + 0.36);
+    });
+  } catch (e) {}
+}
+function notifSuportadaMsg() { return typeof window !== "undefined" && "Notification" in window; }
+function notifPermissaoMsg() { return notifSuportadaMsg() ? Notification.permission : "indisponivel"; }
+function notifLigadaMsg() { return notifPermissaoMsg() === "granted" && lerPrefMsg("cg_notif", true); }
+async function mostrarNotificacaoMsg(titulo, corpo, tag, destino, forcar) {
+  if (!forcar && !notifLigadaMsg()) return;
+  if (notifPermissaoMsg() !== "granted") return;
+  const dados = {
+    url: "./" + (destino.conversa ? "?conversa=" + destino.conversa : "?pagina=" + (destino.pagina || "mensagens")),
+    conversa: destino.conversa || null,
+    pagina: destino.pagina || null,
+  };
+  const op = { body: corpo, icon: "icons/icon-192.png", badge: "icons/badge-96.png", tag: tag, renotify: true, data: dados };
+  try {
+    if (navigator.serviceWorker && navigator.serviceWorker.controller) {
+      const reg = await navigator.serviceWorker.getRegistration();
+      if (reg && reg.showNotification) { await reg.showNotification(titulo, op); return; }
+    }
+  } catch (e) {}
+  try {
+    const n = new Notification(titulo, op);
+    n.onclick = function () { window.focus(); window.dispatchEvent(new CustomEvent("cg-abrir", { detail: dados })); n.close(); };
+  } catch (e) {}
+}
+// Aba em segundo plano: o titulo pisca ate a pessoa voltar
+function piscarTituloMsg(txt) {
+  if (!document.hidden || piscaTituloT) return;
+  let alt = false;
+  piscaTituloT = setInterval(function () {
+    if (!document.hidden) { clearInterval(piscaTituloT); piscaTituloT = null; document.title = AVISO_MSG.titulo; return; }
+    alt = !alt;
+    document.title = alt ? "💬 " + txt : AVISO_MSG.titulo;
+  }, 1200);
+}
+function cortarMsg(t, n) { t = String(t || "").replace(/\s+/g, " ").trim(); return t.length > n ? t.slice(0, n - 1) + "…" : t; }
+
+// ============================================================
 // MENSAGENS (sprint 80) — conversas diretas, grupos e a
 // conversa de cada demanda. Banco: SQL 42.
 // ============================================================
@@ -5828,6 +5898,7 @@ function PaginaMensagens({ ctx, inicial, aoConsumirInicial }) {
   }
 
   function abrir(id) {
+    AVISO_MSG.convAberta = id;
     selRef.current = id;
     ultimoRef.current = null;
     coladoRef.current = true;
@@ -5838,7 +5909,34 @@ function PaginaMensagens({ ctx, inicial, aoConsumirInicial }) {
     setTimeout(() => { if (campoRef.current && window.innerWidth > 820) campoRef.current.focus(); }, 60);
   }
 
-  useEffect(() => { carregarConvs(); }, []);
+  useEffect(() => { carregarConvs(); return () => { AVISO_MSG.convAberta = null; }; }, []);
+  // Preferencias de aviso neste aparelho
+  const [perm, setPerm] = useState(notifPermissaoMsg());
+  const [somOn, setSomOn] = useState(lerPrefMsg("cg_som", true));
+  const [notifOn, setNotifOn] = useState(lerPrefMsg("cg_notif", true));
+  const [dicaAviso, setDicaAviso] = useState("");
+  async function ativarAvisos() {
+    destravarSomMsg();
+    if (!notifSuportadaMsg()) { setDicaAviso("Este navegador não mostra notificações. No iPhone, instale o CORTEX na tela de início."); return; }
+    let p = Notification.permission;
+    if (p === "default") { try { p = await Notification.requestPermission(); } catch (e) {} }
+    setPerm(p);
+    if (p === "granted") {
+      gravarPrefMsg("cg_notif", true); setNotifOn(true); setDicaAviso("");
+      tocarSomMsg("mensagem", true);
+      mostrarNotificacaoMsg("Avisos ligados ✓", "Você vai ser avisado quando chegar mensagem no CORTEX Gestão.", "cg-teste", { pagina: "mensagens" }, true);
+    } else if (p === "denied") {
+      setDicaAviso("As notificações estão bloqueadas. Clique no cadeado ao lado do endereço do site → Notificações → Permitir, e recarregue.");
+    }
+  }
+  function alternarNotif() {
+    if (perm !== "granted") { ativarAvisos(); return; }
+    const v = !notifOn; gravarPrefMsg("cg_notif", v); setNotifOn(v); setDicaAviso(v ? "" : "Notificações desligadas neste aparelho.");
+  }
+  function alternarSom() {
+    const v = !somOn; gravarPrefMsg("cg_som", v); setSomOn(v);
+    if (v) tocarSomMsg("mensagem", true);
+  }
   useEffect(() => {
     if (!inicial) return;
     abrir(inicial);
@@ -5949,12 +6047,29 @@ function PaginaMensagens({ ctx, inicial, aoConsumirInicial }) {
           </span>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontWeight: 700, fontSize: 15 }}>Conversas</div>
-            <div style={{ fontSize: 11, color: "var(--muted)" }}>Equipe, grupos e demandas</div>
+            <div style={{ fontSize: 11, color: "var(--muted)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>Equipe, grupos e demandas</div>
           </div>
+          <button className={"msg-aviso-btn" + (perm === "granted" && notifOn ? " on" : "")} onClick={alternarNotif}
+            title={perm === "granted" ? (notifOn ? "Notificações ligadas — clique para desligar" : "Notificações desligadas — clique para ligar") : perm === "denied" ? "Notificações bloqueadas no navegador" : "Ativar notificações"}
+            aria-label="Notificações">
+            <i className={"ti " + (perm === "granted" && notifOn ? "ti-bell-ringing" : "ti-bell-off")} aria-hidden="true"></i>
+          </button>
+          <button className={"msg-aviso-btn" + (somOn ? " on" : "")} onClick={alternarSom}
+            title={somOn ? "Som ligado — clique para desligar" : "Som desligado — clique para ligar"} aria-label="Som">
+            <i className={"ti " + (somOn ? "ti-volume" : "ti-volume-off")} aria-hidden="true"></i>
+          </button>
           <button className="btn-primaria" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={() => { setAddGrupo(false); abrirContatos("pessoa"); }}>
             <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova
           </button>
         </div>
+        {perm === "default" && (
+          <div className="msg-aviso-faixa">
+            <i className="ti ti-bell-ringing" aria-hidden="true"></i>
+            <span>Quer ser avisado quando chegar mensagem?</span>
+            <button onClick={ativarAvisos}>Ativar</button>
+          </div>
+        )}
+        {dicaAviso && <div className="msg-aviso-dica">{dicaAviso}</div>}
         <div className="msg-busca">
           <i className="ti ti-search" aria-hidden="true"></i>
           <input className="campo" placeholder="Buscar conversa" value={busca} onChange={(e) => setBusca(e.target.value)} />
@@ -9172,16 +9287,77 @@ function Shell({ ctx, aoSair }) {
   const [simAbrir, setSimAbrir] = useState(false);
   const [avisos, setAvisos] = useState({ mensagens: 0, demandas_novas: 0, demandas_minhas: 0 });
   const [convInicial, setConvInicial] = useState(null);
+  const prevAvRef = useRef(null);
+  const ultimoNotifRef = useRef(Date.now());
+  async function avisarMensagensNovas() {
+    const { data, error } = await sb.rpc("conversas_listar");
+    if (error || !data) return;
+    const desde = ultimoNotifRef.current;
+    const visivel = !document.hidden && document.hasFocus();
+    const novas = data.filter((c) => c.nao_lidas > 0 && !c.ultima_sistema && c.ultima_em
+      && new Date(c.ultima_em).getTime() > desde && !(visivel && AVISO_MSG.convAberta === c.id));
+    data.forEach((c) => { const t = c.ultima_em ? new Date(c.ultima_em).getTime() : 0; if (t > ultimoNotifRef.current) ultimoNotifRef.current = t; });
+    if (!novas.length) return;
+    tocarSomMsg("mensagem");
+    piscarTituloMsg("Nova mensagem");
+    novas.slice(0, 3).forEach((c) => {
+      const titulo = c.tipo === "demanda" ? "Demanda: " + cortarMsg(c.titulo, 60) : cortarMsg(c.titulo, 60);
+      const corpo = (c.tipo === "direta" ? "" : primeiroNome(c.ultima_autor) + ": ") + cortarMsg(c.ultima_texto, 160)
+        + (c.nao_lidas > 1 ? "  (+" + (c.nao_lidas - 1) + ")" : "");
+      mostrarNotificacaoMsg(titulo, corpo, "cg-conv-" + c.id, { conversa: c.id });
+    });
+  }
   const atualizarAvisos = useCallback(async () => {
     if (!sb) return;
     try {
       const { data, error } = await sb.rpc("meus_avisos");
-      if (!error && data && data[0]) setAvisos(data[0]);
+      if (!error && data && data[0]) {
+        const novo = data[0];
+        const ant = prevAvRef.current;
+        prevAvRef.current = novo;
+        setAvisos(novo);
+        if (ant && (novo.mensagens || 0) > (ant.mensagens || 0)) avisarMensagensNovas();
+        if (ant && (novo.demandas_novas || 0) > (ant.demandas_novas || 0)) {
+          tocarSomMsg("demanda");
+          piscarTituloMsg("Nova demanda");
+          mostrarNotificacaoMsg("Nova demanda para você",
+            (novo.demandas_novas === 1 ? "Você tem 1 demanda nova" : "Você tem " + novo.demandas_novas + " demandas novas") + " no CORTEX Gestão.",
+            "cg-demandas", { pagina: "demandas" });
+        }
+      }
     } catch (e) {}
+  }, []);
+  // Navegador so libera som depois do primeiro toque/tecla na pagina
+  useEffect(() => {
+    const dest = () => destravarSomMsg();
+    window.addEventListener("pointerdown", dest);
+    window.addEventListener("keydown", dest);
+    return () => { window.removeEventListener("pointerdown", dest); window.removeEventListener("keydown", dest); };
+  }, []);
+  // Clique numa notificacao: abre a conversa (ou Demandas)
+  useEffect(() => {
+    function abrirDestino(d) {
+      if (!d) return;
+      if (d.conversa) { setConvInicial(d.conversa); setPaginaRaw("mensagens"); try { localStorage.setItem("cg_pagina", "mensagens"); } catch (e) {} }
+      else if (d.pagina) { setPaginaRaw(d.pagina); try { localStorage.setItem("cg_pagina", d.pagina); } catch (e) {} }
+    }
+    const qs = new URLSearchParams(window.location.search);
+    if (qs.get("conversa") || qs.get("pagina")) {
+      abrirDestino({ conversa: qs.get("conversa"), pagina: qs.get("pagina") });
+      window.history.replaceState(null, "", window.location.pathname + window.location.hash);
+    }
+    const doSw = (e) => { if (e.data && e.data.cg === "abrir") abrirDestino(e.data); };
+    const daPagina = (e) => abrirDestino(e.detail);
+    if (navigator.serviceWorker) navigator.serviceWorker.addEventListener("message", doSw);
+    window.addEventListener("cg-abrir", daPagina);
+    return () => {
+      if (navigator.serviceWorker) navigator.serviceWorker.removeEventListener("message", doSw);
+      window.removeEventListener("cg-abrir", daPagina);
+    };
   }, []);
   useEffect(() => {
     atualizarAvisos();
-    const t = setInterval(() => { if (!document.hidden) atualizarAvisos(); }, 20000);
+    const t = setInterval(() => { if (!document.hidden) atualizarAvisos(); }, 10000);
     const aoVoltar = () => { if (!document.hidden) atualizarAvisos(); };
     window.addEventListener("focus", aoVoltar);
     document.addEventListener("visibilitychange", aoVoltar);
@@ -9190,7 +9366,8 @@ function Shell({ ctx, aoSair }) {
   useEffect(() => {
     const tot = (avisos.mensagens || 0) + (avisos.demandas_novas || 0);
     const base = "CORTEX Gestão";
-    document.title = tot > 0 ? "(" + (tot > 99 ? "99+" : tot) + ") " + base : base;
+    AVISO_MSG.titulo = tot > 0 ? "(" + (tot > 99 ? "99+" : tot) + ") " + base : base;
+    if (!piscaTituloT) document.title = AVISO_MSG.titulo;
   }, [avisos]);
   const ctxReal = ctx;
   if (simPerfil && simPerms) {
