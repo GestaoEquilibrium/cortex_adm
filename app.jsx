@@ -21,6 +21,7 @@ const sbCadastro = CONFIG_OK ? window.supabase.createClient(CFG.SUPABASE_URL, CF
 // ------------------------------------------------------------
 const MODULOS = [
   { id: "painel",        rotulo: "Painel",         icone: "ti-layout-dashboard", cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo", grupo: "" },
+  { id: "mensagens",     rotulo: "Mensagens",      icone: "ti-message-circle",   cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo", grupo: "" },
   { id: "arquivos",      rotulo: "Arquivos",       icone: "ti-folder",           cor: "var(--marca-texto)", fundo: "var(--tint)",        status: "ativo", grupo: "diaadia" },
   { id: "modelos",       rotulo: "Modelos",        icone: "ti-file-text",        cor: "var(--ambar)",         fundo: "var(--ambar-bg)",    status: "ativo", grupo: "diaadia" },
   { id: "salas",         rotulo: "Salas",          icone: "ti-door",             cor: "var(--teal)",          fundo: "var(--teal-bg)",     status: "ativo", grupo: "diaadia" },
@@ -140,9 +141,12 @@ function registrarEvento(acao, modulo, entidade, entidadeId, detalhes) {
 function nivelModulo(ctx, moduloId) {
   if (!ctx || !ctx.profile) return "oculto";
   if (moduloId === "conta") return ctx.acessoTotal ? "editar" : "ver";
+  if (moduloId === "mensagens") return "editar";
   if (ctx.acessoTotal) return "editar";
   const regra = (ctx.permissoes || []).find((p) => p.modulo === moduloId && !p.aba);
-  return regra ? regra.nivel : "oculto";
+  const nivelRegra = regra ? regra.nivel : "oculto";
+  if (moduloId === "demandas" && nivelRegra === "oculto" && ctx.minhasDemandas) return "ver";
+  return nivelRegra;
 }
 
 // Nivel efetivo de uma aba: regra da aba, senao a do modulo.
@@ -300,6 +304,8 @@ function TelaLogin() {
 // ------------------------------------------------------------
 function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, podeSimular, aoSimular, simulando }) {
   const [celAberta, setCelAberta] = useState(false);
+  const avSb = ctx.avisos || {};
+  const totAv = (avSb.mensagens || 0) + (avSb.demandas_novas || 0);
   const visiveis = MODULOS.filter((m) => nivelModulo(ctx, m.id) !== "oculto");
   const principais = visiveis.filter((m) => m.id !== "configuracoes" && m.id !== "conta");
   const config = visiveis.find((m) => m.id === "configuracoes");
@@ -307,19 +313,24 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
 
   function Item({ m }) {
     const ativo = pagina === m.id;
+    const nAv = m.id === "mensagens" ? (avSb.mensagens || 0) : m.id === "demandas" ? (avSb.demandas_novas || 0) : 0;
+    const nTxt = nAv > 99 ? "99+" : String(nAv);
+    const dicaAv = nAv > 0 ? (m.id === "mensagens" ? nAv + " mensagem(ns) nova(s)" : nAv + " demanda(s) nova(s) para você") : "";
     return (
       <div
         className={"item-menu" + (ativo ? " on" : "")}
         onClick={() => setPagina(m.id)}
-        title={estado === "rail" ? m.rotulo : undefined}
+        title={estado === "rail" ? m.rotulo + (dicaAv ? " · " + dicaAv : "") : (dicaAv || undefined)}
         role="button"
         tabIndex={0}
         onKeyDown={(e) => { if (e.key === "Enter") setPagina(m.id); }}
       >
         <span className="sb-ico" style={ativo ? undefined : { background: m.fundo, color: m.cor }}>
           <i className={"ti " + m.icone} style={{ fontSize: 13.5 }} aria-hidden="true"></i>
+          {nAv > 0 && <b className="sb-badge-ico">{nTxt}</b>}
         </span>
         <span className="rotulo">{m.rotulo}</span>
+        {nAv > 0 && <b className="sb-badge" aria-label={dicaAv}>{nTxt}</b>}
       </div>
     );
   }
@@ -330,11 +341,13 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
         <div className="quadradinho" onClick={() => setEstado("exp")} role="button" aria-label="Abrir menu" tabIndex={0}
              onKeyDown={(e) => { if (e.key === "Enter") setEstado("exp"); }}>
           <Asterisco tam={20} />
+          {totAv > 0 && <b className="sb-dot"></b>}
         </div>
       )}
 
       <button className="botao-celular so-celular" aria-label="Abrir menu" onClick={() => setCelAberta(true)}>
         <i className="ti ti-menu-2" style={{ fontSize: 20 }} aria-hidden="true"></i>
+        {totAv > 0 && <b className="sb-dot"></b>}
       </button>
       {celAberta && <div className="pano-celular so-celular" onClick={() => setCelAberta(false)}></div>}
 
@@ -400,7 +413,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v79</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v80</div>
       </aside>
     </React.Fragment>
   );
@@ -4264,7 +4277,7 @@ function AbaPerfis({ ctx, podeEditar }) {
                 <button className="btn-fantasma" style={{ width: "auto", padding: "0 10px", height: 28, fontSize: 12, fontWeight: 600 }} onClick={excluirPerfil}>excluir perfil</button>
               )}
             </div>
-            {MODULOS.map((m) => (
+            {MODULOS.filter((m) => m.id !== "mensagens").map((m) => (
               <React.Fragment key={m.id}>
                 <div className="linha-hover" style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 10, padding: "7px 6px", borderRadius: 9 }}>
                   <span style={{ fontSize: 12.5, display: "flex", alignItems: "center", gap: 7, minWidth: 0 }}>
@@ -5706,6 +5719,449 @@ function AbaIntegracoes({ ctx }) {
   );
 }
 
+// ============================================================
+// MENSAGENS (sprint 80) — conversas diretas, grupos e a
+// conversa de cada demanda. Banco: SQL 42.
+// ============================================================
+const TIPO_CONV = {
+  direta:  { r: "Equipe",  ico: "ti-user",      cor: "var(--marca-texto)", bg: "var(--tint)" },
+  grupo:   { r: "Grupo",   ico: "ti-users",     cor: "#0F766E",            bg: "#E0F5F1" },
+  demanda: { r: "Demanda", ico: "ti-checklist", cor: "#7C3AED",            bg: "#F3E8FF" },
+};
+const MESES_MSG = ["janeiro", "fevereiro", "março", "abril", "maio", "junho", "julho", "agosto", "setembro", "outubro", "novembro", "dezembro"];
+const PRIO_MSG = { urgente: "Urgente", alta: "Alta", normal: "Normal", baixa: "Baixa" };
+
+function p2Msg(n) { return String(n).padStart(2, "0"); }
+function diaMsg(iso) { const d = new Date(iso); return d.getFullYear() + "-" + p2Msg(d.getMonth() + 1) + "-" + p2Msg(d.getDate()); }
+function horaMsg(iso) { const d = new Date(iso); return p2Msg(d.getHours()) + ":" + p2Msg(d.getMinutes()); }
+function dataHoraMsg(iso) { if (!iso) return ""; const d = new Date(iso); return p2Msg(d.getDate()) + "/" + p2Msg(d.getMonth() + 1) + " às " + horaMsg(iso); }
+function rotuloDiaMsg(chave) {
+  const hoje = diaMsg(new Date().toISOString());
+  const ont = new Date(); ont.setDate(ont.getDate() - 1);
+  if (chave === hoje) return "Hoje";
+  if (chave === diaMsg(ont.toISOString())) return "Ontem";
+  const p = chave.split("-");
+  return Number(p[2]) + " de " + MESES_MSG[Number(p[1]) - 1] + " de " + p[0];
+}
+function quandoListaMsg(iso) {
+  if (!iso) return "";
+  const k = diaMsg(iso);
+  if (k === diaMsg(new Date().toISOString())) return horaMsg(iso);
+  const ont = new Date(); ont.setDate(ont.getDate() - 1);
+  if (k === diaMsg(ont.toISOString())) return "ontem";
+  const p = k.split("-");
+  return p[2] + "/" + p[1];
+}
+
+function AvatarMsg({ nome, foto, tipo, tam }) {
+  const t = tam || 40;
+  if (tipo === "grupo" || tipo === "demanda") {
+    const T = TIPO_CONV[tipo];
+    return (
+      <span className="msg-av" style={{ width: t, height: t, borderRadius: Math.round(t * .32), background: T.bg, color: T.cor }}>
+        <i className={"ti " + T.ico} style={{ fontSize: Math.round(t * .48) }} aria-hidden="true"></i>
+      </span>
+    );
+  }
+  return (
+    <span className="msg-av" style={{ width: t, height: t, borderRadius: "50%", background: "var(--grad)", color: "#fff", fontSize: Math.round(t * .34) }}>
+      {foto ? <img src={foto} alt="" /> : iniciais(nome)}
+    </span>
+  );
+}
+
+function PaginaMensagens({ ctx, inicial, aoConsumirInicial }) {
+  const [convs, setConvs] = useState(null);
+  const [sel, setSel] = useState(null);
+  const [busca, setBusca] = useState("");
+  const [det, setDet] = useState(null);
+  const [msgs, setMsgs] = useState([]);
+  const [carregandoMsgs, setCarregandoMsgs] = useState(false);
+  const [texto, setTexto] = useState("");
+  const [enviando, setEnviando] = useState(false);
+  const [erro, setErro] = useState("");
+  const [nova, setNova] = useState(null);       // null | "pessoa" | "grupo"
+  const [addGrupo, setAddGrupo] = useState(false);
+  const [contatos, setContatos] = useState(null);
+  const [buscaC, setBuscaC] = useState("");
+  const [marcados, setMarcados] = useState({});
+  const [nomeGrupo, setNomeGrupo] = useState("");
+  const [ocupadoM, setOcupadoM] = useState(false);
+  const [verChat, setVerChat] = useState(false); // celular: lista ou conversa
+  const selRef = useRef(null);
+  const ultimoRef = useRef(null);
+  const corpoRef = useRef(null);
+  const coladoRef = useRef(true);
+  const campoRef = useRef(null);
+
+  const erroSql = (e) => (e && e.message ? e.message : String(e)) +
+    (e && e.message && (e.message.indexOf("function") !== -1 || e.message.indexOf("does not exist") !== -1) ? " — rode o 42_mensagens_demandas.sql." : "");
+
+  async function carregarConvs() {
+    const { data, error } = await sb.rpc("conversas_listar");
+    if (error) { setErro(erroSql(error)); setConvs((c) => c || []); return; }
+    setConvs(data || []);
+  }
+
+  async function marcarLida(id) {
+    await sb.rpc("conversa_marcar_lida", { p_conversa: id });
+    setConvs((cs) => (cs || []).map((c) => (c.id === id ? { ...c, nao_lidas: 0 } : c)));
+    if (ctx.atualizarAvisos) ctx.atualizarAvisos();
+  }
+
+  async function carregarMsgs(id, primeira) {
+    const { data, error } = await sb.rpc("mensagens_listar", { p_conversa: id, p_depois: primeira ? null : ultimoRef.current });
+    if (selRef.current !== id) return;
+    if (error) { setErro(erroSql(error)); setCarregandoMsgs(false); return; }
+    const rows = data || [];
+    if (primeira) setMsgs(rows);
+    else if (rows.length) setMsgs((prev) => prev.concat(rows.filter((x) => !prev.some((p) => p.id === x.id))));
+    if (rows.length) ultimoRef.current = rows[rows.length - 1].created_at;
+    setCarregandoMsgs(false);
+    if (primeira || rows.some((x) => !x.minha && !x.sistema)) marcarLida(id);
+  }
+
+  async function carregarDet(id) {
+    const { data, error } = await sb.rpc("conversa_detalhe", { p_conversa: id });
+    if (selRef.current !== id || error) return;
+    setDet(data);
+  }
+
+  function abrir(id) {
+    selRef.current = id;
+    ultimoRef.current = null;
+    coladoRef.current = true;
+    setSel(id); setMsgs([]); setDet(null); setErro(""); setTexto("");
+    setCarregandoMsgs(true); setVerChat(true);
+    carregarMsgs(id, true);
+    carregarDet(id);
+    setTimeout(() => { if (campoRef.current && window.innerWidth > 820) campoRef.current.focus(); }, 60);
+  }
+
+  useEffect(() => { carregarConvs(); }, []);
+  useEffect(() => {
+    if (!inicial) return;
+    abrir(inicial);
+    carregarConvs();
+    if (aoConsumirInicial) aoConsumirInicial();
+  }, [inicial]);
+
+  // Atualização automática: conversa aberta a cada 4 s, lista a cada 12 s
+  useEffect(() => {
+    const t1 = setInterval(() => {
+      if (document.hidden || !selRef.current) return;
+      carregarMsgs(selRef.current, false);
+      carregarDet(selRef.current);
+    }, 4000);
+    const t2 = setInterval(() => { if (!document.hidden) carregarConvs(); }, 12000);
+    return () => { clearInterval(t1); clearInterval(t2); };
+  }, []);
+
+  // Rolagem: desce sozinho quando chega mensagem, se a pessoa já estava no fim
+  useEffect(() => {
+    const el = corpoRef.current;
+    if (el && coladoRef.current) el.scrollTop = el.scrollHeight;
+  }, [msgs.length, sel, det && det.demanda ? 1 : 0]);
+
+  async function enviar() {
+    const t = texto.trim();
+    if (!t || !sel || enviando) return;
+    setEnviando(true); setErro("");
+    const { error } = await sb.rpc("mensagem_enviar", { p_conversa: sel, p_texto: t });
+    setEnviando(false);
+    if (error) { setErro("Não enviou: " + erroSql(error)); return; }
+    setTexto("");
+    coladoRef.current = true;
+    await carregarMsgs(sel, false);
+    carregarConvs();
+    if (campoRef.current) campoRef.current.focus();
+  }
+
+  async function abrirContatos(modo) {
+    setNova(modo); setBuscaC(""); setMarcados({}); setNomeGrupo(""); setErro("");
+    if (!contatos) {
+      const { data, error } = await sb.rpc("mensagens_contatos");
+      if (error) { setErro(erroSql(error)); setContatos([]); return; }
+      setContatos(data || []);
+    }
+  }
+
+  async function iniciarDireta(p) {
+    setOcupadoM(true);
+    const { data, error } = await sb.rpc("conversa_direta", { p_outro: p.id });
+    setOcupadoM(false);
+    if (error) { setErro(erroSql(error)); return; }
+    setNova(null);
+    await carregarConvs();
+    abrir(data);
+  }
+
+  async function criarGrupo() {
+    const ids = Object.keys(marcados).filter((k) => marcados[k]);
+    if (nomeGrupo.trim().length < 2) { setErro("Dê um nome ao grupo."); return; }
+    if (!ids.length) { setErro("Escolha pelo menos uma pessoa."); return; }
+    setOcupadoM(true);
+    const { data, error } = await sb.rpc("conversa_grupo_criar", { p_titulo: nomeGrupo.trim(), p_membros: ids });
+    setOcupadoM(false);
+    if (error) { setErro(erroSql(error)); return; }
+    setNova(null);
+    await carregarConvs();
+    abrir(data);
+  }
+
+  async function adicionarNoGrupo() {
+    const ids = Object.keys(marcados).filter((k) => marcados[k]);
+    if (!ids.length) { setErro("Escolha pelo menos uma pessoa."); return; }
+    setOcupadoM(true);
+    const { error } = await sb.rpc("conversa_grupo_adicionar", { p_conversa: sel, p_membros: ids });
+    setOcupadoM(false);
+    if (error) { setErro(erroSql(error)); return; }
+    setAddGrupo(false); setNova(null);
+    carregarMsgs(sel, false); carregarDet(sel); carregarConvs();
+  }
+
+  const conv = (convs || []).find((c) => c.id === sel) || null;
+  const tipo = (det && det.tipo) || (conv && conv.tipo) || "direta";
+  const meuNome = ctx.profile && ctx.profile.nome;
+  const q = busca.trim().toLowerCase();
+  const lista = (convs || []).filter((c) => !q || ((c.titulo || "") + " " + (c.subtitulo || "") + " " + (c.ultima_texto || "")).toLowerCase().indexOf(q) !== -1);
+  const lidosAte = det && det.lidos_ate ? new Date(det.lidos_ate).getTime() : 0;
+  const dem = det && det.demanda;
+  const membrosIds = {};
+  ((det && det.membros) || []).forEach((m) => { membrosIds[m.id] = 1; });
+  const qc = buscaC.trim().toLowerCase();
+  const contatosVis = (contatos || []).filter((p) => (!addGrupo || !membrosIds[p.id]) &&
+    (!qc || ((p.nome || "") + " " + (p.cargo || "") + " " + (p.setor || "")).toLowerCase().indexOf(qc) !== -1));
+  const nMarcados = Object.keys(marcados).filter((k) => marcados[k]).length;
+
+  let tituloChat = conv ? conv.titulo : "";
+  let subChat = conv ? conv.subtitulo : "";
+  if (tipo === "grupo" && det && det.membros) subChat = det.membros.map((m) => primeiroNome(m.nome)).join(", ");
+  if (tipo === "demanda" && dem) { tituloChat = dem.titulo; subChat = "Demanda · responsável: " + (dem.responsavel || "—"); }
+
+  return (
+    <div className={"msg-casca" + (verChat && sel ? " ver-chat" : "")}>
+      {/* ---------------- LISTA ---------------- */}
+      <div className="card-fl msg-lista">
+        <div className="msg-lista-topo">
+          <span className="msg-av" style={{ width: 38, height: 38, borderRadius: 11, background: "var(--grad)", color: "#fff" }}>
+            <i className="ti ti-message-circle" style={{ fontSize: 19 }} aria-hidden="true"></i>
+          </span>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontWeight: 700, fontSize: 15 }}>Conversas</div>
+            <div style={{ fontSize: 11, color: "var(--muted)" }}>Equipe, grupos e demandas</div>
+          </div>
+          <button className="btn-primaria" style={{ padding: "8px 13px", fontSize: 12.5 }} onClick={() => { setAddGrupo(false); abrirContatos("pessoa"); }}>
+            <i className="ti ti-plus" style={{ fontSize: 14 }} aria-hidden="true"></i>Nova
+          </button>
+        </div>
+        <div className="msg-busca">
+          <i className="ti ti-search" aria-hidden="true"></i>
+          <input className="campo" placeholder="Buscar conversa" value={busca} onChange={(e) => setBusca(e.target.value)} />
+        </div>
+        <div className="msg-itens">
+          {!convs && <div className="msg-vazio-lista">Carregando…</div>}
+          {convs && lista.length === 0 && (
+            <div className="msg-vazio-lista">
+              {convs.length === 0 ? <span>Nenhuma conversa ainda.<br />Toque em <b>Nova</b> para falar com alguém da equipe.</span> : "Nada encontrado."}
+            </div>
+          )}
+          {lista.map((c) => {
+            const T = TIPO_CONV[c.tipo] || TIPO_CONV.direta;
+            const meu = c.ultima_autor && meuNome && c.ultima_autor === meuNome;
+            const prev = !c.ultima_texto ? "Sem mensagens ainda"
+              : c.ultima_sistema ? c.ultima_texto
+              : (meu ? "Você: " : (c.tipo !== "direta" && c.ultima_autor ? primeiroNome(c.ultima_autor) + ": " : "")) + c.ultima_texto;
+            return (
+              <div key={c.id} className={"msg-item" + (c.id === sel ? " on" : "") + (c.nao_lidas > 0 ? " nova" : "")}
+                role="button" tabIndex={0} onClick={() => abrir(c.id)} onKeyDown={(e) => { if (e.key === "Enter") abrir(c.id); }}>
+                <AvatarMsg nome={c.titulo} foto={c.foto_url} tipo={c.tipo} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ display: "flex", alignItems: "baseline", gap: 6 }}>
+                    <span className="msg-item-nome">{c.titulo}</span>
+                    <span className="msg-item-hora">{quandoListaMsg(c.ultima_em)}</span>
+                  </div>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6, marginTop: 2 }}>
+                    {c.tipo === "demanda" && <span className="msg-tag" style={{ background: T.bg, color: T.cor }}>Demanda</span>}
+                    <span className={"msg-item-prev" + (!c.ultima_texto || c.ultima_sistema ? " sis" : "")}>{prev}</span>
+                    {c.nao_lidas > 0 && <b className="msg-n">{c.nao_lidas > 99 ? "99+" : c.nao_lidas}</b>}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* ---------------- CONVERSA ---------------- */}
+      <div className="card-fl msg-chat">
+        {!sel && (
+          <div className="msg-vazio-chat">
+            <span className="msg-av" style={{ width: 58, height: 58, borderRadius: 18, background: "var(--tint)", color: "var(--marca)" }}>
+              <i className="ti ti-messages" style={{ fontSize: 28 }} aria-hidden="true"></i>
+            </span>
+            <div style={{ fontWeight: 700, fontSize: 15, marginTop: 12 }}>Escolha uma conversa</div>
+            <div style={{ fontSize: 12.5, color: "var(--muted)", marginTop: 4, maxWidth: 320, lineHeight: 1.55 }}>
+              Converse com a equipe, crie grupos ou abra a conversa de uma demanda direto do card dela, na aba Demandas.
+            </div>
+          </div>
+        )}
+
+        {sel && (
+          <React.Fragment>
+            <div className="msg-chat-topo">
+              <button className="msg-voltar" aria-label="Voltar para as conversas" onClick={() => setVerChat(false)}>
+                <i className="ti ti-arrow-left" style={{ fontSize: 18 }} aria-hidden="true"></i>
+              </button>
+              <AvatarMsg nome={tituloChat} foto={conv && conv.foto_url} tipo={tipo} tam={40} />
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div className="msg-chat-nome">{tituloChat}</div>
+                <div className="msg-chat-sub">{subChat}</div>
+              </div>
+              {tipo === "grupo" && (
+                <button className="msg-topo-btn" onClick={() => { setAddGrupo(true); abrirContatos("adicionar"); }} title="Adicionar pessoas ao grupo">
+                  <i className="ti ti-user-plus" style={{ fontSize: 15 }} aria-hidden="true"></i><span>Pessoas</span>
+                </button>
+              )}
+              <span className="msg-chip-tipo">{(TIPO_CONV[tipo] || TIPO_CONV.direta).r}</span>
+            </div>
+
+            {tipo === "demanda" && dem && (
+              <div className="msg-demanda">
+                <div style={{ display: "flex", alignItems: "center", gap: 7, flexWrap: "wrap" }}>
+                  <i className="ti ti-checklist" style={{ fontSize: 16, color: "#7C3AED" }} aria-hidden="true"></i>
+                  <span className="chip" style={dem.status === "concluida" ? { background: "var(--verde-bg)", color: "var(--verde)" } : { background: "#F3E8FF", color: "#7C3AED" }}>
+                    {dem.status === "concluida" ? "Concluída" : "Aberta"}
+                  </span>
+                  {dem.prioridade && dem.prioridade !== "normal" && (
+                    <span className="chip" style={dem.prioridade === "urgente" ? { background: "rgba(220,38,38,.12)", color: "var(--vermelho)" } : dem.prioridade === "alta" ? { background: "#FFF7E6", color: "#B45309" } : { background: "var(--campo)", color: "var(--muted)" }}>
+                      {PRIO_MSG[dem.prioridade] || dem.prioridade}
+                    </span>
+                  )}
+                  {dem.prazo && <span style={{ fontSize: 12, color: "var(--sec)" }}><i className="ti ti-calendar" style={{ fontSize: 12, marginRight: 3 }} aria-hidden="true"></i>até {dataBr(dem.prazo)}</span>}
+                  <span style={{ fontSize: 12, color: dem.visto_em ? "var(--verde)" : "var(--ambar)" }}>
+                    <i className={"ti " + (dem.visto_em ? "ti-eye-check" : "ti-eye-off")} style={{ fontSize: 13, marginRight: 3 }} aria-hidden="true"></i>
+                    {dem.visto_em ? "vista em " + dataHoraMsg(dem.visto_em) : "ainda não vista"}
+                  </span>
+                  <span style={{ flex: 1 }}></span>
+                  {ctx.irPara && (
+                    <button className="msg-topo-btn claro" onClick={() => ctx.irPara("demandas")}>
+                      <i className="ti ti-external-link" style={{ fontSize: 14 }} aria-hidden="true"></i><span>Abrir em Demandas</span>
+                    </button>
+                  )}
+                </div>
+                {dem.descricao && <div className="msg-demanda-desc">{dem.descricao}</div>}
+              </div>
+            )}
+
+            <div className="msg-corpo" ref={corpoRef}
+              onScroll={(e) => { const el = e.currentTarget; coladoRef.current = el.scrollHeight - el.scrollTop - el.clientHeight < 120; }}>
+              {carregandoMsgs && <div className="msg-sis">Carregando mensagens…</div>}
+              {!carregandoMsgs && msgs.length === 0 && <div className="msg-sis">Nenhuma mensagem ainda. Escreva a primeira.</div>}
+              {msgs.map((m, i) => {
+                const ant = msgs[i - 1];
+                const dia = diaMsg(m.created_at);
+                const novoDia = !ant || diaMsg(ant.created_at) !== dia;
+                const sep = novoDia ? <div className="msg-dia"><span>{rotuloDiaMsg(dia)}</span></div> : null;
+                if (m.sistema) return <React.Fragment key={m.id}>{sep}<div className="msg-sis">{m.texto}</div></React.Fragment>;
+                const mesmoAutor = ant && !novoDia && !ant.sistema && ant.autor_id === m.autor_id;
+                const lida = m.minha && lidosAte && new Date(m.created_at).getTime() <= lidosAte;
+                return (
+                  <React.Fragment key={m.id}>
+                    {sep}
+                    <div className={"msg-linha" + (m.minha ? " minha" : "") + (mesmoAutor ? " junto" : "")}>
+                      {!m.minha && tipo !== "direta" && (
+                        <span className="msg-linha-av">{!mesmoAutor && <AvatarMsg nome={m.autor_nome} foto={m.autor_foto} tam={28} />}</span>
+                      )}
+                      <div className="msg-col">
+                        {!m.minha && tipo !== "direta" && !mesmoAutor && <div className="msg-autor">{m.autor_nome}</div>}
+                        <div className="msg-bolha">{m.texto}</div>
+                        <div className="msg-meta">
+                          {horaMsg(m.created_at)}
+                          {m.minha && (
+                            <i className={"ti " + (lida ? "ti-checks" : "ti-check")} style={{ fontSize: 13, color: lida ? "var(--marca)" : "var(--muted)" }}
+                              title={lida ? (tipo === "direta" ? "Lida" : "Lida por todos") : "Enviada"} aria-label={lida ? "Lida" : "Enviada"}></i>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </React.Fragment>
+                );
+              })}
+            </div>
+
+            {erro && <div className="msg-erro">{erro}</div>}
+            <div className="msg-escrever">
+              <textarea ref={campoRef} className="campo" rows={Math.min(5, Math.max(1, texto.split("\n").length))}
+                placeholder={window.innerWidth > 820 ? "Escreva uma mensagem… (Enter envia, Shift+Enter quebra a linha)" : "Mensagem…"}
+                value={texto} maxLength={4000}
+                onChange={(e) => setTexto(e.target.value)}
+                onKeyDown={(e) => { if (e.key === "Enter" && !e.shiftKey) { e.preventDefault(); enviar(); } }} />
+              <button className="msg-enviar" onClick={enviar} disabled={enviando || !texto.trim()} aria-label="Enviar" title="Enviar">
+                <i className="ti ti-send" style={{ fontSize: 19 }} aria-hidden="true"></i>
+              </button>
+            </div>
+          </React.Fragment>
+        )}
+      </div>
+
+      {/* ---------------- NOVA CONVERSA / ADICIONAR ---------------- */}
+      {nova && (<PortalCP>
+        <div className="msg-pano" onClick={(e) => { if (e.target === e.currentTarget) { setNova(null); setAddGrupo(false); } }}>
+          <div className="card-fl anim-pop msg-modal">
+            <div style={{ display: "flex", alignItems: "center", gap: 9, marginBottom: 12 }}>
+              <i className={"ti " + (addGrupo ? "ti-user-plus" : "ti-message-plus")} style={{ fontSize: 19, color: "var(--marca)" }} aria-hidden="true"></i>
+              <span style={{ fontWeight: 700, fontSize: 15.5, flex: 1 }}>{addGrupo ? "Adicionar ao grupo" : "Nova conversa"}</span>
+              <button className="btn-fantasma" aria-label="Fechar" onClick={() => { setNova(null); setAddGrupo(false); }}><i className="ti ti-x" aria-hidden="true"></i></button>
+            </div>
+            {!addGrupo && (
+              <div className="msg-seg">
+                <button className={nova === "pessoa" ? "on" : ""} onClick={() => { setNova("pessoa"); setErro(""); }}><i className="ti ti-user" aria-hidden="true"></i>Com uma pessoa</button>
+                <button className={nova === "grupo" ? "on" : ""} onClick={() => { setNova("grupo"); setErro(""); }}><i className="ti ti-users" aria-hidden="true"></i>Grupo</button>
+              </div>
+            )}
+            {nova === "grupo" && !addGrupo && (
+              <input className="campo" style={{ width: "100%", marginBottom: 8 }} placeholder="Nome do grupo (ex.: Neuro Administrativo)" maxLength={80}
+                value={nomeGrupo} onChange={(e) => setNomeGrupo(e.target.value)} />
+            )}
+            <div className="msg-busca" style={{ padding: 0, marginBottom: 8 }}>
+              <i className="ti ti-search" aria-hidden="true"></i>
+              <input className="campo" placeholder="Buscar pessoa, cargo ou setor" value={buscaC} onChange={(e) => setBuscaC(e.target.value)} autoFocus />
+            </div>
+            <div className="msg-contatos">
+              {!contatos && <div className="msg-vazio-lista">Carregando…</div>}
+              {contatos && contatosVis.length === 0 && <div className="msg-vazio-lista">{addGrupo ? "Todo mundo já está no grupo." : "Ninguém encontrado."}</div>}
+              {contatosVis.map((p) => {
+                const multi = nova === "grupo" || addGrupo;
+                return (
+                  <div key={p.id} className={"msg-contato" + (marcados[p.id] ? " on" : "")} role="button" tabIndex={0}
+                    onClick={() => (multi ? setMarcados({ ...marcados, [p.id]: !marcados[p.id] }) : !ocupadoM && iniciarDireta(p))}>
+                    <AvatarMsg nome={p.nome} foto={p.foto_url} tam={34} />
+                    <div style={{ flex: 1, minWidth: 0 }}>
+                      <div style={{ fontSize: 13, fontWeight: 600, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{p.nome}</div>
+                      <div style={{ fontSize: 11.5, color: "var(--muted)", overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{[p.cargo, p.setor].filter(Boolean).join(" · ") || "Login sem cadastro vinculado"}</div>
+                    </div>
+                    {multi
+                      ? <span className={"msg-check" + (marcados[p.id] ? " on" : "")}>{marcados[p.id] && <i className="ti ti-check" aria-hidden="true"></i>}</span>
+                      : <i className="ti ti-chevron-right" style={{ color: "var(--muted)" }} aria-hidden="true"></i>}
+                  </div>
+                );
+              })}
+            </div>
+            {erro && <div className="msg-erro" style={{ margin: "8px 0 0" }}>{erro}</div>}
+            {(nova === "grupo" || addGrupo) && (
+              <button className="btn-primaria" style={{ width: "100%", justifyContent: "center", marginTop: 12 }} disabled={ocupadoM}
+                onClick={addGrupo ? adicionarNoGrupo : criarGrupo}>
+                {ocupadoM ? "Salvando…" : addGrupo ? "Adicionar " + (nMarcados || "") + (nMarcados === 1 ? " pessoa" : " pessoas") : "Criar grupo" + (nMarcados ? " com " + nMarcados + (nMarcados === 1 ? " pessoa" : " pessoas") : "")}
+              </button>
+            )}
+          </div>
+        </div>
+      </PortalCP>)}
+    </div>
+  );
+}
+
 function PaginaDemandas({ ctx }) {
   const podeEditar = nivelModulo(ctx, "demandas") === "editar";
   const [lista, setLista] = useState(null);
@@ -5717,14 +6173,30 @@ function PaginaDemandas({ ctx }) {
   const [form, setForm] = useState(null);
   const [msg, setMsg] = useState("");
   const [ocupado, setOcupado] = useState(false);
+  const [novas, setNovas] = useState({});
 
   async function carregar() {
     const { data, error } = await sb.rpc("demandas_listar");
-    if (error) { setMsg("Erro: " + error.message + " — o 26_demandas.sql já rodou?"); setLista([]); return; }
+    if (error) { setMsg("Erro: " + error.message + " — rode o 42_mensagens_demandas.sql."); setLista([]); return null; }
     setLista(data || []);
+    return data || [];
+  }
+  // Abriu a aba: o que era novo para a pessoa fica destacado nesta visita
+  // e o banco grava a data e a hora em que ela viu.
+  async function abrirEMarcar() {
+    const dados = await carregar();
+    if (!dados) return;
+    const nv = {};
+    dados.forEach((d) => { if (d.minha && !d.visto_em) nv[d.id] = 1; });
+    setNovas(nv);
+    if (Object.keys(nv).length) {
+      const r = await sb.rpc("demandas_marcar_vistas");
+      if (!r.error) carregar();
+    }
+    if (ctx.atualizarAvisos) ctx.atualizarAvisos();
   }
   useEffect(() => {
-    carregar();
+    abrirEMarcar();
     if (podeEditar) {
       sb.from("colaboradores").select("id, nome, setor").eq("status", "ativo").order("nome").limit(2000)
         .then(({ data }) => setColabs(data || []));
@@ -5754,7 +6226,7 @@ function PaginaDemandas({ ctx }) {
   }, [lista]);
 
   const visiveis = (lista || []).filter((d) =>
-    (filtro === "todas" || (filtro === "abertas" ? d.status === "aberta" : d.status === "concluida"))
+    (filtro === "todas" || (filtro === "minhas" ? (d.minha && d.status === "aberta") : filtro === "abertas" ? d.status === "aberta" : d.status === "concluida"))
     && (!setorF || d.setor === setorF)
     && (!prioF || d.prioridade === prioF)
     && ((d.titulo + " " + (d.descricao || "") + " " + d.nome).toLowerCase().indexOf(busca.trim().toLowerCase()) >= 0)
@@ -5762,6 +6234,7 @@ function PaginaDemandas({ ctx }) {
   const nAbertas = (lista || []).filter((d) => d.status === "aberta").length;
   const nAtrasadas = (lista || []).filter((d) => d.status === "aberta" && d.prazo && d.prazo < hojeStr).length;
   const nUrgentes = (lista || []).filter((d) => d.status === "aberta" && d.prioridade === "urgente").length;
+  const nMinhas = (lista || []).filter((d) => d.minha && d.status === "aberta").length;
 
   function abrirNova() { setMsg(""); setForm({ id: null, titulo: "", colaborador_id: "", prazo: "", descricao: "", prioridade: "normal" }); }
   function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "", prioridade: d.prioridade || "normal" }); }
@@ -5786,13 +6259,20 @@ function PaginaDemandas({ ctx }) {
     setForm(null); carregar();
   }
 
+  // Concluir: so a pessoa designada. Reabrir: ela ou quem edita. (trava no banco)
   async function marcar(d, novo) {
-    const { error } = await sb.from("demandas").update({
-      status: novo,
-      concluida_em: novo === "concluida" ? new Date().toISOString() : null,
-      atualizado_em: new Date().toISOString(),
-    }).eq("id", d.id);
-    if (error) setMsg("Erro: " + error.message); else carregar();
+    setMsg("");
+    const { error } = await sb.rpc("demanda_concluir", { p_id: d.id, p_concluir: novo === "concluida" });
+    if (error) { setMsg("Erro: " + error.message); return; }
+    carregar();
+    if (ctx.atualizarAvisos) ctx.atualizarAvisos();
+  }
+
+  async function abrirConversa(d) {
+    setMsg("");
+    const { data, error } = await sb.rpc("conversa_demanda", { p_demanda: d.id });
+    if (error) { setMsg("Erro ao abrir a conversa: " + error.message); return; }
+    if (ctx.abrirConversa) ctx.abrirConversa(data);
   }
 
   async function excluir(d) {
@@ -5809,7 +6289,7 @@ function PaginaDemandas({ ctx }) {
             placeholder="Buscar demanda ou pessoa..." value={busca} onChange={(e) => setBusca(e.target.value)} />
         </div>
         <select className="campo" style={{ width: 130, padding: "8px 10px", fontSize: 12.5 }} value={filtro} onChange={(e) => setFiltro(e.target.value)}>
-          <option value="abertas">Abertas</option><option value="todas">Todas</option><option value="concluidas">Concluídas</option>
+          <option value="abertas">Abertas</option><option value="minhas">Minhas abertas</option><option value="todas">Todas</option><option value="concluidas">Concluídas</option>
         </select>
         <select className="campo" style={{ width: 160, padding: "8px 10px", fontSize: 12.5 }} value={setorF} onChange={(e) => setSetorF(e.target.value)}>
           <option value="">Todos os setores</option>
@@ -5820,6 +6300,7 @@ function PaginaDemandas({ ctx }) {
           <option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normal">Normal</option><option value="baixa">Baixa</option>
         </select>
         <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700 }}>{nAbertas} aberta(s)</span>
+        {nMinhas > 0 && <span className="chip clicavel" style={{ background: "#F3E8FF", color: "#6D28D9", fontWeight: 800, cursor: "pointer" }} onClick={() => setFiltro("minhas")}>{nMinhas} para você</span>}
         {nUrgentes > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.12)", color: "var(--vermelho)", fontWeight: 800 }}>⚡ {nUrgentes} urgente(s)</span>}
         {nAtrasadas > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.10)", color: "var(--vermelho)", fontWeight: 700 }}>{nAtrasadas} atrasada(s)</span>}
         <span style={{ flex: 1 }}></span>
@@ -5867,14 +6348,14 @@ function PaginaDemandas({ ctx }) {
         const farol = farolPrazo(d);
         const feita = d.status === "concluida";
         return (
-          <div key={d.id} className="card-fl" style={{ padding: "12px 14px", marginBottom: 8, display: "flex", gap: 11, alignItems: "flex-start", opacity: feita ? .68 : 1 }}>
-            {podeEditar ? (
+          <div key={d.id} className="card-fl" style={{ padding: "12px 14px", marginBottom: 8, display: "flex", gap: 11, alignItems: "flex-start", opacity: feita ? .68 : 1, boxShadow: novas[d.id] ? "inset 4px 0 0 #DC2626, var(--sombra)" : (d.minha && !feita ? "inset 4px 0 0 #7C3AED, var(--sombra)" : undefined) }}>
+            {(feita ? (d.minha || podeEditar) : d.minha) ? (
               <button onClick={() => marcar(d, feita ? "aberta" : "concluida")} aria-label={feita ? "Reabrir" : "Concluir"} title={feita ? "Reabrir" : "Concluir"}
                 style={{ width: 24, height: 24, borderRadius: 8, flex: "none", marginTop: 2, cursor: "pointer", border: "1.5px solid " + (feita ? "var(--verde)" : "var(--linha)"), background: feita ? "rgba(22,163,74,.12)" : "var(--campo)", color: "var(--verde)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {feita && <i className="ti ti-check" style={{ fontSize: 14 }} aria-hidden="true"></i>}
               </button>
             ) : (
-              <div style={{ width: 24, height: 24, borderRadius: 8, flex: "none", marginTop: 2, border: "1.5px solid " + (feita ? "var(--verde)" : "var(--linha)"), background: feita ? "rgba(22,163,74,.12)" : "var(--campo)", color: "var(--verde)", display: "flex", alignItems: "center", justifyContent: "center" }}>
+              <div title={feita ? "Concluída" : "Só " + d.nome + " conclui esta demanda"} style={{ width: 24, height: 24, borderRadius: 8, flex: "none", marginTop: 2, border: "1.5px solid " + (feita ? "var(--verde)" : "var(--linha)"), background: feita ? "rgba(22,163,74,.12)" : "var(--campo)", color: "var(--verde)", display: "flex", alignItems: "center", justifyContent: "center" }}>
                 {feita && <i className="ti ti-check" style={{ fontSize: 14 }} aria-hidden="true"></i>}
               </div>
             )}
@@ -5883,21 +6364,32 @@ function PaginaDemandas({ ctx }) {
                 <span style={{ fontSize: 13.5, fontWeight: 700, textDecoration: feita ? "line-through" : "none" }}>{d.titulo}</span>
                 {d.prioridade !== "normal" && PRIO[d.prioridade] && <span className="chip" style={{ background: PRIO[d.prioridade].fundo, color: PRIO[d.prioridade].cor, fontWeight: 800, fontSize: 10.5 }}>{PRIO[d.prioridade].r}</span>}
                 {farol && <span className="chip" style={{ background: farol.fundo, color: farol.cor, fontWeight: 700, fontSize: 10.5 }}>{farol.rotulo}</span>}
+                {novas[d.id] && <span className="chip" style={{ background: "#DC2626", color: "#fff", fontWeight: 800, fontSize: 10.5 }}>NOVA</span>}
+                {d.minha && !feita && <span className="chip" style={{ background: "#F3E8FF", color: "#6D28D9", fontWeight: 800, fontSize: 10.5 }}>para você</span>}
                 {d.setor && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700, fontSize: 10.5 }}>{d.setor}</span>}
               </div>
               <div style={{ fontSize: 12, color: "var(--sec)", marginTop: 3 }}>
                 <i className="ti ti-user" style={{ fontSize: 12, marginRight: 4 }} aria-hidden="true"></i>{d.nome}{d.cargo ? " · " + d.cargo : ""}
                 {d.prazo && <span> · <i className="ti ti-calendar" style={{ fontSize: 12, marginRight: 3 }} aria-hidden="true"></i>{feita ? "prazo era " : "até "}{dataBr(d.prazo)}</span>}
-                {feita && d.concluida_em && <span> · concluída em {dataBr(d.concluida_em.slice(0, 10))}</span>}
+                {feita && d.concluida_em && <span> · concluída em {dataHoraMsg(d.concluida_em)}{d.concluida_por_nome ? " por " + d.concluida_por_nome : ""}</span>}
+              </div>
+              <div style={{ fontSize: 11.5, marginTop: 4, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                {d.visto_em
+                  ? <span style={{ color: "var(--verde)", fontWeight: 600 }}><i className="ti ti-eye-check" style={{ fontSize: 13, marginRight: 3 }} aria-hidden="true"></i>vista por {primeiroNome(d.nome)} em {dataHoraMsg(d.visto_em)}</span>
+                  : !feita && <span style={{ color: "var(--ambar)", fontWeight: 600 }}><i className="ti ti-eye-off" style={{ fontSize: 13, marginRight: 3 }} aria-hidden="true"></i>{d.minha ? "nova para você" : "ainda não vista por " + primeiroNome(d.nome)}</span>}
+                {d.criado_por_nome && <span style={{ color: "var(--muted)" }}>criada por {d.criado_por_nome}</span>}
               </div>
               {d.descricao && <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4, whiteSpace: "pre-wrap" }}>{d.descricao}</div>}
             </div>
-            {podeEditar && (
-              <div style={{ display: "flex", gap: 9, flex: "none", marginTop: 3 }}>
-                <i className="ti ti-pencil" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => abrirEdicao(d)} aria-label="Editar" title="Editar"></i>
-                <i className="ti ti-trash" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(d)} aria-label="Excluir" title="Excluir"></i>
-              </div>
-            )}
+            <div style={{ display: "flex", gap: 9, flex: "none", marginTop: 1, alignItems: "center" }}>
+              <button className="dm-conv" onClick={() => abrirConversa(d)} title="Abrir a conversa desta demanda em Mensagens">
+                <i className="ti ti-messages" style={{ fontSize: 14 }} aria-hidden="true"></i>
+                {d.msgs_total > 0 ? d.msgs_total : "Conversar"}
+                {d.msgs_nao_lidas > 0 && <b className="dm-conv-n">{d.msgs_nao_lidas}</b>}
+              </button>
+              {podeEditar && <i className="ti ti-pencil" style={{ fontSize: 15, cursor: "pointer", color: "var(--muted)" }} onClick={() => abrirEdicao(d)} aria-label="Editar" title="Editar"></i>}
+              {podeEditar && <i className="ti ti-trash" style={{ fontSize: 15, cursor: "pointer", color: "var(--vermelho)" }} onClick={() => excluir(d)} aria-label="Excluir" title="Excluir"></i>}
+            </div>
           </div>
         );
       })}
@@ -8678,6 +9170,28 @@ function Shell({ ctx, aoSair }) {
   const [simPerfil, setSimPerfil] = useState(null);
   const [simPerms, setSimPerms] = useState(null);
   const [simAbrir, setSimAbrir] = useState(false);
+  const [avisos, setAvisos] = useState({ mensagens: 0, demandas_novas: 0, demandas_minhas: 0 });
+  const [convInicial, setConvInicial] = useState(null);
+  const atualizarAvisos = useCallback(async () => {
+    if (!sb) return;
+    try {
+      const { data, error } = await sb.rpc("meus_avisos");
+      if (!error && data && data[0]) setAvisos(data[0]);
+    } catch (e) {}
+  }, []);
+  useEffect(() => {
+    atualizarAvisos();
+    const t = setInterval(() => { if (!document.hidden) atualizarAvisos(); }, 20000);
+    const aoVoltar = () => { if (!document.hidden) atualizarAvisos(); };
+    window.addEventListener("focus", aoVoltar);
+    document.addEventListener("visibilitychange", aoVoltar);
+    return () => { clearInterval(t); window.removeEventListener("focus", aoVoltar); document.removeEventListener("visibilitychange", aoVoltar); };
+  }, [atualizarAvisos]);
+  useEffect(() => {
+    const tot = (avisos.mensagens || 0) + (avisos.demandas_novas || 0);
+    const base = "CORTEX Gestão";
+    document.title = tot > 0 ? "(" + (tot > 99 ? "99+" : tot) + ") " + base : base;
+  }, [avisos]);
   const ctxReal = ctx;
   if (simPerfil && simPerms) {
     ctx = { ...ctxReal, acessoTotal: !!simPerfil.acesso_total, permissoes: simPerms, perfilNome: simPerfil.nome, simulando: simPerfil.nome };
@@ -8723,6 +9237,14 @@ function Shell({ ctx, aoSair }) {
     setPaginaRaw(v);
     try { localStorage.setItem("cg_pagina", v); } catch (e) {}
   }, []);
+  ctx = {
+    ...ctx,
+    avisos,
+    atualizarAvisos,
+    minhasDemandas: (avisos.demandas_minhas || 0) > 0,
+    irPara: setPagina,
+    abrirConversa: (id) => { setConvInicial(id); setPagina("mensagens"); },
+  };
   const [sbEstado, setSbEstadoRaw] = useState(() => {
     const v = localStorage.getItem("cg_sidebar");
     return v === "rail" || v === "oculta" ? v : "exp";
@@ -8763,6 +9285,8 @@ function Shell({ ctx, aoSair }) {
         conteudo = <PaginaCalendario ctx={ctx} />;
       } else if (pagina === "callcenter") {
     conteudo = <PaginaCallCenter ctx={ctx} />;
+  } else if (pagina === "mensagens") {
+    conteudo = <PaginaMensagens ctx={ctx} inicial={convInicial} aoConsumirInicial={() => setConvInicial(null)} />;
   } else if (pagina === "demandas") {
     conteudo = <PaginaDemandas ctx={ctx} />;
   } else if (pagina === "infinity") {

@@ -773,3 +773,139 @@ table.w5-tab tbody tr:hover td{background:var(--tint-hover)}
   .cal-fer{display:none}
   .cal-nav b{min-width:116px;font-size:13px}
 }
+
+
+/* ============================================================
+   BOLINHAS DE AVISO NA SIDEBAR (sprint 80)
+   ============================================================ */
+.sb-ico{position:relative}
+.sb-badge{margin-left:auto;min-width:19px;height:19px;padding:0 6px;border-radius:999px;background:#DC2626;color:#fff;
+  font-size:10.5px;font-weight:800;line-height:1;display:inline-flex;align-items:center;justify-content:center;flex:none;
+  box-shadow:0 2px 6px rgba(220,38,38,.35);animation:badge-pop .4s var(--mola)}
+.item-menu.on .sb-badge{background:#fff;color:#DC2626;box-shadow:none}
+.sb-badge-ico{display:none;position:absolute;top:-6px;right:-7px;min-width:16px;height:16px;padding:0 4px;border-radius:999px;
+  background:#DC2626;color:#fff;font-size:9px;font-weight:800;line-height:1;align-items:center;justify-content:center;
+  box-shadow:0 0 0 2px var(--branco)}
+.sb.rail .sb-badge{display:none}
+.sb.rail .sb-badge-ico{display:inline-flex}
+.sb-dot{position:absolute;top:-4px;right:-4px;width:12px;height:12px;border-radius:50%;background:#DC2626;
+  box-shadow:0 0 0 2px var(--branco);animation:badge-pulso 2s ease-in-out infinite}
+@keyframes badge-pop{0%{transform:scale(.4);opacity:0}100%{transform:scale(1);opacity:1}}
+@keyframes badge-pulso{0%,100%{transform:scale(1)}50%{transform:scale(1.18)}}
+@media (max-width: 820px){
+  .sb.rail .sb-badge{display:inline-flex}
+  .sb.rail .sb-badge-ico{display:none}
+  .botao-celular{position:fixed}
+}
+
+/* ============================================================
+   MENSAGENS (sprint 80) — prefixo msg-
+   ============================================================ */
+.msg-casca{display:grid;grid-template-columns:330px minmax(0,1fr);gap:14px;height:calc(100vh - 150px);min-height:470px}
+.msg-av{display:inline-flex;align-items:center;justify-content:center;flex:none;overflow:hidden;font-weight:700}
+.msg-av img{width:100%;height:100%;object-fit:cover}
+
+.msg-lista{display:flex;flex-direction:column;padding:0;overflow:hidden;min-height:0}
+.msg-lista-topo{display:flex;align-items:center;gap:10px;padding:14px 14px 10px}
+.msg-busca{position:relative;padding:0 12px 8px}
+.msg-busca i{position:absolute;left:24px;top:50%;transform:translateY(calc(-50% - 4px));font-size:15px;color:var(--muted);pointer-events:none}
+.msg-modal .msg-busca i{left:11px;transform:translateY(-50%)}
+.msg-busca .campo{width:100%;padding:8px 10px 8px 33px;font-size:12.5px}
+.msg-itens{flex:1;overflow-y:auto;padding:2px 8px 10px;min-height:0}
+.msg-vazio-lista{padding:22px 12px;text-align:center;font-size:12.5px;color:var(--muted);line-height:1.6}
+.msg-item{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:12px;cursor:pointer;position:relative;
+  transition:background .15s ease}
+.msg-item:hover{background:var(--tint-hover)}
+.msg-item.on{background:var(--tint)}
+.msg-item.on::before{content:"";position:absolute;left:0;top:10px;bottom:10px;width:3px;border-radius:3px;background:var(--marca)}
+.msg-item-nome{flex:1;min-width:0;font-size:13.5px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-item.nova .msg-item-nome{font-weight:800}
+.msg-item-hora{font-size:10.5px;color:var(--muted);flex:none}
+.msg-item.nova .msg-item-hora{color:#DC2626;font-weight:700}
+.msg-item-prev{flex:1;min-width:0;font-size:12px;color:var(--sec);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-item.nova .msg-item-prev{color:var(--ink);font-weight:600}
+.msg-item-prev.sis{font-style:italic;color:var(--muted)}
+.msg-tag{font-size:9.5px;font-weight:800;letter-spacing:.3px;text-transform:uppercase;padding:2px 6px;border-radius:6px;flex:none}
+.msg-n{min-width:19px;height:19px;padding:0 6px;border-radius:999px;background:#DC2626;color:#fff;font-size:10.5px;font-weight:800;
+  display:inline-flex;align-items:center;justify-content:center;flex:none}
+
+.msg-chat{display:flex;flex-direction:column;padding:0;overflow:hidden;min-height:0}
+.msg-vazio-chat{flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;padding:30px}
+.msg-chat-topo{display:flex;align-items:center;gap:11px;padding:12px 16px;background:var(--grad);color:#fff}
+.msg-chat-topo .msg-av{box-shadow:0 0 0 2px rgba(255,255,255,.55)}
+.msg-chat-nome{font-weight:700;font-size:14.5px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-chat-sub{font-size:11.5px;opacity:.85;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.msg-chip-tipo{font-size:10px;font-weight:800;letter-spacing:.5px;text-transform:uppercase;padding:4px 10px;border-radius:999px;
+  background:rgba(255,255,255,.18);border:1px solid rgba(255,255,255,.35);flex:none}
+.msg-topo-btn{display:inline-flex;align-items:center;gap:5px;padding:6px 11px;border-radius:9px;border:1px solid rgba(255,255,255,.4);
+  background:rgba(255,255,255,.12);color:#fff;font-family:inherit;font-size:12px;font-weight:600;cursor:pointer;flex:none}
+.msg-topo-btn:hover{background:rgba(255,255,255,.22)}
+.msg-topo-btn.claro{border-color:#DDD0FB;background:#fff;color:#6D28D9}
+.msg-topo-btn.claro:hover{background:#F3E8FF}
+.msg-voltar{display:none;width:34px;height:34px;border-radius:10px;border:none;background:rgba(255,255,255,.16);color:#fff;
+  align-items:center;justify-content:center;cursor:pointer;flex:none}
+
+.msg-demanda{padding:10px 16px;background:#FAF7FF;border-bottom:1px solid #EBE2FC}
+.msg-demanda-desc{font-size:12px;color:var(--sec);margin-top:6px;white-space:pre-wrap;display:-webkit-box;-webkit-line-clamp:3;
+  -webkit-box-orient:vertical;overflow:hidden}
+
+.msg-corpo{flex:1;overflow-y:auto;padding:14px 18px 10px;min-height:0;background-color:var(--fundo);
+  background-image:radial-gradient(rgba(16,104,176,.09) 1px,transparent 1px);background-size:20px 20px}
+.msg-dia{display:flex;justify-content:center;margin:12px 0 8px}
+.msg-dia span{font-size:10px;font-weight:800;letter-spacing:.6px;text-transform:uppercase;color:var(--sec);background:var(--branco);
+  border:1px solid var(--linha);border-radius:999px;padding:4px 12px}
+.msg-sis{text-align:center;font-size:11.5px;color:var(--muted);font-style:italic;margin:8px auto;max-width:80%}
+.msg-linha{display:flex;align-items:flex-end;gap:7px;margin-top:10px}
+.msg-linha.junto{margin-top:3px}
+.msg-linha.minha{justify-content:flex-end}
+.msg-linha-av{width:28px;flex:none;display:flex}
+.msg-col{display:flex;flex-direction:column;max-width:min(560px,74%);min-width:0}
+.msg-linha.minha .msg-col{align-items:flex-end}
+.msg-autor{font-size:11px;font-weight:700;color:var(--marca-texto);margin:0 0 3px 4px}
+.msg-bolha{padding:9px 13px;border-radius:16px 16px 16px 5px;background:var(--branco);border:1px solid var(--linha);
+  font-size:13.5px;line-height:1.45;white-space:pre-wrap;word-break:break-word;box-shadow:0 1px 2px rgba(28,37,48,.04)}
+.msg-linha.minha .msg-bolha{background:var(--grad);color:#fff;border-color:transparent;border-radius:16px 16px 5px 16px;
+  box-shadow:0 3px 10px rgba(16,104,176,.22)}
+.msg-meta{display:flex;align-items:center;gap:3px;font-size:10px;color:var(--muted);margin:3px 4px 0}
+
+.msg-erro{font-size:12px;font-weight:600;color:var(--vermelho);background:var(--vermelho-bg);padding:7px 12px;margin:0 14px 6px;border-radius:9px}
+.msg-escrever{display:flex;align-items:flex-end;gap:10px;padding:10px 14px 14px;border-top:1px solid var(--linha);background:var(--branco)}
+.msg-escrever .campo{flex:1;resize:none;padding:10px 13px;font-size:13.5px;line-height:1.4;border-radius:14px;max-height:140px;font-family:inherit}
+.msg-enviar{width:44px;height:44px;border-radius:50%;border:none;background:var(--grad);color:#fff;cursor:pointer;flex:none;
+  display:flex;align-items:center;justify-content:center;box-shadow:0 4px 12px rgba(16,104,176,.32);transition:transform .15s var(--mola)}
+.msg-enviar:hover:not(:disabled){transform:scale(1.07)}
+.msg-enviar:disabled{opacity:.45;cursor:default;box-shadow:none}
+
+.msg-pano{position:fixed;inset:0;background:rgba(28,37,48,.42);z-index:220;display:flex;align-items:center;justify-content:center;padding:18px}
+.msg-modal{width:100%;max-width:440px;padding:20px 20px 16px;background:#fff;max-height:88vh;display:flex;flex-direction:column}
+.msg-seg{display:flex;gap:4px;background:var(--fundo);border:1px solid var(--linha);border-radius:11px;padding:3px;margin-bottom:10px}
+.msg-seg button{flex:1;display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:7px 10px;border:none;border-radius:8px;
+  background:transparent;color:var(--sec);font-family:inherit;font-size:12.5px;font-weight:600;cursor:pointer}
+.msg-seg button.on{background:var(--branco);color:var(--marca-texto);box-shadow:var(--sombra)}
+.msg-contatos{overflow-y:auto;min-height:120px;max-height:340px;margin:0 -6px;padding:0 6px}
+.msg-contato{display:flex;align-items:center;gap:10px;padding:8px 8px;border-radius:10px;cursor:pointer}
+.msg-contato:hover{background:var(--tint-hover)}
+.msg-contato.on{background:var(--tint)}
+.msg-check{width:20px;height:20px;border-radius:6px;border:1.5px solid var(--linha);display:flex;align-items:center;justify-content:center;
+  color:#fff;font-size:13px;flex:none;background:var(--branco)}
+.msg-check.on{background:var(--marca);border-color:var(--marca)}
+
+/* ---------- Demandas (sprint 80): conversa, visto, novas ---------- */
+.dm-conv{display:inline-flex;align-items:center;gap:5px;padding:5px 10px;border-radius:9px;border:1px solid #DDD0FB;background:#FAF7FF;
+  color:#6D28D9;font-family:inherit;font-size:11.5px;font-weight:700;cursor:pointer;position:relative;flex:none}
+.dm-conv:hover{background:#F3E8FF}
+.dm-conv-n{position:absolute;top:-7px;right:-7px;min-width:17px;height:17px;padding:0 4px;border-radius:999px;background:#DC2626;color:#fff;
+  font-size:9.5px;font-weight:800;display:inline-flex;align-items:center;justify-content:center;box-shadow:0 0 0 2px var(--branco)}
+
+@media (max-width: 820px){
+  .msg-casca{grid-template-columns:1fr;height:calc(100vh - 190px);height:calc(100dvh - 190px);min-height:400px}
+  .msg-casca.ver-chat .msg-lista{display:none}
+  .msg-casca:not(.ver-chat) .msg-chat{display:none}
+  .msg-voltar{display:inline-flex}
+  .msg-chat-topo{padding:10px 12px;gap:9px}
+  .msg-chip-tipo{display:none}
+  .msg-topo-btn span{display:none}
+  .msg-corpo{padding:12px 10px 8px}
+  .msg-col{max-width:84%}
+  .msg-escrever .campo{font-size:16px}
+}
