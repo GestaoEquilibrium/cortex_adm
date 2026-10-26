@@ -413,7 +413,7 @@ function Sidebar({ ctx, pagina, setPagina, estado, setEstado, aoSair, meuCard, p
             <i className="ti ti-logout" style={{ fontSize: 15 }} aria-hidden="true"></i>
           </button>
         </div>
-        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v81</div>
+        <div className="rotulo" style={{ textAlign: "center", fontSize: 10, color: "var(--muted)", opacity: .65, padding: "5px 0 1px" }}>v82</div>
       </aside>
     </React.Fragment>
   );
@@ -6313,8 +6313,11 @@ function PaginaDemandas({ ctx }) {
   useEffect(() => {
     abrirEMarcar();
     if (podeEditar) {
-      sb.from("colaboradores").select("id, nome, setor").eq("status", "ativo").order("nome").limit(2000)
-        .then(({ data }) => setColabs(data || []));
+      sb.rpc("demandas_responsaveis")
+        .then(({ data, error }) => {
+          if (error) { setMsg("Erro: " + error.message + " — rode o 43_demandas_so_usuarios.sql."); setColabs([]); return; }
+          setColabs(data || []);
+        });
     }
   }, []);
 
@@ -6350,13 +6353,17 @@ function PaginaDemandas({ ctx }) {
   const nAtrasadas = (lista || []).filter((d) => d.status === "aberta" && d.prazo && d.prazo < hojeStr).length;
   const nUrgentes = (lista || []).filter((d) => d.status === "aberta" && d.prioridade === "urgente").length;
   const nMinhas = (lista || []).filter((d) => d.minha && d.status === "aberta").length;
+  const nSemLogin = (lista || []).filter((d) => d.status === "aberta" && d.tem_login === false).length;
 
   function abrirNova() { setMsg(""); setForm({ id: null, titulo: "", colaborador_id: "", prazo: "", descricao: "", prioridade: "normal" }); }
-  function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "", prioridade: d.prioridade || "normal" }); }
+  function abrirEdicao(d) { setMsg(""); setForm({ id: d.id, colab_orig: d.colaborador_id, nome_orig: d.nome, titulo: d.titulo, colaborador_id: d.colaborador_id, prazo: d.prazo || "", descricao: d.descricao || "", prioridade: d.prioridade || "normal" }); }
 
   async function salvar() {
     if (!form.titulo.trim()) { setMsg("Dê um título à demanda."); return; }
     if (!form.colaborador_id) { setMsg("Atribua a demanda a alguém."); return; }
+    if ((!form.id || form.colaborador_id !== form.colab_orig) && !colabs.some((c) => c.id === form.colaborador_id)) {
+      setMsg("Escolha uma pessoa com login no sistema."); return;
+    }
     setOcupado(true); setMsg("");
     const dados = {
       titulo: form.titulo.trim(),
@@ -6415,6 +6422,7 @@ function PaginaDemandas({ ctx }) {
           <option value="urgente">Urgente</option><option value="alta">Alta</option><option value="normal">Normal</option><option value="baixa">Baixa</option>
         </select>
         <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700 }}>{nAbertas} aberta(s)</span>
+        {podeEditar && nSemLogin > 0 && <span className="chip" title="Demandas abertas com pessoas que não têm usuário no sistema — reatribua" style={{ background: "var(--ambar-bg)", color: "var(--ambar)", fontWeight: 800 }}>⚠ {nSemLogin} sem login</span>}
         {nMinhas > 0 && <span className="chip clicavel" style={{ background: "#F3E8FF", color: "#6D28D9", fontWeight: 800, cursor: "pointer" }} onClick={() => setFiltro("minhas")}>{nMinhas} para você</span>}
         {nUrgentes > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.12)", color: "var(--vermelho)", fontWeight: 800 }}>⚡ {nUrgentes} urgente(s)</span>}
         {nAtrasadas > 0 && <span className="chip" style={{ background: "rgba(220,38,38,.10)", color: "var(--vermelho)", fontWeight: 700 }}>{nAtrasadas} atrasada(s)</span>}
@@ -6434,13 +6442,20 @@ function PaginaDemandas({ ctx }) {
           <div style={{ display: "grid", gridTemplateColumns: "2fr 1fr 1fr 1fr", gap: 10 }}>
             <input className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} placeholder="O que precisa ser feito?" value={form.titulo} onChange={(e) => setForm({ ...form, titulo: e.target.value })} />
             <select className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.colaborador_id} onChange={(e) => setForm({ ...form, colaborador_id: e.target.value })}>
-              <option value="">Atribuir a...</option>
+              <option value="">{colabs.length ? "Atribuir a..." : "Ninguém com login vinculado"}</option>
+              {form.colab_orig && form.colaborador_id === form.colab_orig && !colabs.some((c) => c.id === form.colab_orig) && (
+                <option value={form.colab_orig} disabled>⚠ {form.nome_orig} (sem login — escolha outra pessoa)</option>
+              )}
               {colabs.map((c) => <option key={c.id} value={c.id}>{c.nome}{c.setor ? " · " + c.setor : ""}</option>)}
             </select>
             <input className="campo" type="date" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.prazo} onChange={(e) => setForm({ ...form, prazo: e.target.value })} />
             <select className="campo" style={{ padding: "8px 10px", fontSize: 12.5 }} value={form.prioridade} onChange={(e) => setForm({ ...form, prioridade: e.target.value })}>
               <option value="baixa">Baixa</option><option value="normal">Normal</option><option value="alta">Alta</option><option value="urgente">Urgente</option>
             </select>
+          </div>
+          <div style={{ fontSize: 11.5, color: "var(--muted)", marginTop: 6, display: "flex", alignItems: "center", gap: 5 }}>
+            <i className="ti ti-user-check" style={{ fontSize: 13 }} aria-hidden="true"></i>
+            Só aparecem pessoas com usuário no sistema ({colabs.length}). Para incluir alguém, vincule o login em Configurações → Pessoas.
           </div>
           <textarea className="campo" style={{ width: "100%", marginTop: 10, padding: "8px 10px", fontSize: 12.5, minHeight: 64, resize: "vertical" }}
             placeholder="Detalhes (opcional)" value={form.descricao} onChange={(e) => setForm({ ...form, descricao: e.target.value })} />
@@ -6481,6 +6496,7 @@ function PaginaDemandas({ ctx }) {
                 {farol && <span className="chip" style={{ background: farol.fundo, color: farol.cor, fontWeight: 700, fontSize: 10.5 }}>{farol.rotulo}</span>}
                 {novas[d.id] && <span className="chip" style={{ background: "#DC2626", color: "#fff", fontWeight: 800, fontSize: 10.5 }}>NOVA</span>}
                 {d.minha && !feita && <span className="chip" style={{ background: "#F3E8FF", color: "#6D28D9", fontWeight: 800, fontSize: 10.5 }}>para você</span>}
+                {d.tem_login === false && !feita && <span className="chip" title={d.nome + " não tem usuário no sistema: não vê, não é avisado e não consegue concluir. Edite e atribua a quem tem login."} style={{ background: "var(--ambar-bg)", color: "var(--ambar)", fontWeight: 800, fontSize: 10.5 }}>⚠ sem login</span>}
                 {d.setor && <span className="chip" style={{ background: "var(--tint)", color: "var(--marca-texto)", fontWeight: 700, fontSize: 10.5 }}>{d.setor}</span>}
               </div>
               <div style={{ fontSize: 12, color: "var(--sec)", marginTop: 3 }}>
